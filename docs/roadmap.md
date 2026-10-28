@@ -10,10 +10,19 @@
    Initial device-start measurements, inactive-stream reuse and background accessibility
    verification are implemented. Immediate-speech acceptance and broader driver measurements
    remain; shortcut selection now uses a focused key/chord recorder.
-3. Phase 2: evaluate permissively licensed 0.5–3B quantized local refinement models; add
-   Raw/Polished selection, limits and raw fallback only after preservation/latency evaluation.
+   The user subsequently confirmed the shortcut picker works and opening-word capture
+   improved. Optional vocabulary hints now guide local recognition of names/technical terms;
+   measured accuracy gains still require representative speech evaluation.
+3. **Phase 2 experimental build implemented:** optional Qwen2.5 0.5B/1.5B Q4 CPU polishing,
+   Raw/Polished selection, custom instructions, explicit verified downloads, lazy warm
+   process, time limit, lexical preservation and raw fallback. Both models were measured
+   on fixed nonsensitive text; 1.5B is the initial choice. Synthetic speech → ASR → refinement
+   passed offline. Real-voice Polished acceptance, broader preservation corpora and
+   clean-machine verification remain. Do not claim Phase 2 acceptance is complete yet.
 4. Desktop polish: opt-in login startup, stronger model lifecycle/cancellation, device identity,
    accessibility and multi-monitor verification. Add screenshots after verified UI capture.
+   Settings now scroll with Save/Cancel outside the scroll area; Raw/Result tabs support
+   comparison. Next implementation priorities are startup preferences and model lifecycle.
 5. Release: license/source inventory, locked dependencies, installable signed/unsigned artifact
    policy, clean-machine checks, release notes, contribution templates and benchmark evidence.
 6. macOS/Linux adapters after the Windows workflow proves dependable. No remote publication

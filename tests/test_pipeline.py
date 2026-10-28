@@ -1,6 +1,7 @@
 import queue
 import threading
 from concurrent.futures import Future
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -83,6 +84,7 @@ def setup():
     yield pipeline, recorder, recognizer, insertion, callbacks, changes, results
     recognizer.gate.set()
     pipeline.shutdown()
+    pipeline.executor.shutdown(wait=True)
 
 
 def finish(callbacks):
@@ -157,7 +159,8 @@ def test_shutdown_during_inference_never_inserts(setup):
     assert recorder.started == 1
     pipeline.shutdown()
     recognizer.gate.set()
-    finish(callbacks)
+    pipeline.executor.shutdown(wait=True)
+    assert callbacks.empty()
     assert not results and not insertion.delivered
 
 
@@ -259,3 +262,70 @@ def test_target_timeout_preserves_raw_transcript(setup):
     finish(callbacks)
     assert results[0][0] == "Hello, world."
     assert not insertion.delivered
+
+
+def test_polishing_runs_off_owner_thread_and_preserves_raw_result(setup):
+    pipeline, recorder, _, insertion, callbacks, changes, results = setup
+    owner = threading.get_ident()
+    raw = []
+    pipeline.raw_result = raw.append
+
+    def polish(text):
+        assert threading.get_ident() != owner
+        assert np.count_nonzero(recorder.audio) == 0
+        return "Hello world!"
+
+    backend = Mock()
+    backend.refine.side_effect = polish
+    pipeline.refiner = backend
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)  # Polishing state is dispatched to the owner.
+    finish(callbacks)
+    assert State.POLISHING in [state for state, _ in changes]
+    assert insertion.delivered == ["Hello world!"]
+    assert raw == ["Hello, world."]
+    assert results == [("Hello world!", "Inserted.")]
+
+
+@pytest.mark.parametrize("failure", ["timeout", "changed", "empty"])
+def test_polishing_failure_inserts_raw_without_exposing_provider_exception(setup, failure):
+    pipeline, _, _, insertion, callbacks, changes, results = setup
+    backend = Mock()
+    if failure == "timeout":
+        backend.refine.side_effect = TimeoutError("private transcription in provider exception")
+    else:
+        backend.refine.return_value = "" if failure == "empty" else "Unrelated new content."
+    pipeline.refiner = backend
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    finish(callbacks)
+    assert insertion.delivered == ["Hello, world."]
+    assert "using raw" in results[0][1]
+    assert "private transcription" not in str(changes) + str(results)
+
+
+def test_shutdown_during_polishing_cannot_deliver_late_result(setup):
+    pipeline, _, _, insertion, callbacks, _, results = setup
+    gate = threading.Event()
+    started = threading.Event()
+    backend = Mock()
+
+    def polish(text):
+        started.set()
+        gate.wait(5)
+        return text
+
+    backend.refine.side_effect = polish
+    backend.close.side_effect = gate.set
+    pipeline.refiner = backend
+    pipeline.press()
+    pipeline.release()
+    assert started.wait(5)
+    pipeline.shutdown()
+    finish(callbacks)
+    pipeline.executor.shutdown(wait=True)
+    assert callbacks.empty()
+    assert not insertion.delivered and not results
+    backend.close.assert_called_once()

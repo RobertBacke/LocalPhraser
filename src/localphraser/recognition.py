@@ -12,9 +12,10 @@ class Recognizer(Protocol):
 
 
 class WhisperRecognizer:
-    def __init__(self, model_path: Path, cpu_threads: int = 4):
+    def __init__(self, model_path: Path, cpu_threads: int = 4, vocabulary: str = ""):
         self.path = model_path
         self.cpu_threads = cpu_threads
+        self.vocabulary = vocabulary.strip()
         self._model: Any = None
 
     def transcribe(self, audio: Audio) -> str:
@@ -42,5 +43,6 @@ class WhisperRecognizer:
             vad_filter=True,
             condition_on_previous_text=False,
             temperature=0,
+            hotwords=self.vocabulary or None,
         )
         return " ".join(segment.text.strip() for segment in segments).strip()

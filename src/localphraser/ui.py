@@ -16,23 +16,28 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMenu,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSystemTrayIcon,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
+    QWidget,
 )
 
 from localphraser.audio import Recorder, microphones
-from localphraser.config import MODELS, Config, save_config
+from localphraser.config import DEFAULT_PROMPT, MODELS, REFINEMENT_MODELS, Config, save_config
 from localphraser.hotkey import Hotkey
 from localphraser.pipeline import Dictation, State
 from localphraser.recognition import WhisperRecognizer
+from localphraser.refinement import LocalRefiner
 from localphraser.shortcut import HINT, ShortcutRecorder
 from localphraser.target_worker import TargetWorker
 
@@ -106,10 +111,20 @@ class Latest(QDialog):
         self.text = QTextEdit()
         self.text.setReadOnly(True)
         self.text.setAcceptRichText(False)
-        layout.addWidget(self.text)
+        self.raw = QTextEdit()
+        self.raw.setReadOnly(True)
+        self.raw.setAcceptRichText(False)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self.text, "Result")
+        self.tabs.addTab(self.raw, "Raw transcription")
+        layout.addWidget(self.tabs)
         row = QHBoxLayout()
         copy = QPushButton("Copy to clipboard")
-        copy.clicked.connect(lambda: QApplication.clipboard().setText(self.text.toPlainText()))
+        copy.clicked.connect(
+            lambda: QApplication.clipboard().setText(
+                (self.raw if self.tabs.currentIndex() == 1 else self.text).toPlainText()
+            )
+        )
         clear = QPushButton("Clear")
         clear.clicked.connect(self.clear)
         row.addWidget(copy)
@@ -118,6 +133,7 @@ class Latest(QDialog):
 
     def clear(self) -> None:
         self.text.clear()
+        self.raw.clear()
         self.notice.setText("Transcript cleared.")
 
     def set_transcript(self, text: str, notice: str) -> None:
@@ -137,7 +153,14 @@ class Settings(QDialog):
         self.apply_config = apply
         self.setWindowTitle("LocalPhraser · Settings")
         self.setMinimumWidth(540)
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        body = QWidget()
+        scroll.setWidget(body)
+        outer.addWidget(scroll)
+        layout = QVBoxLayout(body)
         title = QLabel("LocalPhraser")
         title.setStyleSheet("font-size: 24px; font-weight: 600; margin-bottom: 8px;")
         layout.addWidget(title)
@@ -169,6 +192,17 @@ class Settings(QDialog):
         self.model.addItems(MODELS)
         self.model.setCurrentText(config.model)
         form.addRow("English speech model", self.model)
+        self.vocabulary = QLineEdit(config.vocabulary)
+        self.vocabulary.setMaxLength(300)
+        self.vocabulary.setPlaceholderText("Optional names or terms, separated by commas")
+        self.vocabulary.setAccessibleName("Vocabulary hints")
+        form.addRow("Vocabulary hints", self.vocabulary)
+        vocabulary_hint = QLabel(
+            "Hints guide recognition; they do not guarantee spelling. Keep the list short. "
+            "Saved locally in settings. Clear the field to turn off."
+        )
+        vocabulary_hint.setWordWrap(True)
+        form.addRow(vocabulary_hint)
         self.root = QLineEdit(config.model_root)
         folder = QPushButton("Browse…")
         folder.clicked.connect(self.browse)
@@ -195,8 +229,45 @@ class Settings(QDialog):
             "No audio is captured while idle. Turn off to close the device after each recording."
         )
         form.addRow(self.keep_ready)
-        form.addRow("Mode", QLabel("Raw · Local LLM refinement is planned for Phase 2."))
+        self.mode = QComboBox()
+        self.mode.addItem("Raw", "raw")
+        self.mode.addItem("Polished (experimental, local)", "polished")
+        self.mode.setCurrentIndex(self.mode.findData(config.mode))
+        form.addRow("Mode", self.mode)
         layout.addLayout(form)
+        self.polishing = QGroupBox("Local polishing")
+        polishing_form = QFormLayout(self.polishing)
+        self.refinement_model = QComboBox()
+        self.refinement_model.addItems(REFINEMENT_MODELS)
+        self.refinement_model.setCurrentText(config.refinement_model)
+        polishing_form.addRow("Q4 CPU model", self.refinement_model)
+        self.refinement_timeout = QSpinBox()
+        self.refinement_timeout.setRange(2, 60)
+        self.refinement_timeout.setSuffix(" seconds")
+        self.refinement_timeout.setValue(config.refinement_timeout)
+        polishing_form.addRow("Polishing time limit", self.refinement_timeout)
+        self.refinement_prompt = QTextEdit()
+        self.refinement_prompt.setAcceptRichText(False)
+        self.refinement_prompt.setPlainText(config.refinement_prompt)
+        self.refinement_prompt.setMaximumHeight(100)
+        self.refinement_prompt.setAccessibleName("Polishing instructions")
+        polishing_form.addRow("Instructions", self.refinement_prompt)
+        reset_prompt = QPushButton("Restore default instructions")
+        reset_prompt.clicked.connect(lambda: self.refinement_prompt.setPlainText(DEFAULT_PROMPT))
+        polishing_form.addRow(reset_prompt)
+        self.install_refinement = QPushButton("Download polishing model (internet required)")
+        self.install_refinement.clicked.connect(lambda: self.download(True))
+        polishing_form.addRow(self.install_refinement)
+        polishing_hint = QLabel(
+            "Optional CPU runtime and a downloaded model are required. Words and numbers "
+            "must be preserved; failures and time limits fall back to Raw. The original "
+            "is available in Latest transcript. Models are shared under Model directory."
+        )
+        polishing_hint.setWordWrap(True)
+        polishing_form.addRow(polishing_hint)
+        self.mode.currentIndexChanged.connect(self.update_mode)
+        self.update_mode()
+        layout.addWidget(self.polishing)
         privacy = QLabel(
             "No accounts, telemetry, audio files, or saved transcript history. "
             "Only model installation uses the network. Latest transcript stays in memory "
@@ -208,7 +279,7 @@ class Settings(QDialog):
         self.install.clicked.connect(self.download)
         layout.addWidget(self.install)
         self.progress = QLabel(
-            "Models are downloaded from Systran on Hugging Face. No account needed."
+            "Speech models: Systran. Polishing models: Qwen. Downloads use Hugging Face."
         )
         self.progress.setWordWrap(True)
         layout.addWidget(self.progress)
@@ -218,7 +289,13 @@ class Settings(QDialog):
         )
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        outer.addWidget(buttons)
+        screen = QApplication.primaryScreen()
+        height = min(820, screen.availableGeometry().height() - 100) if screen else 700
+        self.resize(620, max(360, height))
+
+    def update_mode(self) -> None:
+        self.polishing.setVisible(self.mode.currentData() == "polished")
 
     def browse(self) -> None:
         selected = QFileDialog.getExistingDirectory(self, "Model directory", self.root.text())
@@ -235,6 +312,11 @@ class Settings(QDialog):
             max_seconds=self.duration.value(),
             cpu_threads=self.threads.value(),
             keep_microphone_ready=self.keep_ready.isChecked(),
+            vocabulary=self.vocabulary.text().strip(),
+            mode=self.mode.currentData(),
+            refinement_model=self.refinement_model.currentText(),
+            refinement_prompt=self.refinement_prompt.toPlainText().strip(),
+            refinement_timeout=self.refinement_timeout.value(),
         ).validate()
 
     def save(self) -> None:
@@ -246,19 +328,25 @@ class Settings(QDialog):
             return
         self.accept()
 
-    def download(self) -> None:
+    def download(self, refiner: bool = False) -> None:
         try:
             config = self.values()
         except ValueError as exc:
             QMessageBox.warning(self, "Invalid settings", str(exc))
             return
         self.install.setEnabled(False)
+        self.install_refinement.setEnabled(False)
         self.process = QProcess(self)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self.download_output)
         self.process.finished.connect(self.download_finished)
         self.process.errorOccurred.connect(self.download_error)
-        args = ["install-model", config.model, "--root", config.model_root]
+        args = [
+            "install-refiner" if refiner else "install-model",
+            config.refinement_model if refiner else config.model,
+            "--root",
+            config.model_root,
+        ]
         if getattr(sys, "frozen", False):
             self.process.start(sys.executable, args)
         else:
@@ -276,6 +364,7 @@ class Settings(QDialog):
 
     def download_finished(self, exit_code: int, status: Any) -> None:
         self.install.setEnabled(True)
+        self.install_refinement.setEnabled(True)
         self.progress.setText(
             "Model installed and verified. Save to use it."
             if exit_code == 0
@@ -284,6 +373,7 @@ class Settings(QDialog):
 
     def download_error(self, error: Any) -> None:
         self.install.setEnabled(True)
+        self.install_refinement.setEnabled(True)
         self.progress.setText("Could not run the model installer.")
 
     def reject(self) -> None:
@@ -320,7 +410,7 @@ class Desktop:
         self.tray = QSystemTrayIcon(app_icon(), app)
         self.tray.setToolTip("LocalPhraser · Ready")
         menu = QMenu()
-        self.status = menu.addAction("Ready · Raw mode")
+        self.status = menu.addAction(f"Ready · {config.mode.title()} mode")
         self.status.setEnabled(False)
         menu.addSeparator()
         self.toggle_action = menu.addAction("Start recording (manual copy)")
@@ -362,12 +452,26 @@ class Desktop:
             self.audio_preparer.submit(self.recorder.prepare)
         return Dictation(
             self.recorder,
-            WhisperRecognizer(Path(config.model_root) / config.model, config.cpu_threads),
+            WhisperRecognizer(
+                Path(config.model_root) / config.model, config.cpu_threads, config.vocabulary
+            ),
             self.insertion,
             self.bridge.queued.emit,
             self.state_changed,
             self.latest.set_transcript,
             auto_insert=config.auto_insert,
+            refiner=(
+                LocalRefiner(
+                    config.refinement_model,
+                    Path(config.model_root),
+                    config.cpu_threads,
+                    config.refinement_prompt,
+                    config.refinement_timeout,
+                )
+                if config.mode == "polished"
+                else None
+            ),
+            raw_result=self.latest.raw.setPlainText,
         )
 
     def notify(self, message: str) -> None:
@@ -376,7 +480,7 @@ class Desktop:
         )
 
     def state_changed(self, state: State, message: str) -> None:
-        self.status.setText(f"{state.value} · Raw mode")
+        self.status.setText(f"{state.value} · {self.config.mode.title()} mode")
         self.tray.setToolTip(f"LocalPhraser · {state.value}")
         self.tray.setIcon(app_icon(state == State.RECORDING))
         self.indicator.display(state)
@@ -482,6 +586,7 @@ class Desktop:
         self.pipeline.shutdown()
         self.config = config
         self.pipeline = self.make_pipeline(config)
+        self.state_changed(State.IDLE, "")
 
     def shutdown(self) -> None:
         self.closing = True

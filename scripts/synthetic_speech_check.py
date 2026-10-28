@@ -12,7 +12,9 @@ from pathlib import Path
 
 import numpy as np
 
+from localphraser.config import DEFAULT_PROMPT, REFINEMENT_MODELS
 from localphraser.recognition import WhisperRecognizer
+from localphraser.refinement import LocalRefiner
 
 
 def main() -> None:
@@ -23,6 +25,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("model", type=Path)
     parser.add_argument("--temp-dir", type=Path, required=True)
+    parser.add_argument("--vocabulary", default="")
+    parser.add_argument("--polished-model", choices=REFINEMENT_MODELS)
     args = parser.parse_args()
     args.temp_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=args.temp_dir) as directory:
@@ -50,17 +54,26 @@ def main() -> None:
 
         socket.socket.connect = forbidden
         socket.socket.connect_ex = forbidden
-        recognizer = WhisperRecognizer(args.model)
+        recognizer = WhisperRecognizer(args.model, vocabulary=args.vocabulary)
+        refiner = (
+            LocalRefiner(args.polished_model, args.model.parent, 4, DEFAULT_PROMPT, 15)
+            if args.polished_model
+            else None
+        )
         try:
             for label in ("cold", "warm"):
                 started = time.perf_counter()
                 transcript = recognizer.transcribe(audio)
+                if refiner is not None:
+                    transcript = refiner.refine(transcript)
                 elapsed = time.perf_counter() - started
                 # Meaningful sanity check without exposing recognition output.
                 assert "computer" in transcript.lower() and "speech" in transcript.lower()
                 print(f"{label}: synthetic speech content check passed ({elapsed:.3f} seconds)")
         finally:
             audio.fill(0)
+            if refiner is not None:
+                refiner.close()
 
 
 if __name__ == "__main__":

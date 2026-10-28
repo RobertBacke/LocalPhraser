@@ -63,5 +63,23 @@ Local hash manifests detect accidental corruption, not a malicious actor able to
 both manifest and files. Repository commit and LFS hashes are checked/recorded on install;
 this is HTTPS provenance, not an independently signed model supply chain.
 
-Local LLM model selection/benchmarks are deferred to Phase 2. No remote AI SDK, account,
-server, Vercel integration, or external inference provider is needed for this architecture.
+## Phase 2 selection — 2026-10-28
+
+The publisher's [Qwen2.5 0.5B GGUF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF)
+and [1.5B GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF) model cards declare
+Apache-2.0 and provide Q4_K_M files. Both were downloaded with pinned revisions and LFS
+SHA-256 verification, then evaluated on the same five nonsensitive text fixtures.
+[llama-cpp-python](https://llama-cpp-python.readthedocs.io/en/latest/) documents a CPU wheel
+and local GGUF/chat-completion API; version 0.3.36 was installed from its documented CPU index.
+It is optional, avoiding a C++ compiler requirement for the tested Windows wheel.
+
+The 1.5B model passed the lexical check for all five samples; 0.5B needed raw fallbacks for
+numbers and an instruction-like sample. This small trial supports an initial 1.5B choice,
+not a general quality claim. See measured latency/RAM and revisions in performance.md.
+The Apache-2.0 [SmolLM2 1.7B model](https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct)
+was reviewed as an alternative but not benchmarked or exposed in the catalog.
+
+Transformers would add a larger tensor runtime for this optional CPU stage. A local HTTP
+server would add lifecycle and endpoint complexity. We instead use a warm spawn process
+with private pipes, enabling native inference termination without blocking the UI. No
+remote AI SDK, account, external inference provider, or hosted service is required.

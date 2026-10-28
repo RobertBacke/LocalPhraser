@@ -1,3 +1,7 @@
+from multiprocessing import freeze_support
+
 from localphraser.main import main
 
-raise SystemExit(main())
+if __name__ == "__main__":
+    freeze_support()
+    raise SystemExit(main())

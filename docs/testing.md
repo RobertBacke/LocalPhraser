@@ -116,8 +116,9 @@ mypy passed. The source app smoke test also passed with the new default.
   capture or microphone preparation. Source and packaged immediate-speech behavior still
   require a human trial.
 
-Immediate natural speech after key-down still needs a user trial after restarting the new
-version. Microphone readiness can be disabled in Settings; verify this releases the device
+The user subsequently confirmed the shortcut picker works and opening words are captured
+better. This qualitative result is not a measured onset/clipping bound.
+Microphone readiness can be disabled in Settings; verify this releases the device
 between dictations on representative drivers. Actual Windows tray single-click opening was
 confirmed by the user before this update.
 
@@ -149,7 +150,7 @@ already-open minimized Settings window is restored and activated.
 Ruff, formatting, and mypy passed. An isolated Qt check verified that a single-click
 activation creates Settings and restores the same window after minimization, without
 installing hotkeys or opening the microphone. Actual Windows tray interaction after this
-change remains for the user to confirm.
+change was subsequently confirmed by the user.
 
 Notepad-specific testing, clipboard preservation, repeated-session stress, and microphone
 error cases remain pending human acceptance.
@@ -160,3 +161,61 @@ Next quality evaluation: use deliberately chosen nonsensitive sample sentences, 
 together with warm latency. Current decoding uses greedy beam size 1; a wider beam is a
 candidate to evaluate rather than a guaranteed correction. Do not add an LLM to conceal
 recognition errors, and do not record personal speech or transcripts automatically.
+
+## Vocabulary hints increment
+
+Validation on the development machine: **86 tests passed**, including actual `small.en`
+loading and silence/VAD with vocabulary hints while Python socket connections were denied.
+Additional tests cover old settings defaulting to no hints, persistence, invalid input,
+Settings editing/clearing while preserving model choice, and forwarding hints without
+replacing engine output. Ruff check/format and mypy passed.
+
+`scripts/synthetic_speech_check.py` passed cold and warm `small.en` inference with the
+nonsensitive hints `computer, speech, recognition`, checking expected content while socket
+connections were denied. It generated only synthetic speech, deleted the temporary WAV,
+and did not record a microphone or print transcripts. These are integration/silence checks,
+not an accuracy comparison or proof that hints always help. Relevant real-voice comparisons
+and a broader word-error-rate evaluation remain pending.
+
+The updated Settings preview was rendered with Windows Qt and visually checked. Source
+wheel/sdist and the unsigned PyInstaller folder build completed. The executable passed
+`--smoke-test` with a separate test configuration, hints enabled, and microphone preparation
+disabled (exit 0). This checks startup, not frozen real-microphone recognition acceptance.
+
+## Phase 2 experimental local polishing
+
+Implemented Raw/Polished modes, optional CPU runtime, explicit pinned/hash-verified GGUF
+downloads (weights plus LICENSE/README), custom instructions, bounded lazy worker,
+time limit, lexical preservation check, raw fallback, and Raw/Result comparison in memory.
+The Settings body scrolls independently of Save/Cancel for smaller screens.
+
+Tests cover permitted punctuation/case/filler edits; refusal of changed names, signed
+numbers, currency, negations, word order, prompt-instruction responses, added explanations,
+control/bidirectional characters and dropping uppercase UM; subprocess reuse, timeout,
+retry, shutdown while blocked, limits and corrupt/missing files; and pipeline fallback,
+audio clearing before polishing, GUI dispatch, raw retention and late-result suppression.
+
+The initial pipe shutdown implementation reproduced a Windows INVALID_HANDLE failure when
+one thread closed a pipe another thread was polling. Reader-owned close fixed this race;
+the corresponding real-process test passed. A later full pytest run passed all assertions
+but exited with native status 0xC0000409. Isolated combinations and the subsequent full run
+exited 0. Test fixtures now explicitly dispose their Qt windows while QApplication is alive
+and join their owned executors; this reduces teardown ambiguity but is not proof of the
+intermittent native exit's root cause. Keep shutdown stress in release acceptance.
+
+An owned desktop check started actual Qt/tray/target integration using a separate test
+configuration with microphone preparation disabled, loaded real `small.en` on silence,
+ran real 1.5B polishing on fixed synthetic text, then quit cleanly (exit 0). It never opened
+the microphone or inserted into a user application. Synthetic speech → ASR → polishing
+also passed offline. Per-model text outcomes and timings are in performance.md.
+
+Polished mode remains experimental: real-voice cross-app acceptance, a larger corpus,
+punctuation/meaning preservation evaluation, sustained shutdown trials, and clean-machine
+builds are pending. The user has verified Raw mode workflows, not yet Polished mode.
+
+Final local validation: **129 tests passed with exit 0**, including the optional real
+`small.en` offline check; the preceding 128-test run also exited 0 after explicit fixture
+teardown. Ruff check/format and mypy (15 source modules) passed. Wheel/sdist and the unsigned
+Phase 2 folder executable built. The frozen executable passed both GUI `--smoke-test`
+with Polished selected (no capture) and `check-refiner` using actual 1.5B inference twice
+(both exit 0). These are same-host checks, not a clean-machine release certification.

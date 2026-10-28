@@ -21,7 +21,9 @@ def test_hotkey_values():
 
 
 def test_roundtrip(tmp_path):
-    config = Config(hotkey="Ctrl+Shift+F9", model_root=str(tmp_path / "models"))
+    config = Config(
+        hotkey="Ctrl+Shift+F9", model_root=str(tmp_path / "models"), vocabulary="Codex, PySide"
+    )
     path = tmp_path / "settings" / "config.json"
     save_config(config, path)
     assert load_config(path) == config
@@ -39,6 +41,17 @@ def test_roundtrip(tmp_path):
         {"model_root": "relative"},
         {"microphone": 1},
         {"keep_microphone_ready": "yes"},
+        {"vocabulary": None},
+        {"vocabulary": ["Codex"]},
+        {"vocabulary": "x" * 301},
+        {"vocabulary": "two\nlines"},
+        {"vocabulary": "hidden\x00text"},
+        {"mode": "cloud"},
+        {"refinement_model": "arbitrary"},
+        {"refinement_timeout": True},
+        {"refinement_timeout": 61},
+        {"refinement_prompt": " "},
+        {"refinement_prompt": "x" * 2001},
     ],
 )
 def test_invalid_settings(values):
@@ -53,3 +66,13 @@ def test_corrupt_settings_are_not_overwritten(tmp_path):
     with pytest.raises(ValueError):
         load_config(path)
     assert path.read_text() == content
+
+
+def test_older_settings_preserve_model_and_default_to_no_hints(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"model": "small.en", "hotkey": "F9"}))
+    config = load_config(path)
+    assert config.vocabulary == ""
+    assert config.mode == "raw"
+    assert config.model == "small.en"
+    assert config.hotkey == "F9"

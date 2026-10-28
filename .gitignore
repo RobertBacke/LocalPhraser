@@ -14,6 +14,7 @@ models/
 *.wav
 *.mp3
 *.bin
+*.gguf
 *.env
 .env*
 benchmark-results*.json

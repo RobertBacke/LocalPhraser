@@ -14,17 +14,33 @@ sets HF_HUB_OFFLINE and uses a verified local model directory with local_files_o
 No dictated content is logged. Exceptions shown to users are sanitized. No analytics,
 accounts, telemetry, history database, updater, or cloud inference client.
 
+Optional vocabulary hints are text explicitly entered by the user and saved in local
+`config.json`. They are passed only to the local speech recognizer. They are never collected
+from dictated speech or surrounding documents. Clear the field and Save to remove hints
+from the current configuration; user-made backups may retain older settings.
+
 Latest transcript is a single in-memory recovery result, replaced by the next successful
-dictation, explicitly clearable, and cleared on exit. It is not written to settings or disk.
+dictation, with Raw and Result versions in Polished mode. Both are explicitly clearable and
+cleared on exit. They are not written to settings or disk.
 Clipboard is untouched by automatic insertion. Explicit Copy transfers data to the Windows
 clipboard; OS clipboard history or sync may retain that copy outside LocalPhraser.
 
-Only `install-model` and Settings → Download initiate network requests. The installer uses
+Only explicit `install-model`, `install-refiner`, and Settings download actions initiate network requests. The installer uses
 Hugging Face Hub HTTPS metadata/download endpoints and their redirected storage/CDN endpoints
-to fetch Systran model artifacts. It records repository/revision/hashes. No speech is supplied.
+to fetch Systran speech or publisher Qwen GGUF artifacts. It records repository/revision/hashes. No speech is supplied.
 Installer download metadata may reside under the chosen model directory. Installation occurs
 in a separate process; dictation remains offline. Development package installation also
 contacts package registries, but it is not application runtime traffic.
+
+Optional polishing passes text over a private multiprocessing pipe to a local CPU worker.
+It uses only verified local GGUF files; Python socket connections are disabled in that
+worker. It does not start a network listener or use llama.cpp's model downloader. Prompts
+are not placed in shell commands, process arguments, temporary files, or a disk cache.
+Worker output goes to the null device, not logs. The worker resets model context between
+requests and drops temporary Python references, but native buffers and immutable strings
+cannot be securely erased. Clearing the displayed transcript is not a secure-memory-wipe
+guarantee. Selecting Raw or quitting terminates the polishing worker. User-entered polishing
+instructions, model choice, and time limit are saved in settings; dictated text is not.
 
 Caps Lock uses a dedicated keyboard-hook message thread that inspects only the virtual-key
 identifier, consumes Caps Lock press/release, and immediately forwards all unrelated events

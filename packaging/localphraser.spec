@@ -3,6 +3,7 @@ from PyInstaller.utils.hooks import collect_all, copy_metadata
 from pathlib import Path
 import os
 import sys
+import importlib.util
 
 # Ignore unrelated tools on the developer's PATH. In particular, a Poppler ICU DLL
 # can shadow Windows' ICU and break Qt even though source execution works.
@@ -24,6 +25,11 @@ for package in (
     "PySide6-Essentials", "faster-whisper", "huggingface-hub", "sounddevice", "numpy", "uiautomation",
 ):
     datas += copy_metadata(package, recursive=True)
+if importlib.util.find_spec("llama_cpp") is not None:
+    package_datas, package_binaries, package_imports = collect_all("llama_cpp")
+    datas += package_datas + copy_metadata("llama-cpp-python", recursive=True)
+    binaries += package_binaries
+    hiddenimports += package_imports
 datas += [(str(project / "LICENSE"), "."), (str(project / "THIRD_PARTY_NOTICES.md"), ".")]
 a = Analysis([str(project / "packaging" / "entry.py")], pathex=[str(project / "src")], binaries=binaries,
              datas=datas, hiddenimports=hiddenimports,

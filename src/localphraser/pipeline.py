@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -9,12 +10,14 @@ import numpy as np
 
 from localphraser.audio import SAMPLE_RATE, Audio
 from localphraser.recognition import Recognizer
+from localphraser.refinement import Refiner, preserve_words
 
 
 class State(StrEnum):
     IDLE = "Ready"
     RECORDING = "Listening"
     TRANSCRIBING = "Transcribing"
+    POLISHING = "Polishing"
     INSERTING = "Inserting"
     ERROR = "Error"
 
@@ -33,6 +36,13 @@ class Insertion(Protocol):
     def discard(self, target: Any) -> None: ...
 
 
+@dataclass(frozen=True)
+class Transcript:
+    raw: str
+    text: str
+    notice: str = ""
+
+
 class Dictation:
     """Public methods run on the UI thread; inference and target verification use workers.
 
@@ -48,6 +58,8 @@ class Dictation:
         changed: Callable[[State, str], None],
         result: Callable[[str, str], None],
         auto_insert: bool = True,
+        refiner: Refiner | None = None,
+        raw_result: Callable[[str], None] | None = None,
     ):
         self.recorder = recorder
         self.recognizer = recognizer
@@ -56,10 +68,12 @@ class Dictation:
         self.changed = changed
         self.result = result
         self.auto_insert = auto_insert
+        self.refiner = refiner
+        self.raw_result = raw_result
         self.state = State.IDLE
         self.target: Any = None
         self.target_future: Future[Any] | None = None
-        self.pending_transcription: Future[str] | None = None
+        self.pending_transcription: Future[Transcript] | None = None
         self.generation = 0
         self.target_error = ""
         self.closed = False
@@ -68,6 +82,15 @@ class Dictation:
     def _state(self, state: State, message: str = "") -> None:
         self.state = state
         self.changed(state, message)
+
+    def _post(self, callback: Callable[[], None]) -> None:
+        if self.closed:
+            return
+        try:
+            self.dispatch(callback)
+        except RuntimeError:
+            if not self.closed:
+                raise
 
     def press(self) -> None:
         if self.closed or self.state != State.IDLE:
@@ -108,7 +131,7 @@ class Dictation:
             except Exception:
                 pass
             return
-        self.dispatch(lambda: self._target_ready(future, generation))
+        self._post(lambda: self._target_ready(future, generation))
 
     def _target_ready(self, future: Future[Any], generation: int) -> None:
         if generation != self.generation or self.closed:
@@ -147,22 +170,35 @@ class Dictation:
                 return
             self._state(State.TRANSCRIBING)
             future = self.executor.submit(self._transcribe, audio)
-            future.add_done_callback(lambda f: self.dispatch(lambda: self._finish(f)))
+            future.add_done_callback(lambda f: self._post(lambda: self._finish(f)))
         except Exception:
             self.recorder.cancel()
             self._error("Recording failed. Check the microphone and try again.")
 
-    def _transcribe(self, audio: Audio) -> str:
+    def _transcribe(self, audio: Audio) -> Transcript:
         try:
-            return self.recognizer.transcribe(audio)
+            raw = self.recognizer.transcribe(audio).strip()
         finally:
             audio.fill(0)
+        if not raw or self.refiner is None or self.closed:
+            return Transcript(raw, raw)
+        self._post(lambda: None if self.closed else self._state(State.POLISHING))
+        try:
+            polished = self.refiner.refine(raw)
+            if not preserve_words(raw, polished):
+                raise ValueError("Refinement changed words.")
+            return Transcript(raw, polished)
+        except Exception:
+            return Transcript(
+                raw, raw, "Polishing skipped or unavailable; using raw transcription."
+            )
 
-    def _finish(self, future: Future[str]) -> None:
+    def _finish(self, future: Future[Transcript]) -> None:
         if self.closed:
             return
         try:
-            text = future.result().strip()
+            transcript = future.result()
+            text = transcript.text.strip()
         except Exception:
             self._error("Transcription failed. Verify the installed model or reinstall it.")
             return
@@ -185,6 +221,10 @@ class Dictation:
                     "Insertion was not confirmed. Check the target before copying the transcript."
                 )
         self._clear_target()
+        if self.raw_result is not None:
+            self.raw_result(transcript.raw)
+        if transcript.notice:
+            notice = f"{transcript.notice} {notice}"
         self.result(text, notice)
         self._state(State.IDLE, notice)
 
@@ -202,5 +242,7 @@ class Dictation:
     def shutdown(self) -> None:
         self.closed = True
         self.recorder.close()
+        if self.refiner is not None:
+            self.refiner.close()
         self._clear_target()
         self.executor.shutdown(wait=False, cancel_futures=True)

@@ -1,5 +1,6 @@
 import os
 import sys
+from multiprocessing import freeze_support
 
 from localphraser.main import main
 
@@ -9,4 +10,6 @@ for name, mode in (("stdout", "w"), ("stderr", "w"), ("stdin", "r")):
     if getattr(sys, name) is None:
         setattr(sys, name, open(os.devnull, mode, encoding="utf-8"))
 
-raise SystemExit(main())
+if __name__ == "__main__":
+    freeze_support()
+    raise SystemExit(main())

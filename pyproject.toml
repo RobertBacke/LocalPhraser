@@ -20,6 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+polish = ["llama-cpp-python>=0.3.36,<0.4"]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1", "mypy>=1.15,<2", "build>=1.2,<2", "pyinstaller>=6.12,<7", "psutil>=6,<8"]
 
 [project.scripts]

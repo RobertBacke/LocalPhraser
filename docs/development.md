@@ -16,13 +16,32 @@ for 1.5 seconds without recording or typing. Use a disposable config directory.
 Build `packaging/localphraser.spec` with PyInstaller on Windows. Keep the folder intact.
 The development executable is unsigned and may trigger Windows SmartScreen. Public releases
 need clean-machine tests, dependency/license inventory, installer, signing decision, microphone
-and target-app acceptance, and benchmark results. No remote publishing is configured.
+and target-app acceptance, and benchmark results. The public GitHub repository runs Windows
+checks; automated binary releases are not configured.
 
 No launch-at-login registration is made in the MVP. No existing user files are migrated.
 Older configuration files default `keep_microphone_ready` to true when loaded. The setting
 is persisted on Save and can be disabled without altering model selection or the shortcut.
 Malformed settings are refused without overwriting them. A stale `.installing` model folder
 left after an installer is terminated must be removed manually before retrying installation.
+
+Older configurations also default to empty vocabulary hints. Hints are an explicitly entered,
+single-line string limited to 300 characters. The UI passes them through faster-whisper's
+`hotwords` argument; blank hints become `None`. Recognition output is not post-replaced.
+The engine may truncate hints to its prompt token budget, so concise lists work best.
+
+Phase 2 has an optional `polish` extra. The tested Windows CPU wheel and its added
+dependencies are pinned in `requirements-polish.lock`, using the upstream documented CPU
+index; install this after the core environment. A generic PyPI install may need a C++
+compiler, so prefer the tested wheel command in README. PyInstaller includes llama.cpp only
+when installed in the build environment; Raw-only builds do not require it. Model weights
+remain separate setup downloads. Do not remove `freeze_support` from either entry point.
+
+The user must explicitly select Polished; older settings retain Raw and default to the
+initial Qwen2.5 1.5B model choice, built-in instructions, and a 15-second deadline.
+`check-refiner --root <model-root>` runs two fixed synthetic text checks without a microphone
+or transcript output. `scripts/benchmark_refinement.py` reports per-case acceptance, latency,
+own-child peak RSS, and hardware; it is not a statistical accuracy benchmark.
 
 Windowed builds route otherwise-missing Python standard streams to the null device, never
 to a log file. The source installer's detailed file progress is visible in Settings; a

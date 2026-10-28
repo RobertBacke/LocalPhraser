@@ -17,11 +17,15 @@ def digest(path: Path) -> str:
 
 
 def verify_model(path: Path) -> None:
+    verify_artifacts(path, FILES)
+
+
+def verify_artifacts(path: Path, files: tuple[str, ...]) -> None:
     try:
         manifest = json.loads((path / "localphraser-manifest.json").read_text(encoding="utf-8"))
-        if set(manifest["sha256"]) != set(FILES):
+        if set(manifest["sha256"]) != set(files):
             raise ValueError("Incomplete model manifest.")
-        for name in FILES:
+        for name in files:
             if digest(path / name) != manifest["sha256"][name]:
                 raise ValueError("Model integrity check failed.")
     except (OSError, KeyError, TypeError, ValueError) as exc:
@@ -36,6 +40,11 @@ def install_model(name: str, root: Path) -> Path:
     """
     if name not in MODELS:
         raise ValueError("Unsupported model.")
+    return install_artifacts(name, root, f"Systran/faster-whisper-{name}", FILES)
+
+
+def install_artifacts(name: str, root: Path, repo: str, files: tuple[str, ...]) -> Path:
+    """Internal catalog-only installer; callers supply fixed names and file lists."""
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
     os.environ["HF_HUB_DISABLE_XET"] = "1"
     from huggingface_hub import HfApi, hf_hub_download
@@ -43,10 +52,9 @@ def install_model(name: str, root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     destination = root / name
     if destination.exists():
-        verify_model(destination)
+        verify_artifacts(destination, files)
         print("Model already installed and verified. Remove its directory to reinstall.")
         return destination
-    repo = f"Systran/faster-whisper-{name}"
     info = HfApi().model_info(repo, files_metadata=True)
     revision = info.sha
     if not revision:
@@ -57,8 +65,8 @@ def install_model(name: str, root: Path) -> Path:
     try:
         hashes = {}
         siblings = {f.rfilename: f for f in (info.siblings or [])}
-        for index, filename in enumerate(FILES, 1):
-            print(f"Downloading {index}/{len(FILES)}: {filename}", flush=True)
+        for index, filename in enumerate(files, 1):
+            print(f"Downloading {index}/{len(files)}: {filename}", flush=True)
             downloaded = Path(
                 hf_hub_download(
                     repo,
@@ -69,6 +77,8 @@ def install_model(name: str, root: Path) -> Path:
             )
             checksum = digest(downloaded)
             metadata = siblings[filename]
+            if filename.endswith(".gguf") and not metadata.lfs:
+                raise ValueError("GGUF download requires an upstream SHA-256 hash.")
             if metadata.lfs and checksum != metadata.lfs.sha256:
                 raise ValueError("Downloaded model hash does not match repository metadata.")
             hashes[filename] = checksum
@@ -76,7 +86,7 @@ def install_model(name: str, root: Path) -> Path:
             json.dumps({"repository": repo, "revision": revision, "sha256": hashes}, indent=2),
             encoding="utf-8",
         )
-        verify_model(stage)
+        verify_artifacts(stage, files)
         stage.rename(destination)
     finally:
         if stage.exists():

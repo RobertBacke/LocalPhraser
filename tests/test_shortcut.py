@@ -1,15 +1,16 @@
+import gc
 import os
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QScrollArea
 
 from localphraser.config import Config
 from localphraser.pipeline import State
 from localphraser.shortcut import ShortcutRecorder, shortcut_from_key
-from localphraser.ui import Desktop, Settings
+from localphraser.ui import Desktop, Latest, Settings
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -18,6 +19,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 def app():
     application = QApplication.instance() or QApplication([])
     yield application
+    application.closeAllWindows()
+    for widget in application.topLevelWidgets():
+        widget.deleteLater()
+    application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    application.processEvents()
+    gc.collect()
 
 
 @pytest.fixture
@@ -114,6 +121,21 @@ def test_capture_restores_existing_runtime_shortcut():
     desktop.hotkey.register.assert_called_with("Ctrl+Shift+F9")
 
 
+def test_settings_edit_and_clear_vocabulary_without_changing_model(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    applied = Mock()
+    settings = Settings(Config(model="small.en", vocabulary="Codex"), applied)
+    assert settings.vocabulary.text() == "Codex"
+    settings.vocabulary.setText("  Codex, PySide, NumPy  ")
+    settings.save()
+    config = applied.call_args.args[0]
+    assert config.vocabulary == "Codex, PySide, NumPy"
+    assert config.model == "small.en"
+    settings.vocabulary.clear()
+    assert settings.values().vocabulary == ""
+    settings.close()
+
+
 def test_caps_selection_waits_for_key_up_before_restoring_shortcut():
     desktop = object.__new__(Desktop)
     desktop.hotkey = Mock()
@@ -128,3 +150,38 @@ def test_caps_selection_waits_for_key_up_before_restoring_shortcut():
     desktop.hotkey.close.assert_called_once()
     desktop.hotkey.register.assert_called_once_with("F9")
     assert desktop.hotkey.capture_callback is None
+
+
+def test_polishing_settings_and_both_transcripts(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    config = Config(mode="polished", refinement_model="qwen2.5-1.5b", refinement_timeout=8)
+    settings = Settings(config, Mock())
+    assert settings.values() == config
+    settings.refinement_prompt.setPlainText("Punctuate only.")
+    assert settings.values().refinement_prompt == "Punctuate only."
+    settings.mode.setCurrentIndex(0)
+    assert settings.values().mode == "raw"
+    assert settings.values().refinement_model == "qwen2.5-1.5b"
+    settings.close()
+    latest = Latest()
+    latest.raw.setPlainText("hello world")
+    latest.set_transcript("Hello, world.", "Inserted.")
+    assert latest.text.toPlainText() == "Hello, world."
+    assert latest.raw.toPlainText() == "hello world"
+    latest.clear()
+    assert not latest.text.toPlainText() and not latest.raw.toPlainText()
+    latest.close()
+
+
+def test_polished_settings_scroll_without_hiding_save(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    settings = Settings(Config(mode="polished"), Mock())
+    settings.resize(620, 480)
+    settings.show()
+    app.processEvents()
+    scroll = settings.findChild(QScrollArea)
+    buttons = settings.findChild(QDialogButtonBox)
+    assert scroll.verticalScrollBar().maximum() > 0
+    assert buttons.isVisible()
+    assert buttons.geometry().bottom() <= settings.height()
+    settings.close()

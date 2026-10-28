@@ -21,7 +21,7 @@ median/p95, peak RAM, cold/warm and actual model revision. Use explicit consent 
 fixtures and keep them out of version control.
 
 No benchmark results exist yet for the complete real-speech pipeline. Synthetic silence runs
-are functionality checks, not speed/accuracy benchmarks. Phase 2 refinement latency is N/A.
+are functionality checks, not speed/accuracy benchmarks. Phase 2 observations follow below.
 
 ## Actual synthetic-speech sanity run — 2026-10-28
 
@@ -56,3 +56,37 @@ benchmark of the entire old/new app. Callback arrival includes backend buffering
 not establish the physical first-sample timestamp. These observations do not prove opening
 words will never be clipped. There is no background capture; the first start after device
 preparation can still have driver latency. Human immediate-speech acceptance remains pending.
+
+## Phase 2 CPU refinement observations — 2026-10-28
+
+Same host and Python as above, llama-cpp-python 0.3.36 CPU wheel, four threads, Q4_K_M,
+4,096-token context, deterministic temperature 0, 1,024 output-token cap, default prompt.
+`scripts/benchmark_refinement.py` used five fixed nonsensitive texts with Python socket
+connections disabled in the worker. Each cell is one observation, not a percentile or a
+controlled hardware comparison; other development activity may affect timings.
+
+| Fixed case | 0.5B seconds / outcome | 1.5B seconds / outcome |
+| --- | --- | --- |
+| Punctuation, cold process/model | 2.772 / accepted edit | 5.329 / accepted edit |
+| Filler, warm | 0.494 / accepted edit | 1.015 / accepted edit |
+| Numbers, warm | 0.690 / raw fallback | 1.469 / accepted edit |
+| Technical terms, warm | 0.558 / accepted edit | 1.229 / accepted edit |
+| Instruction-like text, warm | 15.081 / timeout/raw | 0.976 / accepted edit |
+
+Peak sampled child RSS (50 ms sampling, excludes parent/ASR/UI): **572.4 MiB** for 0.5B,
+**1,773.1 MiB** for 1.5B. These are observed process working sets, not a total application
+memory bound. The model stays resident while Polished remains selected after first use;
+switching to Raw or exit releases it. Guard rejections retain a healthy warm worker;
+timeouts terminate it, so the following attempt incurs another cold start.
+
+Publisher revisions: 0.5B `9217f5db79a29953eb74d5343926648285ec7e67`;
+1.5B `91cad51170dc346986eccefdc2dd33a9da36ead9`. Download manifests also record GGUF,
+LICENSE and README SHA-256 values. The 1.5B model preserved the lexical content of all five
+samples; that small result supports the initial choice but does not certify meaning,
+accuracy, adversarial robustness, or real-voice quality.
+
+`synthetic_speech_check.py` additionally passed generated Windows SAPI speech through
+`small.en` ASR and 1.5B polishing with Python connections denied. Combined cold ASR+polish
+was **10.299 s**, warm **3.172 s**. Audio generation/decoding occurs before those timings;
+microphone activation, target verification, and insertion are excluded. No personal audio
+or transcripts were recorded or printed. Real microphone end-to-end p50/p95 remains open.

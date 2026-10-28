@@ -6,7 +6,13 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from localphraser.config import MODELS, data_dir, load_config
+from localphraser.config import (
+    DEFAULT_REFINEMENT_MODEL,
+    MODELS,
+    REFINEMENT_MODELS,
+    data_dir,
+    load_config,
+)
 
 
 def main() -> int:
@@ -18,12 +24,65 @@ def main() -> int:
     verify = subparsers.add_parser("verify-model", help="Check model integrity without networking")
     verify.add_argument("model", choices=MODELS, nargs="?", default="base.en")
     verify.add_argument("--root", type=Path, default=data_dir() / "models")
+    polish_install = subparsers.add_parser(
+        "install-refiner", help="Download a local polishing model"
+    )
+    polish_install.add_argument(
+        "model", choices=REFINEMENT_MODELS, nargs="?", default=DEFAULT_REFINEMENT_MODEL
+    )
+    polish_install.add_argument("--root", type=Path, default=data_dir() / "models")
+    polish_verify = subparsers.add_parser("verify-refiner", help="Verify a local polishing model")
+    polish_verify.add_argument(
+        "model", choices=REFINEMENT_MODELS, nargs="?", default=DEFAULT_REFINEMENT_MODEL
+    )
+    polish_verify.add_argument("--root", type=Path, default=data_dir() / "models")
+    polish_check = subparsers.add_parser("check-refiner", help="Offline synthetic polishing check")
+    polish_check.add_argument(
+        "model", choices=REFINEMENT_MODELS, nargs="?", default=DEFAULT_REFINEMENT_MODEL
+    )
+    polish_check.add_argument("--root", type=Path, default=data_dir() / "models")
     parser.add_argument("--config", type=Path, default=data_dir() / "config.json")
     parser.add_argument(
         "--smoke-test", action="store_true", help="Launch briefly without microphone use"
     )
     args = parser.parse_args()
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    if args.command == "check-refiner":
+        import json
+        import time
+
+        from localphraser.config import DEFAULT_PROMPT
+        from localphraser.refinement import LocalRefiner
+
+        backend = LocalRefiner(args.model, args.root, 4, DEFAULT_PROMPT, 15)
+        try:
+            timings = []
+            for _ in range(2):
+                started = time.perf_counter()
+                backend.refine("hello world this is local dictation")
+                timings.append(round(time.perf_counter() - started, 3))
+            print(json.dumps({"offline_polishing_check": "passed", "seconds": timings}))
+            return 0
+        except Exception:
+            print("Offline polishing check failed. Verify the runtime and model.", file=sys.stderr)
+            return 1
+        finally:
+            backend.close()
+    if args.command in ("install-refiner", "verify-refiner"):
+        from localphraser.refinement_models import install_refiner, verify_refiner
+
+        os.environ["HF_HUB_OFFLINE"] = "0" if args.command == "install-refiner" else "1"
+        try:
+            operation = install_refiner if args.command == "install-refiner" else verify_refiner
+            operation(args.model, args.root)
+        except Exception:
+            print(
+                "Polishing model operation failed. Check model files or download connectivity.",
+                file=sys.stderr,
+            )
+            return 1
+        print("Polishing model verified.")
+        return 0
     if args.command == "install-model":
         # A downloader launched by the offline desktop inherits its environment.
         # Only this explicit, separate entry point is permitted to go online.

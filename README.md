@@ -37,7 +37,8 @@ The tray provides start/stop recording, cancellation, latest transcript, setting
 Single-click the tray icon to open or restore Settings; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
-and automatic insertion. Raw mode only; Polished mode and login startup are future work.
+and automatic insertion. Raw mode is the default. Optional Polished mode adds local
+punctuation, capitalization, and hesitation removal. Login startup remains future work.
 To choose a shortcut, click its **Change…** button and press Caps Lock, F1–F11, or a
 modifier combination; **Save** applies it. Esc or moving focus away cancels selection.
 Dictation is suspended while choosing, and Caps Lock selection does not toggle capitalization.
@@ -74,8 +75,47 @@ missing/damaged models. It never downloads them implicitly.
 
 No telemetry, saved audio, transcript history, cloud inference, or background update checks.
 Only the latest transcript is retained in RAM for recovery; clear it from the tray dialog.
+Settings → Vocabulary hints accepts a short comma-separated list of names or technical
+terms (up to 300 characters), for example `Codex, PySide, NumPy`. These optional hints
+guide the local recognizer; they do not force a spelling or replace recognized words.
+Hints are saved in local settings, independently of transcripts. Clear the field to disable
+them. Too many or unrelated hints can reduce accuracy; start with a few relevant terms.
 Manual Copy intentionally changes the clipboard and may enter OS clipboard history.
 See [privacy](docs/privacy.md) and [third-party licenses](THIRD_PARTY_NOTICES.md).
+
+## Optional local polishing (experimental)
+
+The first Phase 2 build supports publisher-provided Qwen2.5 0.5B and 1.5B Q4_K_M models.
+The initial choice is **1.5B**, based on a small fixed-text preservation trial. The 0.5B
+option uses less memory but required more raw fallbacks. This is not a broad quality ranking.
+Raw mode works without the optional runtime or a polishing model.
+
+![Local polishing options](assets/polishing.png)
+
+For a source installation, add the upstream CPU wheel explicitly:
+
+```powershell
+uv pip install --python .venv\Scripts\python.exe -r requirements-polish.lock
+.venv\Scripts\python.exe -m localphraser install-refiner qwen2.5-1.5b
+.venv\Scripts\python.exe -m localphraser check-refiner qwen2.5-1.5b
+```
+
+Use `--root <your-model-directory>` for a custom model location. Alternatively choose
+**Settings → Mode → Polished**, select a model, and click **Download polishing model**.
+Save when installation finishes. The development Polished executable includes the CPU
+runtime; models are separate explicit downloads. No local HTTP server or cloud API is used.
+
+Polishing runs in a lazy, reusable child process. The configurable limit is 15 seconds by
+default, including the cold model load; timeout, missing runtime/model, truncated output,
+changed words/numbers, or inputs over 3,000 characters fall back to raw transcription.
+The first build permits punctuation, capitalization, and removing `um`, `uh`, `erm`, `hmm`;
+it deliberately refuses paraphrases and word substitutions. This guard does not prove that
+punctuation preserves meaning. Review important text and compare the **Raw transcription**
+tab in Latest transcript. Copy uses the selected tab; Clear removes both displayed versions.
+
+On the development machine, the 1.5B worker used about 1.8 GiB and added roughly 1–1.5 s
+for four short warm text trials; the first took 5.3 s. These are single observations,
+not an end-to-end or real-voice benchmark. See [performance](docs/performance.md).
 
 ## Checks and build
 
