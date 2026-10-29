@@ -419,3 +419,18 @@ local base.en and Qwen2.5 1.5B (exit 0). No personal audio or editor input was u
 
 The previously intermittent native shutdown failure was not reproduced. Nine clean owned
 Qt process exits do not establish its root cause or complete sustained-session acceptance.
+
+## Insertion timeout cancellation (2026-10-29)
+
+Windows checks for commits `105ec3b` and `7e151e9` failed the slow-insertion timeout
+test: the caller had timed out, but late work could still pass the monotonic deadline
+check. Future wait expiration and the separate clock comparison can disagree near the
+timeout boundary. Insertion now also checks an explicit cancellation event, set before
+the caller returns from waiting. Existing immediate target/focus checks remain required;
+this does not make the final native input dispatch atomic with a focus change.
+
+A regression test holds the permission clock before its deadline, lets the Future wait
+expire, then releases the blocked insertion provider. It must deliver nothing and retain
+no target. Local suite: 210 passed, one optional model test skipped, process exit 0.
+Ruff check/format and mypy passed. This failure was an assertion failure, separate from
+the previously observed native process-exit issue.

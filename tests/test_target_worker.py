@@ -92,3 +92,18 @@ def test_slow_insertion_cannot_deliver_after_timeout(backend):
     native.insert_gate.set()
     barrier(worker)
     assert not native.delivered
+
+
+def test_wait_timeout_revokes_insertion_even_before_clock_deadline(backend, monkeypatch):
+    worker, native = backend
+    token = worker.capture(123).result(timeout=2)
+    # Reproduce a Future wait returning before the permission clock reaches its
+    # deadline, independently of the host's timer resolution and scheduling.
+    monkeypatch.setattr("localphraser.target_worker.time.monotonic", lambda: 100.0)
+    native.insert_gate.clear()
+    with pytest.raises(TimeoutError):
+        worker.insert(token, "text")
+    native.insert_gate.set()
+    barrier(worker)
+    assert not native.delivered
+    assert worker.targets == {}

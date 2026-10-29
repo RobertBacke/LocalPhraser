@@ -80,15 +80,25 @@ class TargetWorker:
 
     def insert(self, token: int, text: str) -> None:
         deadline = time.monotonic() + self.timeout
+        cancelled = threading.Event()
 
         def work() -> None:
             target = self.targets.pop(token)
             self.native.insert(
-                target, text, permitted=lambda: not self.closed and time.monotonic() < deadline
+                target,
+                text,
+                permitted=lambda: (
+                    not self.closed and not cancelled.is_set() and time.monotonic() < deadline
+                ),
             )
 
         # Only the final insertion stage waits; no active microphone capture is blocked.
-        self.executor.submit(work).result(timeout=self.timeout)
+        try:
+            self.executor.submit(work).result(timeout=self.timeout)
+        finally:
+            # Future waits and monotonic deadlines can disagree at the timeout
+            # boundary. Once the caller stops waiting, late work must stay revoked.
+            cancelled.set()
 
     def close(self) -> None:
         if self.closed:
