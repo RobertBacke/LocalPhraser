@@ -271,3 +271,27 @@ runner build is useful integration evidence but cannot replace microphone, consu
 startup, selection/focus, clipboard, multi-monitor, driver or sustained shutdown acceptance.
 Public binary distribution remains gated on the release checklist, exact license/source
 audit and installer/signing decision. The manual preview workflow's upload defaults off.
+
+
+## Per-user installer preview (2026-10-29)
+
+Settings and product guidance now say **Start LocalPhraser upon startup**. The stored
+`start_at_login` key is unchanged for existing configurations. Startup remains opt-in.
+Updated Settings screenshots use an explicit system font and were visually reviewed.
+
+Local validation: 161 tests passed, one optional local-model test skipped; Ruff check/format
+and mypy passed. The rebuilt `dist/installer-preview/LocalPhraser/LocalPhraser.exe` passed
+its owned GUI smoke check with microphone preparation disabled. Its portable ZIP passed
+packaging integrity checks and has a SHA-256 sidecar. No user startup entry was enabled.
+
+The Inno Setup source uses a per-user install, optional desktop shortcut and optional launch.
+Uninstall preserves application data and removes only prefixed startup values pointing to
+its own executable. A disposable-runner check covers install, launch, reinstall, uninstall,
+Start menu cleanup, data preservation and preservation of other startup entries. Interactive
+wizard and running-app upgrade behavior still need consumer-machine acceptance testing.
+
+
+[Windows preview run 40879826951](https://github.com/RobertBacke/LocalPhraser/actions/runs/40879826951)
+passed the full workflow for source commit `29f2ea3`, including real installer compilation
+and install/launch/reinstall/uninstall checks. Artifact upload was disabled. This runner is
+Windows Server; passing here does not establish Windows 10/11 consumer acceptance.
