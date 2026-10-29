@@ -28,3 +28,15 @@ Do not publicly distribute a build until exact wheel/native-library terms, copyr
 Qt replacement/source obligations and FFmpeg build configuration are reviewed. The build
 collects available installed license files; missing notices/source offers still require review.
 No application license grants model redistribution rights beyond the model's own license.
+
+
+Preview builds additionally contain `_internal/third_party`: notices collected from wheel
+RECORD entries, the build interpreter's Python license, PyInstaller's bootloader license and
+exception, plus supplemental upstream license texts. `packaging/licenses/SOURCES.json`
+records version-tagged URLs and SHA-256 values for those supplemental texts. These copies
+close known notice omissions but do not establish exact native binary/source correspondence.
+
+`BUNDLE_INVENTORY.json` records relative runtime file paths and hashes, exact distribution
+versions, declared terms, notice locations, and FFmpeg self-reported configuration/license
+strings. `BUNDLE_REVIEW.md` lists pending review. Reports do not certify distribution rights;
+see [bundled dependency review](https://github.com/RobertBacke/LocalPhraser/blob/main/docs/bundled-dependencies.md) for actual findings.

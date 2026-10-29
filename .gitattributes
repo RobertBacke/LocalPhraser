@@ -1,0 +1,2 @@
+# Preserve upstream notice bytes so their recorded SHA-256 values survive checkout.
+packaging/licenses/* -text

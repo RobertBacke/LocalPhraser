@@ -6,6 +6,11 @@ import os
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
+if __package__:
+    from .bundle_inventory import verify_inventory
+else:
+    from bundle_inventory import verify_inventory
+
 
 def package(folder: Path, output: Path) -> Path:
     if folder.is_symlink() or folder.is_junction():
@@ -26,6 +31,7 @@ def package(folder: Path, output: Path) -> Path:
         raise ValueError("Build is missing the application license.")
     if not (folder / "_internal" / "THIRD_PARTY_NOTICES.md").is_file():
         raise ValueError("Build is missing third-party notices.")
+    verify_inventory(folder)
     paths = []
     for current, directories, files in os.walk(folder, followlinks=False):
         for name in [*directories, *files]:

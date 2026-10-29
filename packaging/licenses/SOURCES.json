@@ -1,0 +1,53 @@
+{
+  "note": "Supplemental upstream terms; not proof of exact binary/source correspondence or completed license review.",
+  "sources": [
+    {
+      "file": "CTranslate2-MIT.txt",
+      "url": "https://raw.githubusercontent.com/OpenNMT/CTranslate2/v4.8.4/LICENSE",
+      "sha256": "54aa79d9fe3c09e67a16dcd95b9e88676405a6ec174efda31036983cf7672ecb",
+      "component": "ctranslate2"
+    },
+    {
+      "file": "PortAudio.txt",
+      "url": "https://raw.githubusercontent.com/PortAudio/portaudio/v19.7.0/LICENSE.txt",
+      "sha256": "ec52a1952d701f94e5135719a47376da4ee0b4a0201f1cafb49f61db6480ac3d",
+      "component": "portaudio"
+    },
+    {
+      "file": "LGPL-3.0-only.txt",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.12.0/LICENSES/LGPL-3.0-only.txt",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
+      "component": "qt"
+    },
+    {
+      "file": "GPL-3.0-only.txt",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.12.0/LICENSES/GPL-3.0-only.txt",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "component": "qt"
+    },
+    {
+      "file": "Silero-VAD-MIT.txt",
+      "url": "https://raw.githubusercontent.com/snakers4/silero-vad/v6.0/LICENSE",
+      "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b",
+      "component": "silero-vad"
+    },
+    {
+      "file": "FlatBuffers-Apache-2.0.txt",
+      "component": "flatbuffers",
+      "url": "https://raw.githubusercontent.com/google/flatbuffers/v25.12.19/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "Tokenizers-Apache-2.0.txt",
+      "component": "tokenizers",
+      "url": "https://raw.githubusercontent.com/huggingface/tokenizers/v0.23.3/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "file": "tqdm-LICENCE.txt",
+      "component": "tqdm",
+      "url": "https://raw.githubusercontent.com/tqdm/tqdm/v4.70.1/LICENCE",
+      "sha256": "fcff87c3a47ce8028a8512aa182d4fcf0ad1c90544ee75cf9b343684cac194de"
+    }
+  ]
+}

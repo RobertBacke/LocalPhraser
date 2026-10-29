@@ -11,8 +11,14 @@ Use Windows x64 Python 3.12, core requirements-dev.lock, optional requirements-p
 and the README validation commands. Run PyInstaller with packaging/localphraser.spec, then:
 
 ```powershell
+python scripts/bundle_inventory.py --folder dist/LocalPhraser --probe-ffmpeg
 python scripts/package_windows.py --folder dist/LocalPhraser --output dist/packages/LocalPhraser-windows-x64-preview.zip
 ```
+
+The offline inventory hashes runtime files and records installed distribution metadata,
+collected notices, supplemental notice sources and native FFmpeg configuration/license
+strings. See [bundle review](bundled-dependencies.md) for observations and remaining gaps.
+It is not a complete SBOM or legal approval. The packager rejects absent/stale reports.
 
 The packager checks the x64 PE header and application/third-party notices, retains shared
 libraries and metadata, refuses linked/external paths and known weights/audio/local settings,

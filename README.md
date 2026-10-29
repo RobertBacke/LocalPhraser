@@ -150,14 +150,18 @@ stable release. Keep the complete `dist\LocalPhraser` folder, including shared l
 and third-party licenses. Speech-recognition models are downloaded separately; the VAD
 asset supplied by faster-whisper is bundled with its own license. See [development](docs/development.md).
 
-Create a checked portable preview ZIP after the folder build:
+Inventory the trusted folder build offline, then create a checked portable preview ZIP:
 
 ```powershell
+.venv\Scripts\python.exe scripts/bundle_inventory.py --probe-ffmpeg
 .venv\Scripts\python.exe scripts/package_windows.py --output dist/packages/LocalPhraser-windows-x64-preview.zip
 ```
 
 The ZIP keeps the complete runtime, first-run instructions and license metadata; a SHA-256
-sidecar accompanies it. The manual Windows preview workflow builds/checks on a fresh runner;
+sidecar accompanies it. BUNDLE_INVENTORY.json records runtime file hashes, dependency
+versions, notice locations and FFmpeg binary observations; BUNDLE_REVIEW.md lists open review
+items. Packaging refuses missing or stale inventories. These reports do not certify license
+compliance. The manual Windows preview workflow builds/checks on a fresh runner;
 artifact upload defaults off pending bundled license/source review. This is not a signed
 installer or a stable release. A separate per-user installer preview is built and checked
 by the manual workflow; see the [release checklist](docs/release-checklist.md).

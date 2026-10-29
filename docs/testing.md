@@ -321,3 +321,25 @@ a SHA-256 sidecar. [Windows preview run 40885414192](https://github.com/RobertBa
 passed for source commit `ea06b4f`, including tests, frozen launch, packaging, installer
 compilation and disposable install/reinstall/uninstall checks. Upload was disabled. These
 checks do not replace clean Windows 10/11 consumer acceptance or the bundled license audit.
+
+
+## Runtime inventory and notice packaging (2026-10-29)
+
+Local suite: 180 passed, one optional model test skipped. Ruff check/format and mypy passed.
+New tests check offline/repeatable inventory generation, actual binary SHA-256 changes,
+missing declared notices, refusal of known local-data payloads and escaped notice paths,
+wheel RECORD notice collection outside metadata directories, supplemental source hashes,
+FFmpeg observation retention, and package rejection of absent/stale reports.
+
+The rebuilt `dist/release-inventory/LocalPhraser` folder passed its owned frozen GUI smoke
+check with microphone preparation disabled (exit 0). Offline inventory recorded 32 wheel
+distributions and 185 native EXE/DLL/PYD files, queried avcodec/avformat/avutil exports in a
+separate process, and verified eight supplemental source-text hashes. ONNX Runtime's
+LICENSE and ThirdPartyNotices.txt are present under `_internal/third_party`, alongside
+Python's runtime license and PyInstaller's bootloader license/exception. The checked ZIP
+includes both inventory reports and a SHA-256 sidecar.
+
+FFmpeg libraries self-reported LGPL version 3 or later while their configuration enabled
+x264/x265. These are recorded observations, not a completed linked-library/source review.
+The corresponding-source, Qt module/replacement, codec, compiler-runtime and clean-machine
+items in the release checklist remain open. No binary distribution approval is inferred.
