@@ -343,3 +343,15 @@ FFmpeg libraries self-reported LGPL version 3 or later while their configuration
 x264/x265. These are recorded observations, not a completed linked-library/source review.
 The corresponding-source, Qt module/replacement, codec, compiler-runtime and clean-machine
 items in the release checklist remain open. No binary distribution approval is inferred.
+
+
+Wheel and source archive builds also passed with temporary files kept in the workspace.
+The source archive preserved all eight upstream supplemental notice hashes. The local
+portable preview is 121.3 MiB and passed ZIP CRC checks; inspection confirmed inventory
+reports, ONNX notices, Python license and PyInstaller bootloader terms are present.
+
+
+[Windows preview run 40891140721](https://github.com/RobertBacke/LocalPhraser/actions/runs/40891140721)
+passed for source commit `8558670`: tests/checks, frozen build, offline inventory/native
+probe, launch smoke, checked ZIP, installer compilation, and disposable install/reinstall/
+uninstall acceptance. Artifact upload was disabled; no public binary release was created.
