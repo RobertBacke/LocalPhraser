@@ -19,11 +19,25 @@ need clean-machine tests, dependency/license inventory, installer, signing decis
 and target-app acceptance, and benchmark results. The public GitHub repository runs Windows
 checks; automated binary releases are not configured.
 
-No launch-at-login registration is made in the MVP. No existing user files are migrated.
+Sign-in startup is opt-in and off in older configurations. Registration changes only on
+Settings Save when enabled or toggled; launches do not rewrite it. Each absolute config path
+has a distinct current-user Run value. A failed settings save attempts registry rollback.
+Source startup uses the same environment's pythonw.exe with an absolute config path; frozen
+startup uses its current executable. Windows startup delays/disablement remain OS-managed.
 Older configuration files default `keep_microphone_ready` to true when loaded. The setting
 is persisted on Save and can be disabled without altering model selection or the shortcut.
-Malformed settings are refused without overwriting them. A stale `.installing` model folder
-left after an installer is terminated must be removed manually before retrying installation.
+Malformed settings are refused without overwriting them. Download jobs now use unique
+UUID staging directories and kernel-backed per-model file locks. Settings cancels its
+owned process, waits for exit, then runs offline cleanup separately from the UI. Cleanup
+validates catalog/job identity, resolved containment, absence of links/junctions and an
+ownership marker; it never removes published models. Startup failures, OS crashes, denied
+deletion or old fixed-name staging folders may leave residue; new jobs still can retry.
+Do not remove a whole model root to recover one failed download.
+
+New microphone selections persist exact name plus host API, resolving a fresh index before
+opening. Unique old names remain usable and migrate on Save when unambiguous. Indistinguishable
+duplicates are omitted/refused. System default remains the default, and no device is opened
+by merely enumerating the list. Broader driver/sample-rate/hot-plug acceptance remains open.
 
 Older configurations also default to empty vocabulary hints. Hints are an explicitly entered,
 single-line string limited to 300 characters. The UI passes them through faster-whisper's

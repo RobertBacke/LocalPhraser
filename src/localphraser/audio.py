@@ -1,6 +1,9 @@
 """Bounded RAM capture with optional pre-opened, stopped microphone streams."""
 
+import json
 import threading
+from collections import Counter
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -10,10 +13,62 @@ Audio = npt.NDArray[np.float32]
 SAMPLE_RATE = 16000
 
 
-def microphones() -> list[str]:
+@dataclass(frozen=True)
+class Microphone:
+    name: str
+    host_api: str
+
+    @property
+    def label(self) -> str:
+        return f"{self.name} — {self.host_api}"
+
+    @property
+    def value(self) -> str:
+        return "device:" + json.dumps([self.name, self.host_api], ensure_ascii=False)
+
+
+def microphones() -> list[Microphone]:
     import sounddevice as sd
 
-    return sorted({d["name"] for d in sd.query_devices() if d["max_input_channels"] > 0})
+    apis = sd.query_hostapis()
+    counts = Counter(
+        Microphone(d["name"], apis[d["hostapi"]]["name"])
+        for d in sd.query_devices()
+        if d["max_input_channels"] > 0
+    )
+    return sorted(
+        (item for item, count in counts.items() if count == 1), key=lambda item: item.label
+    )
+
+
+def resolve_microphone(value: str | None) -> int | None:
+    """Resolve exact current identity, refusing ambiguous legacy names and duplicates."""
+    if value is None:
+        return None
+    import sounddevice as sd
+
+    api_name = None
+    name = value
+    if value.startswith("device:"):
+        identity = json.loads(value.removeprefix("device:"))
+        if (
+            not isinstance(identity, list)
+            or len(identity) != 2
+            or not all(isinstance(x, str) for x in identity)
+        ):
+            raise ValueError("Invalid microphone identity. Select the device again.")
+        name, api_name = identity
+    apis = sd.query_hostapis()
+    matches = [
+        index
+        for index, device in enumerate(sd.query_devices())
+        if device["max_input_channels"] > 0
+        and device["name"] == name
+        and (api_name is None or apis[device["hostapi"]]["name"] == api_name)
+    ]
+    if len(matches) != 1:
+        raise ValueError("Microphone is missing or ambiguous. Select the device again.")
+    return matches[0]
 
 
 class Recorder:
@@ -57,7 +112,7 @@ class Recorder:
                     samplerate=SAMPLE_RATE,
                     channels=1,
                     dtype="float32",
-                    device=self.device,
+                    device=resolve_microphone(self.device),
                     latency="low",
                     callback=self._callback,
                 )

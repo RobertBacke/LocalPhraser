@@ -1,30 +1,14 @@
-import gc
-import os
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialogButtonBox, QScrollArea
+from PySide6.QtWidgets import QDialogButtonBox, QScrollArea
 
 from localphraser.config import Config
 from localphraser.pipeline import State
 from localphraser.shortcut import ShortcutRecorder, shortcut_from_key
 from localphraser.ui import Desktop, Latest, Settings
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-
-@pytest.fixture(scope="module")
-def app():
-    application = QApplication.instance() or QApplication([])
-    yield application
-    application.closeAllWindows()
-    for widget in application.topLevelWidgets():
-        widget.deleteLater()
-    application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    application.processEvents()
-    gc.collect()
 
 
 @pytest.fixture
@@ -184,4 +168,18 @@ def test_polished_settings_scroll_without_hiding_save(app, monkeypatch):
     assert scroll.verticalScrollBar().maximum() > 0
     assert buttons.isVisible()
     assert buttons.geometry().bottom() <= settings.height()
+    settings.close()
+
+
+def test_settings_startup_preference_and_download_save_guard(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    applied = Mock()
+    settings = Settings(Config(), applied)
+    assert not settings.start_at_login.isChecked()
+    settings.start_at_login.setChecked(True)
+    assert settings.values().start_at_login is True
+    settings.downloader.phase = "download"
+    settings.save()
+    applied.assert_not_called()
+    settings.downloader.phase = "idle"
     settings.close()

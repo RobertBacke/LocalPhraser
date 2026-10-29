@@ -101,3 +101,8 @@ not controlled end-to-end microphone measurements. The following requests took 0
 1.442, 1.133 and 0.922 s, respectively; all five edits passed the unchanged guard.
 Sampled peak child RSS was 1,773.0 MiB. Preparation can hide cold loading during speech,
 but does not speed up warm token generation or eliminate ASR processing time.
+
+The Phase 3 unsigned portable ZIP measured **121.1 MiB**, excluding ASR/LLM setup downloads.
+This is a compressed artifact size, distinct from the earlier folder size and process RSS.
+The ZIP retains shared libraries and bundled dependency notices; compression is not a
+runtime resource optimization. Broader idle/peak/end-to-end profiling remains open.

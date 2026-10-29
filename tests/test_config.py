@@ -22,7 +22,10 @@ def test_hotkey_values():
 
 def test_roundtrip(tmp_path):
     config = Config(
-        hotkey="Ctrl+Shift+F9", model_root=str(tmp_path / "models"), vocabulary="Codex, PySide"
+        hotkey="Ctrl+Shift+F9",
+        model_root=str(tmp_path / "models"),
+        vocabulary="Codex, PySide",
+        start_at_login=True,
     )
     path = tmp_path / "settings" / "config.json"
     save_config(config, path)
@@ -41,6 +44,7 @@ def test_roundtrip(tmp_path):
         {"model_root": "relative"},
         {"microphone": 1},
         {"keep_microphone_ready": "yes"},
+        {"start_at_login": "yes"},
         {"vocabulary": None},
         {"vocabulary": ["Codex"]},
         {"vocabulary": "x" * 301},
@@ -74,5 +78,6 @@ def test_older_settings_preserve_model_and_default_to_no_hints(tmp_path):
     config = load_config(path)
     assert config.vocabulary == ""
     assert config.mode == "raw"
+    assert config.start_at_login is False
     assert config.model == "small.en"
     assert config.hotkey == "F9"

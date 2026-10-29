@@ -16,11 +16,17 @@ from localphraser.config import (
 
 
 def main() -> int:
+    # pythonw.exe at sign-in also has absent standard streams, just like the
+    # frozen windowed build. Keep libraries usable without creating log files.
+    for name, mode in (("stdout", "w"), ("stderr", "w"), ("stdin", "r")):
+        if getattr(sys, name) is None:
+            setattr(sys, name, open(os.devnull, mode, encoding="utf-8"))
     parser = argparse.ArgumentParser(description="LocalPhraser offline Windows dictation")
     subparsers = parser.add_subparsers(dest="command")
     install = subparsers.add_parser("install-model", help="Explicitly download a speech model")
     install.add_argument("model", choices=MODELS, nargs="?", default="base.en")
     install.add_argument("--root", type=Path, default=data_dir() / "models")
+    install.add_argument("--job-id", help=argparse.SUPPRESS)
     verify = subparsers.add_parser("verify-model", help="Check model integrity without networking")
     verify.add_argument("model", choices=MODELS, nargs="?", default="base.en")
     verify.add_argument("--root", type=Path, default=data_dir() / "models")
@@ -31,6 +37,11 @@ def main() -> int:
         "model", choices=REFINEMENT_MODELS, nargs="?", default=DEFAULT_REFINEMENT_MODEL
     )
     polish_install.add_argument("--root", type=Path, default=data_dir() / "models")
+    polish_install.add_argument("--job-id", help=argparse.SUPPRESS)
+    cleanup = subparsers.add_parser("cleanup-install", help="Clean one cancelled download job")
+    cleanup.add_argument("model", choices=(*MODELS, *REFINEMENT_MODELS))
+    cleanup.add_argument("--root", type=Path, required=True)
+    cleanup.add_argument("--job-id", required=True)
     polish_verify = subparsers.add_parser("verify-refiner", help="Verify a local polishing model")
     polish_verify.add_argument(
         "model", choices=REFINEMENT_MODELS, nargs="?", default=DEFAULT_REFINEMENT_MODEL
@@ -47,6 +58,19 @@ def main() -> int:
     )
     args = parser.parse_args()
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    if args.command == "cleanup-install":
+        from localphraser.models import cleanup_install
+
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        try:
+            cleanup_install(args.model, args.root, args.job_id)
+            return 0
+        except Exception:
+            print(
+                "Partial download cleanup failed; installed models were not removed.",
+                file=sys.stderr,
+            )
+            return 1
     if args.command == "check-refiner":
         import json
         import time
@@ -74,7 +98,10 @@ def main() -> int:
         os.environ["HF_HUB_OFFLINE"] = "0" if args.command == "install-refiner" else "1"
         try:
             operation = install_refiner if args.command == "install-refiner" else verify_refiner
-            operation(args.model, args.root)
+            if args.command == "install-refiner" and args.job_id:
+                install_refiner(args.model, args.root, job_id=args.job_id)
+            else:
+                operation(args.model, args.root)
         except Exception:
             print(
                 "Polishing model operation failed. Check model files or download connectivity.",
@@ -90,7 +117,10 @@ def main() -> int:
         from localphraser.models import install_model
 
         try:
-            install_model(args.model, args.root)
+            if args.job_id:
+                install_model(args.model, args.root, job_id=args.job_id)
+            else:
+                install_model(args.model, args.root)
         except Exception:
             print(
                 "Model installation failed. Check connectivity, disk space, and model directory.",

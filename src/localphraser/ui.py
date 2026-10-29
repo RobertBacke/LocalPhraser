@@ -1,12 +1,10 @@
 """Small Qt tray application; all model work stays off the GUI thread."""
 
-import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
 
-from PySide6.QtCore import QObject, QProcess, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QColor, QCursor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -32,8 +30,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from localphraser import startup
 from localphraser.audio import Recorder, microphones
 from localphraser.config import DEFAULT_PROMPT, MODELS, REFINEMENT_MODELS, Config, save_config
+from localphraser.downloads import ModelDownload
 from localphraser.hotkey import Hotkey
 from localphraser.pipeline import Dictation, State
 from localphraser.recognition import WhisperRecognizer
@@ -155,6 +155,7 @@ class Settings(QDialog):
         self.setMinimumWidth(540)
         outer = QVBoxLayout(self)
         scroll = QScrollArea()
+        self.scroll_area = scroll
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         body = QWidget()
@@ -177,16 +178,28 @@ class Settings(QDialog):
         form.addRow(shortcut_hint)
         self.device = QComboBox()
         self.device.addItem("System default", None)
+        choices = []
         try:
-            for name in microphones():
-                self.device.addItem(name, name)
+            choices = microphones()
+            for microphone in choices:
+                self.device.addItem(microphone.label, microphone.value)
         except Exception:
             self.device.addItem("Microphones unavailable", None)
         index = self.device.findData(config.microphone)
         if index < 0:
+            legacy_matches = [
+                i + 1 for i, choice in enumerate(choices) if choice.name == config.microphone
+            ]
+            if len(legacy_matches) == 1:
+                index = legacy_matches[0]
+        if index < 0:
             self.device.addItem(f"Unavailable: {config.microphone}", config.microphone)
             index = self.device.count() - 1
         self.device.setCurrentIndex(index)
+        self.device.setToolTip(
+            "Choose an exact device and audio API. Indistinguishable duplicates are omitted; "
+            "use System default for those devices."
+        )
         form.addRow("Microphone", self.device)
         self.model = QComboBox()
         self.model.addItems(MODELS)
@@ -229,6 +242,13 @@ class Settings(QDialog):
             "No audio is captured while idle. Turn off to close the device after each recording."
         )
         form.addRow(self.keep_ready)
+        self.start_at_login = QCheckBox("Start LocalPhraser when I sign in")
+        self.start_at_login.setChecked(config.start_at_login)
+        self.start_at_login.setToolTip(
+            "Opt-in startup for this configuration and current Windows user. "
+            "Keep this application folder in place after enabling."
+        )
+        form.addRow(self.start_at_login)
         self.mode = QComboBox()
         self.mode.addItem("Raw", "raw")
         self.mode.addItem("Polished (experimental, local)", "polished")
@@ -275,7 +295,7 @@ class Settings(QDialog):
         )
         privacy.setWordWrap(True)
         layout.addWidget(privacy)
-        self.install = QPushButton("Download selected model (internet required)")
+        self.install = QPushButton("Download speech model (internet required)")
         self.install.clicked.connect(self.download)
         layout.addWidget(self.install)
         self.progress = QLabel(
@@ -283,7 +303,13 @@ class Settings(QDialog):
         )
         self.progress.setWordWrap(True)
         layout.addWidget(self.progress)
-        self.process: QProcess | None = None
+        self.cancel_download = QPushButton("Cancel download")
+        self.cancel_download.setEnabled(False)
+        layout.addWidget(self.cancel_download)
+        self.downloader = ModelDownload(self)
+        self.downloader.message.connect(self.progress.setText)
+        self.downloader.finished.connect(self.download_finished)
+        self.cancel_download.clicked.connect(self.downloader.cancel)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -317,10 +343,16 @@ class Settings(QDialog):
             refinement_model=self.refinement_model.currentText(),
             refinement_prompt=self.refinement_prompt.toPlainText().strip(),
             refinement_timeout=self.refinement_timeout.value(),
+            start_at_login=self.start_at_login.isChecked(),
         ).validate()
 
     def save(self) -> None:
         self.hotkey.cancel_capture()
+        if self.downloader.busy:
+            self.progress.setText(
+                "Cancel the download or wait for installation/cleanup before saving."
+            )
+            return
         try:
             self.apply_config(self.values())
         except Exception as exc:
@@ -329,6 +361,8 @@ class Settings(QDialog):
         self.accept()
 
     def download(self, refiner: bool = False) -> None:
+        if self.downloader.busy:
+            return
         try:
             config = self.values()
         except ValueError as exc:
@@ -336,57 +370,30 @@ class Settings(QDialog):
             return
         self.install.setEnabled(False)
         self.install_refinement.setEnabled(False)
-        self.process = QProcess(self)
-        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self.process.readyReadStandardOutput.connect(self.download_output)
-        self.process.finished.connect(self.download_finished)
-        self.process.errorOccurred.connect(self.download_error)
-        args = [
-            "install-refiner" if refiner else "install-model",
+        self.cancel_download.setEnabled(True)
+        self.downloader.start(
             config.refinement_model if refiner else config.model,
-            "--root",
-            config.model_root,
-        ]
-        if getattr(sys, "frozen", False):
-            self.process.start(sys.executable, args)
-        else:
-            self.process.start(sys.executable, ["-m", "localphraser", *args])
-        self.progress.setText("Installing model… Download runs separately from dictation.")
-
-    def download_output(self) -> None:
-        if self.process:
-            output = bytes(self.process.readAllStandardOutput().data()).decode(
-                "utf-8", errors="replace"
-            )
-            lines = output.strip().splitlines()
-            if lines:
-                self.progress.setText(lines[-1][-200:])
-
-    def download_finished(self, exit_code: int, status: Any) -> None:
-        self.install.setEnabled(True)
-        self.install_refinement.setEnabled(True)
-        self.progress.setText(
-            "Model installed and verified. Save to use it."
-            if exit_code == 0
-            else "Installation failed. Check connectivity, disk space, and model folder."
+            Path(config.model_root),
+            refiner=refiner,
         )
+        self.scroll_area.ensureWidgetVisible(self.cancel_download)
 
-    def download_error(self, error: Any) -> None:
+    def download_finished(self, success: bool, cancelled: bool) -> None:
         self.install.setEnabled(True)
         self.install_refinement.setEnabled(True)
-        self.progress.setText("Could not run the model installer.")
+        self.cancel_download.setEnabled(False)
 
     def reject(self) -> None:
         self.hotkey.cancel_capture()
-        if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
+        if self.downloader.busy:
             self.progress.setText(
-                "Wait for the model installation to finish before closing settings."
+                "Cancel the download or wait for installation/cleanup before closing settings."
             )
             return
         super().reject()
 
     def accept(self) -> None:
-        if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
+        if self.downloader.busy:
             self.progress.setText("Wait for model installation to finish, then save.")
             return
         super().accept()
@@ -574,12 +581,28 @@ class Desktop:
     def apply(self, config: Config) -> None:
         if self.pipeline.state != State.IDLE:
             raise ValueError("Finish dictation before saving settings.")
+        config.validate()
         changed_hotkey = config.hotkey != self.config.hotkey or not self.hotkey.registered
         if changed_hotkey:
             self.hotkey.register(config.hotkey)
+        previous_startup = None
+        startup_changed = False
         try:
+            if config.start_at_login or config.start_at_login != self.config.start_at_login:
+                previous_startup = startup.read_entry(self.config_path)
+                command = (
+                    startup.startup_command(self.config_path) if config.start_at_login else None
+                )
+                if command != previous_startup:
+                    startup.write_entry(self.config_path, command)
+                    startup_changed = True
             save_config(config, self.config_path)
         except Exception:
+            if startup_changed:
+                try:
+                    startup.write_entry(self.config_path, previous_startup)
+                except OSError:
+                    self.notify("Settings were not saved; the startup entry could not be restored.")
             if changed_hotkey:
                 self.hotkey.register(self.config.hotkey)
             raise
@@ -600,10 +623,5 @@ class Desktop:
         self.latest.clear()
         self.indicator.hide()
         self.tray.hide()
-        if self.settings and self.settings.process:
-            process = self.settings.process
-            if process.state() != QProcess.ProcessState.NotRunning:
-                process.terminate()
-                if not process.waitForFinished(1000):
-                    process.kill()
-                    process.waitForFinished(1000)
+        if self.settings:
+            self.settings.downloader.shutdown()

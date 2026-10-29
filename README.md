@@ -40,7 +40,9 @@ Single-click the tray icon to open or restore Settings; right-click it for the m
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
 and automatic insertion. Raw mode is the default. Optional Polished mode adds local
-punctuation, capitalization, and hesitation removal. Login startup remains future work.
+punctuation, capitalization, and hesitation removal. **Start when I sign in** is opt-in:
+enable it in Settings and Save after choosing a permanent application location.
+Microphones use exact device names and audio APIs; ambiguous duplicates are refused.
 To choose a shortcut, click its **Change…** button and press Caps Lock, F1–F11, or a
 modifier combination; **Save** applies it. Esc or moving focus away cancels selection.
 Dictation is suspended while choosing, and Caps Lock selection does not toggle capitalization.
@@ -76,6 +78,9 @@ missing/damaged models. It never downloads them implicitly.
 ```
 
 No telemetry, saved audio, transcript history, cloud inference, or background update checks.
+Download actions now have **Cancel download**, with cleanup of only that installation's
+temporary files. Wait for cleanup before saving, closing Settings or retrying. Installed
+models remain available. See [troubleshooting](docs/troubleshooting.md) for recovery.
 Only the latest transcript is retained in RAM for recovery; clear it from the tray dialog.
 Settings → Vocabulary hints accepts a short comma-separated list of names or technical
 terms (up to 300 characters), for example `Codex, PySide, NumPy`. These optional hints
@@ -138,6 +143,17 @@ stable release. Keep the complete `dist\LocalPhraser` folder, including shared l
 and third-party licenses. Speech-recognition models are downloaded separately; the VAD
 asset supplied by faster-whisper is bundled with its own license. See [development](docs/development.md).
 
+Create a checked portable preview ZIP after the folder build:
+
+```powershell
+.venv\Scripts\python.exe scripts/package_windows.py --output dist/packages/LocalPhraser-windows-x64-preview.zip
+```
+
+The ZIP keeps the complete runtime, first-run instructions and license metadata; a SHA-256
+sidecar accompanies it. The manual Windows preview workflow builds/checks on a fresh runner;
+artifact upload defaults off pending bundled license/source review. This is not a signed
+installer or a stable release. See the [release checklist](docs/release-checklist.md).
+
 ## Limitations and contribution
 
 Windows x64 is the first target; macOS/Linux adapters are not implemented. Text insertion
@@ -160,3 +176,4 @@ Contributions: use small changes, add meaningful tests for behavior, run the che
 document actual platform verification, and never include models, private audio, dictated
 text, credentials, or generated binaries. See [architecture](docs/architecture.md),
 [research](docs/research.md), and [roadmap](docs/roadmap.md).
+See [CONTRIBUTING](CONTRIBUTING.md) and [troubleshooting](docs/troubleshooting.md).

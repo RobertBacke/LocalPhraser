@@ -22,11 +22,16 @@
    clean-machine verification remain. Do not claim Phase 2 acceptance is complete yet.
    Initial loading now begins on the background worker after recording starts, overlapping
    speech rather than waiting until transcription ends. Warm inference still costs CPU time.
-4. Desktop polish: opt-in login startup, stronger model lifecycle/cancellation, device identity,
-   accessibility and multi-monitor verification. Add screenshots after verified UI capture.
-   Settings now scroll with Save/Cancel outside the scroll area; Raw/Result tabs support
-   comparison. Next implementation priorities are startup preferences and model lifecycle.
+4. **Phase 3 core implemented:** opt-in per-profile sign-in startup, save rollback,
+   cancellable model downloads with owned-job cleanup and per-model locks, exact microphone
+   name/API selection, scrollable Settings, and Raw/Result comparison. Disposable registry
+   and actual installer cancellation checks passed. Actual sign-in launch, wider device/driver,
+   accessibility and multi-monitor acceptance remain; optional dark/light styling is deferred.
 5. Release: license/source inventory, locked dependencies, installable signed/unsigned artifact
    policy, clean-machine checks, release notes, contribution templates and benchmark evidence.
+   **Phase 4 foundation implemented:** checked portable ZIP plus SHA-256, first-run guide,
+   manual Windows preview workflow (upload off by default), contributor/bug-report guidance,
+   troubleshooting and release checklist. Installer/signing policy, exact bundled licensing,
+   clean consumer-machine and sustained-session acceptance still block release readiness.
 6. macOS/Linux adapters after the Windows workflow proves dependable. No remote publication
    or stable release without explicit authorization and acceptance evidence.

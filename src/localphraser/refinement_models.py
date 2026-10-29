@@ -17,9 +17,9 @@ def artifacts(name: str) -> tuple[str, tuple[str, ...]]:
     )
 
 
-def install_refiner(name: str, root: Path) -> Path:
+def install_refiner(name: str, root: Path, *, job_id: str | None = None) -> Path:
     repo, files = artifacts(name)
-    return install_artifacts(name, root, repo, files)
+    return install_artifacts(name, root, repo, files, job_id=job_id)
 
 
 def verify_refiner(name: str, root: Path) -> Path:

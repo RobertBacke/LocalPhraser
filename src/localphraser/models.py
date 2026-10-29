@@ -4,9 +4,12 @@ import hashlib
 import json
 import os
 import shutil
+import uuid
 from pathlib import Path
 
-from localphraser.config import MODELS
+from filelock import FileLock
+
+from localphraser.config import MODELS, REFINEMENT_MODELS
 
 FILES = ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt")
 
@@ -32,7 +35,7 @@ def verify_artifacts(path: Path, files: tuple[str, ...]) -> None:
         raise ValueError("Model missing or damaged. Run install-model explicitly.") from exc
 
 
-def install_model(name: str, root: Path) -> Path:
+def install_model(name: str, root: Path, *, job_id: str | None = None) -> Path:
     """Only caller-authorized CLI/UI setup calls this network operation.
 
     Resolve the repository once, pin every file to that commit, verify LFS hashes,
@@ -40,11 +43,50 @@ def install_model(name: str, root: Path) -> Path:
     """
     if name not in MODELS:
         raise ValueError("Unsupported model.")
-    return install_artifacts(name, root, f"Systran/faster-whisper-{name}", FILES)
+    return install_artifacts(name, root, f"Systran/faster-whisper-{name}", FILES, job_id=job_id)
 
 
-def install_artifacts(name: str, root: Path, repo: str, files: tuple[str, ...]) -> Path:
+def staging_path(name: str, root: Path, job_id: str) -> Path:
+    if name not in (*MODELS, *REFINEMENT_MODELS) or len(job_id) != 32:
+        raise ValueError("Invalid installation identity.")
+    if any(char not in "0123456789abcdef" for char in job_id):
+        raise ValueError("Invalid installation identity.")
+    root = root.resolve()
+    stage = root / f".{name}.{job_id}.installing"
+    if stage.is_symlink() or stage.is_junction() or stage.resolve().parent != root:
+        raise ValueError("Installation path is not an owned staging directory.")
+    return stage
+
+
+def cleanup_install(name: str, root: Path, job_id: str) -> None:
+    """Remove only one identified job, never the published model or other jobs."""
+    stage = staging_path(name, root, job_id)
+    if not stage.exists():
+        return
+    marker = stage / ".localphraser-job"
+    if not marker.exists():
+        stage.rmdir()  # Only an empty directory from the mkdir/marker-write gap is safe.
+        return
+    if marker.is_symlink() or marker.read_text(encoding="ascii") != job_id:
+        raise ValueError("Staging ownership could not be verified.")
+    shutil.rmtree(stage)
+
+
+def install_artifacts(
+    name: str, root: Path, repo: str, files: tuple[str, ...], *, job_id: str | None = None
+) -> Path:
     """Internal catalog-only installer; callers supply fixed names and file lists."""
+    job_id = uuid.uuid4().hex if job_id is None else job_id
+    staging_path(name, root, job_id)  # Validate before creating or acquiring anything.
+    root.mkdir(parents=True, exist_ok=True)
+    # Kernel-backed lock releases on forced termination; its empty file may remain.
+    with FileLock(str(root / f".{name}.install.lock"), timeout=0):
+        return _install_artifacts(name, root, repo, files, job_id)
+
+
+def _install_artifacts(
+    name: str, root: Path, repo: str, files: tuple[str, ...], job_id: str
+) -> Path:
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
     os.environ["HF_HUB_DISABLE_XET"] = "1"
     from huggingface_hub import HfApi, hf_hub_download
@@ -59,9 +101,9 @@ def install_artifacts(name: str, root: Path, repo: str, files: tuple[str, ...]) 
     revision = info.sha
     if not revision:
         raise ValueError("Model repository did not return a revision.")
-    # A fixed staging name and exclusive creation prevent concurrent partial installs.
-    stage = root / f".{name}.installing"
+    stage = staging_path(name, root, job_id)
     stage.mkdir()
+    (stage / ".localphraser-job").write_text(job_id, encoding="ascii")
     try:
         hashes = {}
         siblings = {f.rfilename: f for f in (info.siblings or [])}
@@ -90,6 +132,6 @@ def install_artifacts(name: str, root: Path, repo: str, files: tuple[str, ...]) 
         stage.rename(destination)
     finally:
         if stage.exists():
-            shutil.rmtree(stage)
+            cleanup_install(name, root, job_id)
     print(f"Installed and verified: {destination}", flush=True)
     return destination

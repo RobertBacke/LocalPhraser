@@ -32,6 +32,13 @@ Installer download metadata may reside under the chosen model directory. Install
 in a separate process; dictation remains offline. Development package installation also
 contacts package registries, but it is not application runtime traffic.
 
+Cancelling a download stops only its owned child process and cleans only its UUID-identified
+staging directory after exit. Verified models and other jobs remain. Cleanup runs offline;
+model staging/lock metadata contains no speech. Startup is off by default and writes a
+current-user Run value only after an explicit settings change/Save. That value contains the
+application command and absolute config path, not transcripts. It does not enable recording
+at sign-in; Keep microphone ready still opens only an inactive stream until recording starts.
+
 Optional polishing passes text over a private multiprocessing pipe to a local CPU worker.
 Its model starts loading in the background after the first Polished recording begins,
 without receiving audio or transcript text. Text is sent only after recognition finishes.

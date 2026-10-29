@@ -21,6 +21,7 @@ branding or weights are committed here.
 | Optional llama-cpp-python / llama.cpp | [MIT bindings](https://github.com/abetlen/llama-cpp-python/blob/main/LICENSE.md) / [MIT runtime](https://github.com/ggml-org/llama.cpp/blob/master/LICENSE) |
 | Optional Qwen2.5 0.5B / 1.5B Instruct GGUF | Publisher-declared [Apache-2.0](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/LICENSE); model LICENSE and README are explicitly downloaded and verified |
 | Optional Jinja2 / MarkupSafe / diskcache | BSD-3-Clause / BSD-3-Clause / Apache-2.0; included runtime metadata retains their licenses |
+| filelock 4.2.4 | MIT declared in the installed distribution's License-Expression; runtime metadata/notices are bundled |
 
 This table is a contributor inventory, not a substitute for complete bundled notices.
 Do not publicly distribute a build until exact wheel/native-library terms, copyright notices,

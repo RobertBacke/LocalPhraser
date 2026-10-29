@@ -239,3 +239,35 @@ and polishing, followed by clean shutdown, without microphone use or insertion. 
 wheel/sdist and the updated unsigned folder build completed. Frozen GUI smoke and real
 1.5B `check-refiner` both exited 0. Actual microphone capture while loading and real-voice
 release-to-result latency for this preparation update remain user acceptance work.
+
+## Phase 3 core and Phase 4 preview foundation
+
+Local validation: **162 tests passed with exit 0**, including real `small.en` offline VAD;
+Ruff check/format and mypy passed for 17 source modules. Coverage adds startup command quoting,
+profile scoping, rollback on failed config writes, default-off/no-registry-access saves,
+windowless source streams, exact microphone/API resolution and ambiguity refusal, per-model
+locks, strict job cleanup, actual child cancellation/retry/shutdown, busy-save refusal,
+portable ZIP contents/checksum and refusal of weights/audio/local settings.
+
+Native same-host checks:
+
+- A disposable HKCU test key passed write/read/remove with the real registry API. The actual
+  Run key was untouched, and no real sign-in entry was enabled for testing.
+- Source pythonw.exe passed GUI smoke startup with an owned configuration (exit 0), no
+  microphone preparation/capture or insertion. Null streams are handled without log files.
+- The actual tiny.en installer was started and cancelled in a dedicated ignored root;
+  offline cleanup removed its stage. This passed for source and the frozen executable.
+  Installed models were not removed. Synthetic QProcess tests additionally exercise retry.
+- Source wheel/sdist and the current unsigned folder build completed. The checked ZIP is
+  **121.1 MiB**, excluding separately downloaded models, and includes a SHA-256 sidecar.
+  The ZIP passed CRC checks, was extracted to a fresh owned path containing spaces, and the
+  extracted executable passed GUI smoke and real 1.5B inference twice (both exit 0).
+- Updated Settings screenshots were rendered and visually reviewed without reading personal
+  fields, opening microphones, or changing actual startup preferences.
+
+Actual Windows sign-in behavior has not been exercised by logging the user out. No clean
+consumer VM is available here (Windows Sandbox executable is absent). A GitHub Windows
+runner build is useful integration evidence but cannot replace microphone, consumer-machine,
+startup, selection/focus, clipboard, multi-monitor, driver or sustained shutdown acceptance.
+Public binary distribution remains gated on the release checklist, exact license/source
+audit and installer/signing decision. The manual preview workflow's upload defaults off.

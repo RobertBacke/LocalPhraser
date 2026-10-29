@@ -47,7 +47,7 @@ def test_pinned_download_integrity_and_cleanup(tmp_path, monkeypatch, valid_hash
         with pytest.raises(ValueError):
             install_refiner(name, tmp_path)
         assert not (tmp_path / name).exists()
-    assert not (tmp_path / f".{name}.installing").exists()
+    assert not list(tmp_path.glob(".*.installing"))
 
 
 def test_missing_refiner_is_only_a_local_check(tmp_path, monkeypatch):

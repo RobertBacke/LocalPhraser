@@ -1,0 +1,35 @@
+LocalPhraser — unsigned experimental Windows build
+
+This is a development preview, not a stable release. Keep the entire folder together.
+
+1. Extract the ZIP to a permanent folder. Do not run the app from inside the ZIP.
+2. Open LocalPhraser.exe. Windows may identify this unsigned app as unrecognized.
+3. In Settings, choose a speech model and Download it. This setup step needs internet.
+   No account or API key is needed. Models can be large; allow enough disk space.
+4. Save. Place the cursor in a text field, hold CapsLock, speak, then release it.
+5. Open Settings or Latest transcript from the system tray icon. Quit there to exit.
+
+Raw mode is the default. Experimental Polished mode needs its own model download and
+uses more memory and processing time. Try Raw first, then compare both modes.
+Polished keeps the original in Latest transcript's Raw transcription tab.
+
+After model installation, dictation operates locally without internet. Audio and transcript
+history are not saved. Latest transcript stays in memory. Explicit Copy changes the clipboard.
+Check important text before sending it. Unverified fields, changed focus, and selected text
+use manual-copy recovery to avoid inserting or overwriting in the wrong place.
+
+Startup at sign-in is off by default. Enable it in Settings only after choosing a permanent
+application location. Disable it before moving or deleting that folder. It applies to the
+current configuration and Windows user; no administrator access is required.
+
+Cancel download stops that installation and cleans its identified temporary files. Installed
+models stay available. Retry after cancellation finishes. If cleanup fails, do not delete
+unrelated files: consult the troubleshooting guide.
+
+Source, setup, limitations, privacy, and troubleshooting:
+https://github.com/RobertBacke/LocalPhraser
+
+Original source: MIT, Copyright 2026 Robert Backe.
+Dependencies retain separate licenses. LICENSE and THIRD_PARTY_NOTICES.md, plus dependency
+notices, are in _internal. Model terms accompany their separate downloads. Release license
+review, clean-machine testing, and broader compatibility testing remain pending.

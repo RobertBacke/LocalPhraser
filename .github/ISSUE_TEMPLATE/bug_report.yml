@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible LocalPhraser problem without private dictated content.
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach private audio, transcripts, credentials, model weights or personal screenshots.
+  - type: input
+    id: environment
+    attributes:
+      label: Windows version and LocalPhraser commit/build
+    validations:
+      required: true
+  - type: input
+    id: models
+    attributes:
+      label: Speech model, Raw/Polished mode and polishing model
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use a fixed nonsensitive example. Include the target app/field and input device/API if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+    validations:
+      required: true

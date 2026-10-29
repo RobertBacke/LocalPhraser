@@ -26,6 +26,8 @@ Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone
 - `windows.py`: pointer-safe Win32 ABI, UIA identity/selection/editability/caret validation;
   exact-class native EDIT fallback with bounded EM_GETSEL queries and matching focus/handle.
 - `models.py`: explicit online installation with provenance and hashes, offline verification.
+- `downloads.py`: owned QProcess installer lifecycle, cancellation and separate offline cleanup.
+- `startup.py`: quoted windowless startup command and per-profile current-user Run entry.
 - `ui.py`: tray, nonactivating multi-monitor indicator, settings, recovery transcript, UI dispatcher.
 - `main.py`: CLI, one-instance lock, separate online/offline entry paths.
 
@@ -47,6 +49,10 @@ each recording. Shutdown closes it permanently, including races with pending pre
 Shutdown cancels capture and ignores worker results. Native inference cannot currently be
 interrupted; Python executor shutdown allows the native call to finish before process exit.
 Models remain warm for repeated use; changing settings releases the previous pipeline.
+Sign-in startup is disabled by default; saving a changed preference updates only its profile's
+registry value, with rollback if configuration persistence fails. Normal launches do not
+reconcile registration. New microphone identities combine exact name/API rather than relying
+on ambiguous PortAudio substring matching or a persistent numeric index.
 Phase 2 adds an independent Refiner protocol. Raw mode never loads llama.cpp. Polished
 mode starts a spawn child on the existing background executor after the microphone starts
 and keeps its model warm. Preparation loads the model without sending any text; recording
