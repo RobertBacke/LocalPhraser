@@ -19,7 +19,7 @@ need clean-machine tests, dependency/license inventory, installer, signing decis
 and target-app acceptance, and benchmark results. The public GitHub repository runs Windows
 checks; automated binary releases are not configured.
 
-Sign-in startup is opt-in and off in older configurations. Registration changes only on
+Launch upon startup is opt-in and off in older configurations. Registration changes only on
 Settings Save when enabled or toggled; launches do not rewrite it. Each absolute config path
 has a distinct current-user Run value. A failed settings save attempts registry rollback.
 Source startup uses the same environment's pythonw.exe with an absolute config path; frozen

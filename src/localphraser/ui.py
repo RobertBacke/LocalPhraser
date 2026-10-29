@@ -242,7 +242,7 @@ class Settings(QDialog):
             "No audio is captured while idle. Turn off to close the device after each recording."
         )
         form.addRow(self.keep_ready)
-        self.start_at_login = QCheckBox("Start LocalPhraser when I sign in")
+        self.start_at_login = QCheckBox("Start LocalPhraser upon startup")
         self.start_at_login.setChecked(config.start_at_login)
         self.start_at_login.setToolTip(
             "Opt-in startup for this configuration and current Windows user. "

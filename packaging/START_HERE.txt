@@ -2,7 +2,8 @@ LocalPhraser — unsigned experimental Windows build
 
 This is a development preview, not a stable release. Keep the entire folder together.
 
-1. Extract the ZIP to a permanent folder. Do not run the app from inside the ZIP.
+1. Run the preview installer, or extract the ZIP to a permanent folder.
+   Keep the portable folder together; do not run the app from inside the ZIP.
 2. Open LocalPhraser.exe. Windows may identify this unsigned app as unrecognized.
 3. In Settings, choose a speech model and Download it. This setup step needs internet.
    No account or API key is needed. Models can be large; allow enough disk space.
@@ -18,9 +19,11 @@ history are not saved. Latest transcript stays in memory. Explicit Copy changes 
 Check important text before sending it. Unverified fields, changed focus, and selected text
 use manual-copy recovery to avoid inserting or overwriting in the wrong place.
 
-Startup at sign-in is off by default. Enable it in Settings only after choosing a permanent
+Launch upon startup is off by default. Enable it in Settings only after choosing a permanent
 application location. Disable it before moving or deleting that folder. It applies to the
 current configuration and Windows user; no administrator access is required.
+The installer adds a Start menu shortcut. Uninstall through Windows Installed apps;
+settings and downloaded models are preserved. Quit from the tray before upgrading/removing.
 
 Cancel download stops that installation and cleans its identified temporary files. Installed
 models stay available. Retry after cancellation finishes. If cleanup fails, do not delete

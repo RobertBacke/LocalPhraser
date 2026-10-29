@@ -39,6 +39,17 @@ jobs:
           $previewProcess.Refresh()
           if ($previewProcess.ExitCode -ne 0) { throw 'Preview startup failed' }
       - run: python scripts/package_windows.py --output dist/packages/LocalPhraser-windows-x64-preview.zip
+      - name: Compile the per-user unsigned installer
+        shell: pwsh
+        run: |
+          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
+          & $compiler packaging/localphraser.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+          $setup = Get-Item dist/packages/*-setup-preview.exe
+          $digest = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  $($setup.Name)" | Set-Content -Encoding utf8 "$($setup.FullName).sha256"
+      - name: Check installation and removal on the disposable runner
+        run: python scripts/check_windows_installer.py dist/packages/LocalPhraser-0.1.0a1-windows-x64-setup-preview.exe
       - uses: actions/upload-artifact@v7
         if: ${{ inputs.upload_preview }}
         with:

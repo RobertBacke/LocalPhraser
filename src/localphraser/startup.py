@@ -1,4 +1,4 @@
-"""Opt-in, per-configuration Windows sign-in entry. Never reconciled at app launch."""
+"""Opt-in, per-configuration Windows startup entry. Never reconciled at app launch."""
 
 import hashlib
 import subprocess
@@ -20,7 +20,9 @@ def startup_command(config_path: Path) -> str:
     else:
         executable = executable.with_name("pythonw.exe")
         if not executable.is_file():
-            raise ValueError("Sign-in startup requires pythonw.exe or the Windows folder build.")
+            raise ValueError(
+                "Launch upon startup requires pythonw.exe or the Windows folder build."
+            )
         arguments = [str(executable), "-m", "localphraser"]
     arguments += ["--config", str(config_path.resolve())]
     command = subprocess.list2cmdline(arguments)

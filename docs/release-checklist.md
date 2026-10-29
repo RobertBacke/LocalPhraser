@@ -1,8 +1,8 @@
 # Development preview and release checklist
 
 The source repository is public. This is not a declaration that binaries are release-ready.
-An unsigned folder/ZIP can be built locally; a ZIP does not provide installation, signing,
-automatic updates or an uninstaller. Models are separate explicit downloads.
+Unsigned folder/ZIP and per-user installer previews can be built. Neither is signed, and
+automatic updates are not implemented. Models are separate explicit downloads.
 
 ## Repeatable build procedure
 
@@ -24,6 +24,27 @@ review below; artifacts in a public repository are not a private distribution ch
 The workflow does not create a GitHub release or tag. A CI GUI smoke check is not a real
 microphone, accessibility, sign-in or clean consumer-machine acceptance test.
 
+## Installer preview
+
+After validating the folder with the ZIP packager, compile `packaging/localphraser.iss`
+with [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php). The default input is
+`dist/LocalPhraser`; `/DBuildDir=<absolute folder>` overrides it. Output is under
+`dist/packages`. The installer uses [non-administrative mode](https://jrsoftware.org/ishelp/topic_setup_privilegesrequired.htm),
+installs under the current user's Programs directory, and adds a Start menu shortcut.
+Desktop shortcut and immediate launch are optional; launch upon startup remains off.
+Quit the tray application before upgrades/removal. The uninstaller removes installed files
+and startup entries whose LocalPhraser-prefixed value points exactly to its executable.
+It preserves configuration, downloaded models, and entries for other installations.
+The saved startup preference remains in preserved settings; re-enable it after reinstalling.
+
+The preview workflow compiles using the runner's Inno Setup and runs
+`scripts/check_windows_installer.py` on its disposable Windows runner. That script refuses
+ordinary local execution: it installs into a unique path with spaces, launches without
+microphone capture, reinstalls, uninstalls, and checks preservation of data and unrelated
+startup entries. Installer hashes accompany optional uploads. This is development coverage;
+interactive wizard behavior, running-app updates, clean consumer PCs and signing still need
+acceptance testing. No public binary release is created.
+
 ## Required before public binary distribution
 
 - Complete the exact dependency/native-library license and source inventory. Include copies,
@@ -34,7 +55,7 @@ microphone, accessibility, sign-in or clean consumer-machine acceptance test.
 - Test first-run downloads, offline Raw/Polished dictation, first/warm latency, microphone
   permissions/device loss, selection/focus safety, clipboard preservation and recovery.
 - Test cancelled/interrupted downloads, retries, disk-full/corruption cases, source/frozen
-  startup paths, opt-in sign-in startup, disabling it, and folder movement/uninstall behavior.
+  startup paths, opt-in launch upon startup, disabling it, and folder movement/uninstall behavior.
 - Run sustained sessions and shutdown stress. Track the intermittent native test-process
   shutdown failure previously observed; later clean exits do not establish its root cause.
 - Decide the installer/signing policy and publish accurate unsigned/alpha warnings, checksums,

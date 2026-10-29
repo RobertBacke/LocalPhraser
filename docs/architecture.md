@@ -49,7 +49,7 @@ each recording. Shutdown closes it permanently, including races with pending pre
 Shutdown cancels capture and ignores worker results. Native inference cannot currently be
 interrupted; Python executor shutdown allows the native call to finish before process exit.
 Models remain warm for repeated use; changing settings releases the previous pipeline.
-Sign-in startup is disabled by default; saving a changed preference updates only its profile's
+Launch upon startup is disabled by default; saving a changed preference updates only its profile's
 registry value, with rollback if configuration persistence fails. Normal launches do not
 reconcile registration. New microphone identities combine exact name/API rather than relying
 on ambiguous PortAudio substring matching or a persistent numeric index.

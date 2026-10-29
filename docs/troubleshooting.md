@@ -46,9 +46,9 @@ The developer cleanup CLI accepts one validated model/job identity and refuses u
 linked staging directories. Old `.model.installing` folders from earlier builds are not
 automatically deleted. Inspect partial files carefully before removing them manually.
 
-## Startup at sign-in
+## Launch upon startup
 
-Enable Settings → Start LocalPhraser when I sign in, then Save. This is off by default and
+Enable Settings → Start LocalPhraser upon startup, then Save. This is off by default and
 uses a current-user Run entry specific to the absolute configuration path. It needs no admin
 rights. Source runs use `pythonw.exe`; folder builds use their executable. Windows can delay
 startup or disable it through Startup apps; the app does not rewrite registration on launch.

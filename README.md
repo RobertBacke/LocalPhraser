@@ -40,7 +40,7 @@ Single-click the tray icon to open or restore Settings; right-click it for the m
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
 and automatic insertion. Raw mode is the default. Optional Polished mode adds local
-punctuation, capitalization, and hesitation removal. **Start when I sign in** is opt-in:
+punctuation, capitalization, and hesitation removal. **Start LocalPhraser upon startup** is opt-in:
 enable it in Settings and Save after choosing a permanent application location.
 Microphones use exact device names and audio APIs; ambiguous duplicates are refused.
 To choose a shortcut, click its **Change…** button and press Caps Lock, F1–F11, or a
@@ -152,7 +152,8 @@ Create a checked portable preview ZIP after the folder build:
 The ZIP keeps the complete runtime, first-run instructions and license metadata; a SHA-256
 sidecar accompanies it. The manual Windows preview workflow builds/checks on a fresh runner;
 artifact upload defaults off pending bundled license/source review. This is not a signed
-installer or a stable release. See the [release checklist](docs/release-checklist.md).
+installer or a stable release. A separate per-user installer preview is built and checked
+by the manual workflow; see the [release checklist](docs/release-checklist.md).
 
 ## Limitations and contribution
 

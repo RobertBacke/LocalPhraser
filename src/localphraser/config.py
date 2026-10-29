@@ -81,7 +81,7 @@ class Config:
         if type(self.keep_microphone_ready) is not bool:
             raise ValueError("Keep microphone ready must be true or false.")
         if type(self.start_at_login) is not bool:
-            raise ValueError("Sign-in startup must be true or false.")
+            raise ValueError("Launch upon startup must be true or false.")
         if not isinstance(self.vocabulary, str) or len(self.vocabulary) > 300:
             raise ValueError("Vocabulary hints must be text of at most 300 characters.")
         if any(ord(char) < 32 or ord(char) == 127 for char in self.vocabulary):
