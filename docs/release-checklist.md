@@ -52,6 +52,15 @@ startup entries. Installer hashes accompany optional uploads. This is developmen
 interactive wizard behavior, running-app updates, clean consumer PCs and signing still need
 acceptance testing. No public binary release is created.
 
+## Opt-in runtime validation
+
+The source and frozen application support `check-runtime`; see
+[runtime validation](runtime-validation.md) for the exact command and report scope. This
+uses fixed synthetic speech, local models and optional polishing, with no microphone or
+insertion. Run it on the target consumer machine using preinstalled models, then perform
+manual microphone/editor acceptance separately. The preview workflow verifies the frozen
+missing-model failure report without downloading any models.
+
 ## Required before public binary distribution
 
 - Complete the exact dependency/native-library license and source inventory. Include copies,

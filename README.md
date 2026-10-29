@@ -166,6 +166,10 @@ artifact upload defaults off pending bundled license/source review. This is not 
 installer or a stable release. A separate per-user installer preview is built and checked
 by the manual workflow; see the [release checklist](docs/release-checklist.md).
 
+The optional `check-runtime` command exercises recognition and polishing with generated
+synthetic speech and writes a small report without microphone capture or transcripts.
+See [runtime validation](docs/runtime-validation.md) for usage and limits.
+
 ## Limitations and contribution
 
 Windows x64 is the first target; macOS/Linux adapters are not implemented. Text insertion

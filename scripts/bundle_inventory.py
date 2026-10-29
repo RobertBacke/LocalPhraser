@@ -1,6 +1,8 @@
 """Offline inventory of a trusted Windows folder build; not a license approval tool."""
 
 import argparse
+import base64
+import csv
 import hashlib
 import json
 import re
@@ -134,9 +136,34 @@ def inventory(folder: Path, *, probe: bool = False) -> dict:
                 "notices": notices,
             }
         )
+    record_hashes: dict[str, list[dict]] = {}
+    for directory in sorted(internal.glob("*.dist-info")):
+        record = directory / "RECORD"
+        if not record.is_file():
+            continue
+        metadata = Parser().parsestr((directory / "METADATA").read_text(encoding="utf-8"))
+        for row in csv.reader(record.read_text(encoding="utf-8").splitlines()):
+            if len(row) < 2 or not row[1].startswith("sha256="):
+                continue
+            encoded = row[1].removeprefix("sha256=")
+            digest = base64.b64decode(
+                encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True
+            )
+            if len(digest) != 32:
+                raise ValueError("Invalid wheel RECORD SHA-256 value.")
+            record_hashes.setdefault(digest.hex(), []).append(
+                {
+                    "distribution": metadata["Name"],
+                    "version": metadata["Version"],
+                    "record_path": row[0],
+                }
+            )
     native = [
-        item for item in files if Path(item["path"]).suffix.lower() in (".dll", ".pyd", ".exe")
+        {**item, "wheel_records": record_hashes.get(item["sha256"], [])}
+        for item in files
+        if Path(item["path"]).suffix.lower() in (".dll", ".pyd", ".exe")
     ]
+    matched = sum(bool(item["wheel_records"]) for item in native)
     ffmpeg = []
     if probe:
         completed = subprocess.run(
@@ -173,6 +200,12 @@ def inventory(folder: Path, *, probe: bool = False) -> dict:
         "release_approved": False,
         "packages": packages,
         "native_files": native,
+        "native_provenance": {
+            "matched_files": matched,
+            "unmatched_files": len(native) - matched,
+            "basis": "Bundled wheel RECORD hashes only; original wheel archives/signatures "
+            "and corresponding sources are not verified by this match.",
+        },
         "ffmpeg": ffmpeg,
         "supplemental_sources": supplemental,
         "review_findings": findings,
@@ -194,6 +227,9 @@ def write_inventory(folder: Path, *, probe: bool = False) -> dict:
         "No model weights, user settings or speech were inspected to create this report.",
         "",
         f"Distributions: {len(report['packages'])}; native files: {len(report['native_files'])}.",
+        "Native files matching wheel RECORD hashes: "
+        f"{report['native_provenance']['matched_files']}. "
+        "Unmatched files still require separate runtime/build provenance review.",
         "",
         "## Review findings",
         "",
@@ -207,6 +243,8 @@ def write_inventory(folder: Path, *, probe: bool = False) -> dict:
             f"- {item['path']}: {item['license']}",
             f"  Configuration: `{item['configuration']}`",
         ]
+    lines += ["", "## Native files without a wheel RECORD hash match", ""]
+    lines += ["- " + item["path"] for item in report["native_files"] if not item["wheel_records"]]
     (folder / "BUNDLE_REVIEW.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return report
 

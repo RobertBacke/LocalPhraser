@@ -41,7 +41,7 @@ alternatives but its collected license file contains commercial terms. Supplemen
 LGPLv3 and GPLv3 texts are included from the Qt 6.12.0 source tag. CTranslate2, FlatBuffers,
 and tokenizers wheels also lacked separate notice files; version-tagged upstream texts
 are provided alongside PortAudio and Silero VAD terms. The collector also recognizes
-tqdm’s LICENCE spelling; a version-tagged supplemental copy is included. Files and hashes are recorded in
+tqdm's LICENCE spelling; a version-tagged supplemental copy is included. Files and hashes are recorded in
 `packaging/licenses/SOURCES.json`. These are supplemental terms, not matched source archives.
 
 ## FFmpeg observations requiring further review
@@ -53,6 +53,13 @@ recorded separately; the reported FFmpeg label does not settle linked codec term
 Upstream [FFmpeg licensing documentation](https://github.com/FFmpeg/FFmpeg/blob/master/LICENSE.md)
 identifies external codec libraries that can affect distribution terms. The
 [PyAV FFmpeg build repository](https://github.com/PyAV-Org/pyav-ffmpeg) supplies build context.
+The inventory now matches native bytes against SHA-256 entries in bundled wheel RECORD
+files. The preceding preview matched 157 of 185 native files; the JSON report lists every
+matching distribution/version/record path and separately lists unmatched files. Most
+unmatched files are Python/Windows runtimes, plus the application executable. This identifies
+wheel-record correspondence; original wheel archives/signatures and exact source archives
+remain unverified by the comparison. A filename alone never establishes a match.
+
 Exact source revisions, patches, build recipes and codec dependency correspondence still
 need investigation before public binary distribution. No licensing conclusion is inferred
 from the self-reported string alone.

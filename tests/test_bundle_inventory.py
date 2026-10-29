@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import socket
@@ -48,6 +49,22 @@ def test_missing_license_is_recorded_without_inventing_terms(bundle):
     (bundle / "_internal/example-1.0.dist-info/licenses/LICENSE.txt").unlink()
     result = inventory(bundle)
     assert any("declared license file absent" in finding for finding in result["review_findings"])
+
+
+def test_native_attribution_requires_matching_record_hash_not_filename(bundle):
+    metadata = bundle / "_internal/example-1.0.dist-info"
+    digest = (
+        base64.urlsafe_b64encode(hashlib.sha256(b"owned native fixture").digest())
+        .decode()
+        .rstrip("=")
+    )
+    (metadata / "RECORD").write_text(f"example/native.dll,sha256={digest},20\n")
+    result = inventory(bundle)
+    assert result["native_provenance"]["matched_files"] == 1
+    matched = next(item for item in result["native_files"] if item["wheel_records"])
+    assert matched["wheel_records"][0]["distribution"] == "Example"
+    (bundle / "_internal/native.dll").write_bytes(b"other bytes with same filename")
+    assert inventory(bundle)["native_provenance"]["matched_files"] == 0
 
 
 @pytest.mark.parametrize(

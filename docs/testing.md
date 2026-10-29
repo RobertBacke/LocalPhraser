@@ -355,3 +355,28 @@ reports, ONNX notices, Python license and PyInstaller bootloader terms are prese
 passed for source commit `8558670`: tests/checks, frozen build, offline inventory/native
 probe, launch smoke, checked ZIP, installer compilation, and disposable install/reinstall/
 uninstall acceptance. Artifact upload was disabled; no public binary release was created.
+
+
+## Synthetic runtime diagnostics and native RECORD attribution (2026-10-29)
+
+Local suite: 189 passed, one optional model test skipped. Ruff check/format and mypy passed
+for 18 source modules. New tests cover Raw/Polished cold/warm check orchestration, rejected
+word edits, buffer clearing and refinement cleanup, sanitized failure stages, restoration
+of socket patches, refusal to overwrite an existing report, and missing-model failure
+without audio generation/downloads. Native attribution requires an exact RECORD SHA-256
+match; a matching filename with different bytes receives no attribution.
+
+Source check-runtime passed with the real local base.en and Qwen2.5 1.5B models (exit 0).
+The new frozen executable passed Raw synthetic recognition and three separate Polished
+process trials, each doing cold/warm recognition and refinement (3/3 Polished trials exit 0).
+No microphone or editor insertion was used. A frozen missing-model trial exited 1, wrote
+only the expected model_verification failure report, and created no model directory.
+Generated audio was temporary and reports contained no recognition output or model paths.
+These small CLI trials do not establish GUI shutdown-stress reliability or broad accuracy.
+
+The new bundle again records 32 distributions and 185 native files. 157 native files match
+SHA-256 entries from bundled wheel RECORD metadata; 28 are unmatched and separately listed
+for Python/runtime/application provenance review. This does not authenticate original wheel
+archives, signatures or corresponding source revisions. The portable preview includes
+inventory evidence and a SHA-256 sidecar; native-source/codec and consumer acceptance gaps
+remain open.

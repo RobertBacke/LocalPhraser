@@ -53,12 +53,30 @@ def main() -> int:
         "model", choices=REFINEMENT_MODELS, nargs="?", default=DEFAULT_REFINEMENT_MODEL
     )
     polish_check.add_argument("--root", type=Path, default=data_dir() / "models")
+    runtime = subparsers.add_parser(
+        "check-runtime", help="Opt-in synthetic speech check; no microphone or downloads"
+    )
+    runtime.add_argument("--root", type=Path, default=data_dir() / "models")
+    runtime.add_argument("--model", choices=MODELS, default="base.en")
+    runtime.add_argument("--polishing-model", choices=REFINEMENT_MODELS)
+    runtime.add_argument("--report", type=Path, required=True, help="New JSON report file")
     parser.add_argument("--config", type=Path, default=data_dir() / "config.json")
     parser.add_argument(
         "--smoke-test", action="store_true", help="Launch briefly without microphone use"
     )
     args = parser.parse_args()
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    if args.command == "check-runtime":
+        from localphraser.diagnostics import write_runtime_report
+
+        try:
+            return write_runtime_report(args.report, args.root, args.model, args.polishing_model)
+        except (OSError, ValueError):
+            print(
+                "Runtime report could not be written. Choose a new writable JSON file.",
+                file=sys.stderr,
+            )
+            return 1
     if args.command == "cleanup-install":
         from localphraser.models import cleanup_install
 

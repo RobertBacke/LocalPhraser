@@ -40,6 +40,20 @@ jobs:
           }
           $previewProcess.Refresh()
           if ($previewProcess.ExitCode -ne 0) { throw 'Preview startup failed' }
+      - name: Verify frozen diagnostic failure reporting without models or downloads
+        shell: pwsh
+        run: |
+          $reportPath = Join-Path $env:RUNNER_TEMP 'runtime-missing-models.json'
+          $missingRoot = Join-Path $env:RUNNER_TEMP 'runtime-models-not-installed'
+          $diagnostic = Start-Process -FilePath dist/LocalPhraser/LocalPhraser.exe -ArgumentList @('check-runtime', '--root', $missingRoot, '--report', $reportPath) -WindowStyle Hidden -PassThru
+          if (-not $diagnostic.WaitForExit(30000)) {
+            Stop-Process -Id $diagnostic.Id
+            throw 'Diagnostic failure report timed out'
+          }
+          $diagnostic.Refresh()
+          $report = Get-Content -Raw $reportPath | ConvertFrom-Json
+          if ($diagnostic.ExitCode -ne 1 -or $report.stage -ne 'model_verification' -or $report.status -ne 'failed') { throw 'Unexpected diagnostic result' }
+          if (Test-Path $missingRoot) { throw 'Diagnostics created a model directory' }
       - run: python scripts/package_windows.py --output dist/packages/LocalPhraser-windows-x64-preview.zip
       - name: Compile the per-user unsigned installer
         shell: pwsh
