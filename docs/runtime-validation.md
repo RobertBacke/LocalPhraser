@@ -30,7 +30,10 @@ $check.ExitCode
 Add `--polishing-model qwen2.5-1.5b` to exercise polishing after installing that model.
 Repeat with different report names to check initialization/shutdown across process launches.
 The windowed EXE has no console output; inspect the JSON report after the process exits.
-Exit code 0 means the check passed; 1 means failure. Existing report files are refused and
+Require both exit code 0 and JSON status passed for a successful cycle. Exit code 1 means
+a reported failure; any other nonzero exit also fails the cycle. A native shutdown crash
+can happen after writing a passed report, so inspect the process exit code as well.
+Existing report files are refused and
 never overwritten. A native crash or interrupted run can leave an empty/incomplete report;
 treat that as a failed check. The command uses CPU and RAM while testing.
 

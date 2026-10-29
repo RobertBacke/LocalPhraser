@@ -380,3 +380,16 @@ for Python/runtime/application provenance review. This does not authenticate ori
 archives, signatures or corresponding source revisions. The portable preview includes
 inventory evidence and a SHA-256 sidecar; native-source/codec and consumer acceptance gaps
 remain open.
+
+
+Source archive and wheel builds passed; the wheel contains the diagnostic module. No
+synthetic temporary folders remained after the source/frozen checks. For shutdown evidence,
+a complete passed JSON report is insufficient on its own: the invoking process must also
+exit 0. The runtime validation guide explicitly requires both outcomes.
+
+
+[Windows preview run 40898119456](https://github.com/RobertBacke/LocalPhraser/actions/runs/40898119456)
+passed for source commit `d8b43a8`: tests/checks, frozen build, native inventory, GUI smoke,
+frozen missing-model diagnostic/report, portable packaging and installer install/reinstall/
+uninstall acceptance. Binary artifact upload was disabled. This does not replace real
+model checks on clean Windows 10/11 consumer machines or the remaining release review.
