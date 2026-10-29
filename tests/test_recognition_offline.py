@@ -2,6 +2,7 @@
 
 import os
 import socket
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -46,3 +47,40 @@ def test_hints_reach_engine_without_replacing_recognized_words(vocabulary, expec
     assert args[0] is audio
     assert kwargs["hotwords"] == expected
     assert kwargs["vad_filter"] is True
+
+
+def test_prepare_loads_local_model_once_without_inference(monkeypatch, tmp_path):
+    verify = Mock()
+    factory = Mock()
+    factory.return_value.transcribe.return_value = (iter([]), None)
+    monkeypatch.setattr("localphraser.models.verify_model", verify)
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=factory))
+    recognizer = WhisperRecognizer(tmp_path, cpu_threads=2)
+    recognizer.prepare()
+    recognizer.prepare()
+    factory.return_value.transcribe.assert_not_called()
+    assert recognizer.transcribe(np.zeros(16000, dtype=np.float32)) == ""
+    verify.assert_called_once_with(tmp_path)
+    factory.assert_called_once_with(
+        str(tmp_path),
+        device="cpu",
+        compute_type="int8",
+        cpu_threads=2,
+        num_workers=1,
+        local_files_only=True,
+    )
+    assert os.environ["HF_HUB_OFFLINE"] == "1"
+
+
+def test_failed_prepare_can_retry_at_transcription(monkeypatch, tmp_path):
+    monkeypatch.setattr("localphraser.models.verify_model", Mock())
+    engine = Mock()
+    engine.transcribe.return_value = (iter([]), None)
+    factory = Mock(side_effect=[OSError("loading failed"), engine])
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=factory))
+    recognizer = WhisperRecognizer(tmp_path)
+    with pytest.raises(OSError):
+        recognizer.prepare()
+    assert recognizer._model is None
+    assert recognizer.transcribe(np.zeros(16000, dtype=np.float32)) == ""
+    assert factory.call_count == 2

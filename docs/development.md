@@ -1,5 +1,14 @@
 # Development
 
+Speech-model preparation starts on the existing inference executor after microphone start,
+before polishing-model preparation. Verification and native construction stay on that worker;
+`transcribe` also calls the idempotent `prepare` method for CLI/direct callers and to retry
+failed preparation. No download or synthetic inference is performed during preparation.
+This moves cold loading into speaking time; it does not promise a fixed latency reduction.
+Cancelled or silent first recordings may still load weights. Native loading/inference cannot
+be interrupted; shutdown suppresses delivery and skips later polishing preparation, but may
+wait for active loading to finish. Startup remains lazy.
+
 Use the README's Python 3.12 x64 virtual environment commands. The project is source-layout
 packaged with Hatchling. `requirements-dev.lock` captures the resolved development environment;
 install it with `uv pip sync --python .venv\Scripts\python.exe requirements-dev.lock` and then

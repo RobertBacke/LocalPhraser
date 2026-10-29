@@ -34,6 +34,9 @@ class FakeRecognizer:
         self.gate = threading.Event()
         self.gate.set()
 
+    def prepare(self):
+        pass
+
     def transcribe(self, audio):
         self.gate.wait(3)
         if self.error:
@@ -381,3 +384,69 @@ def test_minimum_recording_duration_uses_actual_capture_rate(setup):
     pipeline.release()
     assert pipeline.state == State.IDLE and not results and not insertion.delivered
     assert not recorder.audio.any()
+
+
+def test_speech_model_loading_overlaps_recording_on_inference_worker(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, results = setup
+    owner = threading.get_ident()
+    started, gate = threading.Event(), threading.Event()
+    calls = []
+
+    def prepare():
+        assert threading.get_ident() != owner
+        assert recorder.started == 1
+        calls.append(("prepare", threading.get_ident()))
+        started.set()
+        assert gate.wait(5)
+
+    def transcribe(audio):
+        calls.append(("transcribe", threading.get_ident()))
+        return "Hello, world."
+
+    recognizer.prepare = prepare
+    recognizer.transcribe = transcribe
+    try:
+        pipeline.press()
+        assert started.wait(5)
+        assert pipeline.state == State.RECORDING
+        pipeline.release()
+        assert pipeline.state == State.TRANSCRIBING
+        assert len(calls) == 1
+    finally:
+        gate.set()
+    finish(callbacks)
+    assert calls[0][1] == calls[1][1]
+    assert results[0][0] == "Hello, world."
+
+
+def test_speech_preparation_failure_defers_to_actual_transcription(setup):
+    pipeline, _, recognizer, _, callbacks, changes, results = setup
+    recognizer.prepare = Mock(side_effect=OSError("private loading failure"))
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    recognizer.prepare.assert_called_once()
+    assert results[0][0] == "Hello, world."
+    assert "private" not in str(changes)
+
+
+def test_shutdown_during_speech_preparation_skips_polishing(setup):
+    pipeline, _, recognizer, insertion, callbacks, _, results = setup
+    started, gate = threading.Event(), threading.Event()
+    backend = Mock()
+    pipeline.refiner = backend
+
+    def prepare():
+        started.set()
+        assert gate.wait(5)
+
+    recognizer.prepare = prepare
+    try:
+        pipeline.press()
+        assert started.wait(5)
+        pipeline.shutdown()
+    finally:
+        gate.set()
+    pipeline.executor.shutdown(wait=True)
+    backend.prepare.assert_not_called()
+    assert callbacks.empty() and not results and not insertion.delivered

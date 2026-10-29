@@ -23,7 +23,9 @@
    connected and disconnected, while noting processing delay. Broader preservation corpora and
    clean-machine verification remain. Do not claim Phase 2 acceptance is complete yet.
    Initial loading now begins on the background worker after recording starts, overlapping
-   speech rather than waiting until transcription ends. Warm inference still costs CPU time.
+   speech rather than waiting until transcription ends. Speech-model verification/loading
+   now also starts after microphone capture begins, on the same inference worker before
+   polishing-model preparation. Warm inference still costs CPU time.
 4. **Phase 3 core implemented:** opt-in per-profile launch upon startup, save rollback,
    cancellable model downloads with owned-job cleanup and per-model locks, exact microphone
    name/API selection, scrollable Settings, and Raw/Result comparison. Disposable registry

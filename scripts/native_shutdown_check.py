@@ -47,11 +47,11 @@ def check(root: Path, temporary: Path, case: str, capture_rate: int) -> None:
         backend = pipeline.refiner
         assert backend is not None
         if case == "loading":
-            pending = pipeline.executor.submit(backend.prepare)
+            pending = pipeline.executor.submit(pipeline._prepare_models)
         else:
             audio = synthetic_audio(temporary, capture_rate)
             pipeline._state(State.TRANSCRIBING)
-            pipeline.executor.submit(backend.prepare)
+            pipeline.executor.submit(pipeline._prepare_models)
             pending = pipeline.executor.submit(pipeline._transcribe, audio, capture_rate)
             pending.add_done_callback(
                 lambda result: pipeline._post(lambda: pipeline._finish(result))

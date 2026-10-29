@@ -434,3 +434,23 @@ expire, then releases the blocked insertion provider. It must deliver nothing an
 no target. Local suite: 210 passed, one optional model test skipped, process exit 0.
 Ruff check/format and mypy passed. This failure was an assertion failure, separate from
 the previously observed native process-exit issue.
+
+## Speech-model preparation during recording (2026-10-29)
+
+Local suite: 216 passed, process exit 0, with LOCALPHRASER_TEST_MODEL pointing at the
+verified base.en model. The optional real-model test ran with Python socket connections
+denied. Ruff check/format, mypy and source archive/wheel builds passed.
+
+Tests cover nonblocking preparation after microphone start, serialization with recognition
+on the same inference worker, idempotent preparation without inference, retry after failed
+construction, sanitized deferred failures, and shutdown skipping later polishing preparation.
+The owned Qt helper now uses the actual combined preparation path; loading, polishing and
+normal-completion trials with synthetic 48 kHz speech each exited 0. No personal audio,
+keyboard registration or editor insertion was used. These are not sustained-session proof.
+
+A single source-process base.en measurement with generated speech and Python connections
+blocked observed preparation at 1.232 seconds, first prepared inference at 1.283 seconds,
+and warm inference at 0.692 seconds. This identifies loading work that can overlap speech;
+it is not a controlled before/after benchmark, a hardware-wide speed claim or a microphone
+latency measurement. Short recordings may still wait for loading; native loading remains
+noninterruptible and may delay process exit. Cancelled/silent first recordings may load weights.

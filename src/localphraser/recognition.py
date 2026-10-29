@@ -8,6 +8,7 @@ from localphraser.audio import Audio
 
 
 class Recognizer(Protocol):
+    def prepare(self) -> None: ...
     def transcribe(self, audio: Audio) -> str: ...
 
 
@@ -18,7 +19,8 @@ class WhisperRecognizer:
         self.vocabulary = vocabulary.strip()
         self._model: Any = None
 
-    def transcribe(self, audio: Audio) -> str:
+    def prepare(self) -> None:
+        """Load verified local weights on the inference worker, before speech is released."""
         # Also protects against optional tokenizer fallbacks contacting the model hub.
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -36,6 +38,9 @@ class WhisperRecognizer:
                 num_workers=1,
                 local_files_only=True,
             )
+
+    def transcribe(self, audio: Audio) -> str:
+        self.prepare()
         segments, _ = self._model.transcribe(
             audio,
             language="en",

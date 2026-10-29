@@ -71,7 +71,10 @@ Choose `tiny.en`, `base.en` (default), or `small.en`. They are the MIT-licensed 
 CTranslate2 conversions of OpenAI Whisper English models. `base.en` is an initial
 quality/resource compromise, **not a measured winner**. Inference uses CPU INT8, one worker,
 four threads by default, greedy decoding, and bundled Silero voice activity detection.
-Models load lazily and remain warm until settings change or the app exits.
+The speech model begins loading on the background inference worker after recording starts,
+so loading can overlap speaking. It remains warm until settings change or the app exits.
+Very short first recordings can still finish before loading does; native inference itself
+still takes time. No models load at idle startup.
 
 Models/configuration default to `%LOCALAPPDATA%\LocalPhraser`; custom `--config` paths
 are supported. Model installation resolves and records an immutable repository commit,

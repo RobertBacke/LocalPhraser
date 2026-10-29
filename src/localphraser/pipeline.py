@@ -111,10 +111,7 @@ class Dictation:
             self.recorder.cancel()
             self._error("Cannot open microphone. Check device and Windows microphone permissions.")
             return
-        if self.refiner is not None:
-            # Spawn/loading happens on the existing worker after audio has started.
-            # The child can load while the user speaks; Raw mode never starts it.
-            self.executor.submit(self.refiner.prepare)
+        self.executor.submit(self._prepare_models)
         # Audio is already buffered while potentially slow accessibility checks run.
         if self.auto_insert and snapshot is not None:
             try:
@@ -127,6 +124,19 @@ class Dictation:
                     self.target = target
             except Exception:
                 self.target_error = "Target could not be verified. Open Latest transcript to copy."
+
+    def _prepare_models(self) -> None:
+        if self.closed:
+            return
+        try:
+            self.recognizer.prepare()
+        except Exception:
+            # Transcription retries and reports loading failures after recording ends.
+            pass
+        if self.refiner is not None and not self.closed:
+            # Spawn/loading happens on the existing worker after audio has started.
+            # The child can load while the user speaks; Raw mode never starts it.
+            self.refiner.prepare()
 
     def _target_completed(self, future: Future[Any], generation: int) -> None:
         if self.closed:
