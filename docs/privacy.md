@@ -32,7 +32,7 @@ never trigger automatic retries. Existing profiles and `--smoke-test` never star
 Only that first-launch setup, explicit `install-model` / `install-refiner`, and Settings download
 actions initiate network requests. Download workers use
 Hugging Face Hub HTTPS metadata/download endpoints and their redirected storage/CDN endpoints
-to fetch Systran speech or publisher Qwen GGUF artifacts. It records repository/revision/hashes. No speech is supplied.
+to fetch Systran speech or publisher Qwen GGUF artifacts. Each installation records repository/revision/hashes. No speech is supplied.
 Installer download metadata may reside under the chosen model directory. Installation occurs
 in a separate process; dictation remains offline. Development package installation also
 contacts package registries, but it is not application runtime traffic.

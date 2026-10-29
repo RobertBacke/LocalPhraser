@@ -313,3 +313,11 @@ without Save (exit 0). Relaunch used the same persisted profile, started no down
 passed with Python socket connect/connect_ex denied (exit 0). No microphone recording,
 text insertion, actual user startup registration, or private transcript was involved.
 This is not a native-library packet audit or a clean consumer-machine test.
+
+
+The local frozen build at `dist/first-launch-setup/LocalPhraser/LocalPhraser.exe` passed its
+owned GUI smoke check (exit 0). The matching portable ZIP passed integrity checks and has
+a SHA-256 sidecar. [Windows preview run 40885414192](https://github.com/RobertBacke/LocalPhraser/actions/runs/40885414192)
+passed for source commit `ea06b4f`, including tests, frozen launch, packaging, installer
+compilation and disposable install/reinstall/uninstall checks. Upload was disabled. These
+checks do not replace clean Windows 10/11 consumer acceptance or the bundled license audit.

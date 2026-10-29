@@ -2,7 +2,8 @@
 
 The source repository is public. This is not a declaration that binaries are release-ready.
 Unsigned folder/ZIP and per-user installer previews can be built. Neither is signed, and
-automatic updates are not implemented. Models are separate explicit downloads.
+automatic updates are not implemented. Models are downloaded separately: base.en on the
+first launch of a new profile, and other models through explicit setup actions.
 
 ## Repeatable build procedure
 
