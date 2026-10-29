@@ -18,10 +18,13 @@ includes cold loading time. Overflow and disconnected-device checks remain enabl
 
 Recognized phrases appear in the non-focusing preview after release as the engine produces
 them; the model does not emit live per-token microphone captions. Final insertion runs on
-the target worker rather than blocking Qt. Native Windows EDIT controls pace longer
-single-line ASCII output in 32-character batches, checking the expected caret and original
-field before each batch. Browser and Qt editors use one complete checked dispatch because
-UI Automation caret ranges can change when their documents update.
+the target worker rather than blocking Qt. Longer single-line ASCII output uses
+32-character batches, checking the expected caret and original field before each batch.
+Supported UI Automation editors rebuild the expected position from a fresh document range,
+so saved range anchors moving during edits do not double-advance the expected caret.
+Unsupported navigation or a prefix over 32,000 character units uses one checked dispatch.
+Final typing starts after recognition and optional polishing finish; this is gradual
+delivery, not live microphone captions.
 The target gets up to 300 ms to process the previous batch; the GUI wait is capped at
 30 seconds and timeout revokes further delivery. Native provider calls cannot be forcibly
 interrupted. Unicode and newlines also use a single dispatch. App rendering varies. A moved target or expired deadline
@@ -45,10 +48,15 @@ and Raw transcription; neither model's accuracy is guaranteed.
 ## Polished takes time or returns Raw
 
 First model loading is more expensive than repeated requests. Loading begins after recording
-starts and can overlap speech. Short recordings may still leave a cold-load wait. A longer
+stops to protect microphone callbacks. Polishing preparation can overlap recognition. A longer
 passage needs more ASR and generation time. 1.5B uses more memory than 0.5B; Raw skips the LLM.
 Missing/corrupt models, missing optional source runtime, limits, truncation and edits that
-change lexical content fall back to Raw. Check the selected model/root and run the README's
+change lexical content fall back to Raw. Latest transcript distinguishes "Polishing applied",
+"no changes needed", "suggested word changes", timeout, and unavailable outcomes. A rejected
+word-changing edit means the model ran and the safeguard kept the original words; restarting
+does not change that behavior. Successful insertion after a rejected edit does not show an
+error toast. Missing models can be installed with Settings → Download polishing model.
+Check the selected model/root and run the README's
 `verify-refiner` and `check-refiner` commands without including private transcript text.
 
 ## Microphone missing or ambiguous

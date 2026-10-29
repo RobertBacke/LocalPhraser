@@ -22,6 +22,10 @@ TOKENS = re.compile(
 )
 
 
+class RefinementRejected(ValueError):
+    """The model ran, but its edit did not preserve the dictated words."""
+
+
 class Refiner(Protocol):
     def prepare(self) -> None: ...
     def refine(self, text: str) -> str: ...
@@ -190,12 +194,10 @@ class LocalRefiner:
                     self._stop_locked()
                 raise
             candidate = response.get("text")
-            if (
-                not response.get("complete")
-                or not isinstance(candidate, str)
-                or not preserve_words(text, candidate)
-            ):
-                raise ValueError("Refinement did not preserve the transcript.")
+            if not response.get("complete") or not isinstance(candidate, str):
+                raise RuntimeError("Refinement did not complete.")
+            if not preserve_words(text, candidate):
+                raise RefinementRejected("Refinement did not preserve the transcript.")
             return candidate.strip()
         finally:
             with self.lifecycle:

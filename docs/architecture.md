@@ -8,7 +8,7 @@ No audio or transcription files are produced.
 Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone RAM buffer
   → background accessibility verification (concurrent with recording) → shortcut release
   → one ASR worker (local directory only) → optional polishing child → target-worker recheck
-  → checked native ASCII batches / single UIA or Unicode batch OR manual-copy recovery
+  → checked ASCII batches / single unsupported-provider or Unicode batch OR manual-copy recovery
 ```
 
 - `config.py`: validated immutable settings, atomic JSON saves.
@@ -39,10 +39,13 @@ disconnection. Audio starts before accessibility calls, which execute on a dedic
 worker. The UI retains only opaque target tokens; COM ranges never cross threads. Target
 verification times out to manual recovery after two seconds, and late targets are discarded.
 The final insertion stage runs asynchronously on the target worker. Longer single-line
-ASCII text in native EDIT controls uses 32-character batches with a 20 ms minimum interval and up to 300 ms caret
-settling per batch. Field, focus, selection, modifiers and permission are checked again;
-UIA-backed editors always use one checked SendInput dispatch because document updates can
-move or invalidate stored caret ranges. Unicode/newlines also use one dispatch. A length-based overall deadline
+ASCII text uses 32-character batches with a 20 ms minimum interval and up to 300 ms caret
+settling per batch. Field, focus, selection, modifiers and permission are checked again.
+For supported UIA editors, a bounded navigation preflight measures the initial caret offset
+without reading text; subsequent expected ranges come from the current document start.
+Saved ranges may move when providers update their document, so they are not reused for
+subsequent batches. Unsupported navigation, prefixes over 32,000 units, Unicode and
+newlines retain one checked dispatch before any input. A length-based overall deadline
 is capped at 30 seconds; timeout revokes permission and preserves full text for recovery.
 The legacy synchronous developer port keeps its two-second wait. An isolated process for forcibly terminating
 a hung native provider remains release hardening; threads cannot interrupt such calls.

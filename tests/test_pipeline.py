@@ -288,7 +288,7 @@ def test_polishing_runs_off_owner_thread_and_preserves_raw_result(setup):
     assert State.POLISHING in [state for state, _ in changes]
     assert insertion.delivered == ["Hello world!"]
     assert raw == ["Hello, world."]
-    assert results == [("Hello world!", "Inserted.")]
+    assert results == [("Hello world!", "Polishing applied. Inserted.")]
 
 
 @pytest.mark.parametrize("failure", ["timeout", "changed", "empty"])
@@ -501,7 +501,7 @@ def test_stage_timings_include_polishing_failure_time(setup, monkeypatch, fallba
         pipeline.refiner.refine.return_value = "Hello world!"
     result = pipeline.executor.submit(pipeline._transcribe, recorder.audio).result(timeout=5)
     assert result.recognition_seconds == 2.0 and result.polishing_seconds == 3.0
-    assert bool(result.notice) == fallback
+    assert ("using raw" in result.notice) == fallback
 
 
 def test_segment_previews_dispatch_without_inserting_partial_text(setup):
@@ -567,3 +567,31 @@ def test_async_delivery_completion_is_ignored_after_shutdown(setup):
     pipeline.shutdown()
     delivery.set_result(None)
     assert callbacks.empty() and not results
+
+
+@pytest.mark.parametrize("case", ["changed", "timeout", "unavailable", "applied", "unchanged"])
+def test_polishing_notice_reports_actual_outcome(setup, case):
+    pipeline, recorder, _, _, _, _, _ = setup
+    backend = Mock()
+    if case == "timeout":
+        backend.refine.side_effect = TimeoutError("private detail")
+    elif case == "unavailable":
+        backend.refine.side_effect = RuntimeError("private detail")
+    else:
+        backend.refine.return_value = {
+            "changed": "Goodbye world!",
+            "applied": "Hello world!",
+            "unchanged": "Hello, world.",
+        }[case]
+    pipeline.refiner = backend
+    result = pipeline.executor.submit(pipeline._transcribe, recorder.audio).result(timeout=5)
+    expected = {
+        "changed": "suggested word changes",
+        "timeout": "timed out",
+        "unavailable": "unavailable",
+        "applied": "applied",
+        "unchanged": "no changes needed",
+    }[case]
+    assert expected in result.notice and "private" not in result.notice
+    if case in ("changed", "timeout", "unavailable"):
+        assert result.text == result.raw

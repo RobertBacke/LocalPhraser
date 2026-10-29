@@ -160,3 +160,23 @@ def test_audio_watchdog_cancels_unhealthy_capture_without_transcribing(desktop):
     desktop.pipeline.cancel.assert_called_once()
     desktop.pipeline.release.assert_not_called()
     assert "Recording cancelled" in desktop.notify.call_args.args[0]
+
+
+@pytest.mark.parametrize(
+    "notice",
+    [
+        "Polishing applied. Inserted.",
+        "Polishing checked; no changes needed. Inserted.",
+        "Polishing suggested word changes; using raw transcription. Inserted.",
+    ],
+)
+def test_successful_delivery_and_safe_word_preservation_do_not_show_error_toast(desktop, notice):
+    desktop.notify.reset_mock()
+    desktop.state_changed(State.IDLE, notice)
+    desktop.notify.assert_not_called()
+
+
+def test_real_polishing_timeout_still_notifies(desktop):
+    desktop.notify.reset_mock()
+    desktop.state_changed(State.IDLE, "Polishing timed out; using raw transcription. Inserted.")
+    desktop.notify.assert_called_once()

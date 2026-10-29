@@ -135,3 +135,21 @@ def test_prepare_starts_worker_without_sending_text_and_reuses_it(tmp_path, monk
     with pytest.raises(RuntimeError):
         backend.prepare()
     assert backend.process is None
+
+
+def changed_word_worker(connection, *args):
+    try:
+        connection.recv()
+        connection.send({"text": "Different words.", "complete": True})
+    finally:
+        connection.close()
+
+
+def test_rejected_model_edit_has_distinct_failure_type(tmp_path, monkeypatch):
+    monkeypatch.setattr(refinement, "refinement_worker", changed_word_worker)
+    backend = LocalRefiner("fixture", tmp_path, 1, DEFAULT_PROMPT, 5)
+    try:
+        with pytest.raises(refinement.RefinementRejected):
+            backend.refine("Original words.")
+    finally:
+        backend.close()

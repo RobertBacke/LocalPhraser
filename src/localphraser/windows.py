@@ -282,17 +282,34 @@ class WindowsInsertion:
                 "Input was blocked or partially delivered; do not retry automatically."
             )
 
+    def _document_start(self, control: Any) -> Any:
+        pattern = control.GetPattern(self.automation.PatternId.TextPattern)
+        document = pattern.DocumentRange
+        document.textRange.MoveEndpointByRange(1, document.textRange, 0)
+        return document
+
     def insert_gradually(
         self, target: Target | NativeTarget, text: str, permitted: Callable[[], bool]
     ) -> None:
         # Validate the whole message before any delivery. Character-unit navigation
         # varies for Unicode/newlines, so those retain the single checked dispatch.
         unicode_inputs(text)
-        # UIA ranges can move or be invalidated when editors update their document.
-        # Use one checked dispatch rather than risk stopping after the first batch.
-        if isinstance(target, Target) or len(text) <= 32 or not text.isascii() or "\n" in text:
+        if len(text) <= 32 or not text.isascii() or "\n" in text:
             self.insert(target, text, permitted)
             return
+        origin = 0
+        if isinstance(target, Target):
+            try:
+                control, _ = self._selection()
+                start = self._document_start(control)
+                probe = target.caret.Clone()
+                origin = -probe.Move(0, -32001, waitTime=0)
+                if origin < 0 or probe.textRange.CompareEndpoints(0, start.textRange, 0) != 0:
+                    raise ValueError("Document origin is unavailable.")
+            except Exception:
+                # Unsupported providers retain one checked dispatch, before any input.
+                self.insert(target, text, permitted)
+                return
         for offset in range(0, len(text), 32):
             if offset:
                 time.sleep(0.02)  # Give the target's input and paint queues time to advance.
@@ -300,14 +317,31 @@ class WindowsInsertion:
             while True:
                 if not permitted() or self.api.GetForegroundWindow() != target.hwnd:
                     raise ValueError("Insertion cancelled or target changed.")
-                expected = NativeTarget(
-                    target.hwnd, target.process_id, target.edit, target.caret + offset
-                )
-                try:
-                    self.insert(expected, text[offset : offset + 32], permitted)
-                    break
-                except CaretNotReady:
-                    pass  # This check sent no input. Never retry SendInput failures.
+                ready = True
+                if isinstance(target, NativeTarget):
+                    expected: Target | NativeTarget = NativeTarget(
+                        target.hwnd, target.process_id, target.edit, target.caret + offset
+                    )
+                elif not offset:
+                    expected = target
+                else:
+                    control, _ = self._selection()
+                    if (
+                        control.ProcessId != target.process_id
+                        or tuple(control.GetRuntimeId()) != target.runtime_id
+                    ):
+                        raise ValueError("Target field changed.")
+                    # Editors can move saved ranges during input. Recreate the expected
+                    # caret from the current document start without reading its text.
+                    caret = self._document_start(control)
+                    ready = caret.Move(0, origin + offset, waitTime=0) == origin + offset
+                    expected = Target(target.hwnd, target.process_id, target.runtime_id, caret)
+                if ready:
+                    try:
+                        self.insert(expected, text[offset : offset + 32], permitted)
+                        break
+                    except CaretNotReady:
+                        pass  # This check sent no input. Never retry SendInput failures.
                 if time.monotonic() >= settle_deadline:
                     raise ValueError("Target caret did not reach the expected insertion position.")
                 time.sleep(0.01)

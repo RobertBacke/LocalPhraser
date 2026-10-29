@@ -608,7 +608,17 @@ class Desktop:
             self.watchdog.start()
         else:
             self.watchdog.stop()
-        if message and state == State.IDLE and message != "Inserted.":
+        if (
+            message
+            and state == State.IDLE
+            and message
+            not in (
+                "Inserted.",
+                "Polishing applied. Inserted.",
+                "Polishing checked; no changes needed. Inserted.",
+                "Polishing suggested word changes; using raw transcription. Inserted.",
+            )
+        ):
             self.notify(message)
 
     def check_audio(self) -> None:

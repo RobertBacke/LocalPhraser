@@ -600,3 +600,36 @@ launch and a long message in the user's original applications remains necessary.
 Both new regressions were run against the previous implementation and failed, then passed
 with the changes. The full local suite passed 247 tests, including the real offline speech
 model test; Ruff, formatting and mypy checks passed.
+
+
+## Polishing outcomes and refreshed UIA pacing (2026-10-29)
+
+After installation of the missing active-profile 1.5B model, the user still reported the
+shared polishing-fallback toast and all-at-once delivery. Fixed example sentences reproduced
+a working model deleting non-filler words (including "of it", "just" and "like"). Two of
+four examples were rejected by the unchanged preservation guard; two were accepted.
+Cold completion took 5.448 s and subsequent requests 1.509–1.866 s. No model/runtime error
+or incomplete response occurred in those trials. These observations do not identify every
+past fallback: the previous message collapsed all causes together.
+
+A distinct RefinementRejected error now identifies word-preservation fallback. Latest
+transcript records applied, unchanged, word-changing, timeout and unavailable outcomes.
+Successful insertion after a rejected edit retains the raw words and does not show an
+error toast; actual timeout/unavailable cases and delivery failures still notify.
+
+UIA ASCII pacing now measures the initial offset from the document start, bounded to
+32,000 character units without reading document text. Each subsequent expected caret comes
+from a fresh current DocumentRange; it no longer moves the original saved anchor again.
+Preflight failure retains one checked dispatch before any input. Changed field/caret,
+nonempty selection, modifiers, cancellation and partial SendInput safeguards remain.
+Unicode/newline delivery still uses one checked dispatch. Final typing begins only after
+recognition and polishing finish, and is batched rather than live ASR token streaming.
+
+The moving-anchor and outcome regressions failed against the previous implementation and
+passed with these changes. The full suite passed 261 tests including real offline ASR.
+An isolated reactive Chrome editor passed 2,736 ASCII characters in 86 checked batches,
+including an existing draft, exact final text and selected-text refusal. The assertion
+requires multiple batches, so a single-dispatch fallback cannot count as a pacing pass.
+Owned Qt real small.en → preview → polishing → insertion and prefilled field checks also
+passed. Broader editor compatibility, actual Codex pacing and live-voice latency still
+require user acceptance.

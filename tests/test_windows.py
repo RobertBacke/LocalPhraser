@@ -150,7 +150,7 @@ def test_gradual_delivery_validates_entire_message_before_any_input():
     insertion.api.SendInput.assert_not_called()
 
 
-def test_uia_delivery_sends_complete_text_when_provider_moves_saved_caret():
+def test_uia_provider_without_document_navigation_uses_single_checked_dispatch():
     insertion, _, target = insertion_fixture()
     position = [0]
     control = insertion._selection.return_value[0]
@@ -226,3 +226,69 @@ def test_paced_partial_send_is_never_retried():
     with pytest.raises(RuntimeError, match="partially delivered"):
         insertion.insert_gradually(NativeTarget(123, 42, 456, 0), "a" * 80, lambda: True)
     insertion.api.SendInput.assert_called_once()
+
+
+@pytest.mark.parametrize("change", [None, "caret", "field", "expired"])
+def test_uia_pacing_rebuilds_position_from_current_document(monkeypatch, change):
+    monkeypatch.setattr("localphraser.windows.time.sleep", lambda _: None)
+    clock = iter(range(1000))
+    monkeypatch.setattr("localphraser.windows.time.monotonic", lambda: next(clock) / 10)
+    insertion, _, target = insertion_fixture()
+    insertion.automation = SimpleNamespace(PatternId=SimpleNamespace(TextPattern=10014))
+    position, length, anchor = [15], [15], [15]
+
+    class Range:
+        def __init__(self, start, end=None, saved=False):
+            self.start, self.end = start, start if end is None else end
+            self.saved = saved
+            self.textRange = self
+
+        def Clone(self):
+            return Range(anchor[0]) if self.saved else Range(self.start, self.end)
+
+        def Move(self, unit, count, waitTime=0):
+            previous = self.start
+            self.start = min(length[0], max(0, self.start + count))
+            self.end = self.start
+            return self.start - previous
+
+        def MoveEndpointByRange(self, endpoint, other, other_endpoint):
+            assert endpoint == 1 and other_endpoint == 0
+            self.end = other.start
+
+        def CompareEndpoints(self, endpoint, other, other_endpoint):
+            return (self.start if endpoint == 0 else self.end) - (
+                other.start if other_endpoint == 0 else other.end
+            )
+
+        def Compare(self, other):
+            return self.start == other.start and self.end == other.end
+
+    control = SimpleNamespace(
+        ProcessId=42,
+        GetRuntimeId=lambda: [9] if change == "field" and position[0] > 15 else [1, 2, 3],
+        GetPattern=lambda _: SimpleNamespace(DocumentRange=Range(0, length[0])),
+    )
+    target.caret = Range(15, saved=True)
+    insertion._selection = lambda: (control, Range(position[0]))
+
+    def send(count, events, size):
+        position[0] += count // 2
+        length[0] += count // 2
+        anchor[0] = position[0]
+        if change == "caret":
+            position[0] += 1
+        return count
+
+    insertion.api.SendInput.side_effect = send
+
+    def permitted():
+        return change != "expired" or insertion.api.SendInput.call_count == 0
+
+    if change:
+        with pytest.raises(ValueError):
+            insertion.insert_gradually(target, "a" * 80, permitted)
+        assert insertion.api.SendInput.call_count == 1
+    else:
+        insertion.insert_gradually(target, "a" * 80, permitted)
+        assert insertion.api.SendInput.call_count == 3 and position[0] == 95

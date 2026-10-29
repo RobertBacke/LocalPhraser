@@ -19,25 +19,29 @@
    synthetic base.en/small.en and 4/8-thread comparison is recorded in testing.md; broader
    human-speech accuracy and isolated latency benchmarks remain necessary.
    Manual launches now show Settings, new startup commands use --background, and the last
-   sanitized error survives later dictations in memory. A reproduced slow-driver-start
-   watchdog timeout is fixed; the user's first-dictation failure still needs live retesting.
+   sanitized error survives later dictations in memory. The user confirmed a successful
+   first dictation and longer-message insertion after the capture/delivery fixes.
    A phrase preview and asynchronous insertion are implemented. Following reported
-   32-character truncation, paced ASCII output is restricted to native EDIT controls;
-   UIA editors use a complete checked dispatch. Cold speech-model loading now waits until
+   32-character truncation, UIA pacing now uses a fresh document origin for each batch;
+   unsupported providers retain complete checked dispatch. Owned reactive Chrome and
+   prefilled Qt checks passed; actual Codex pacing still needs user acceptance.
+   Cold speech-model loading now waits until
    capture stops after a real-device test reproduced callback overflow during loading.
    The user now reports quick, accurate live dictation with their own microphone. This is
    qualitative acceptance on their current setup, not a broad-device performance claim.
 3. **Phase 2 experimental build implemented:** optional Qwen2.5 0.5B/1.5B Q4 CPU polishing,
    Raw/Polished selection, custom instructions, explicit verified downloads, lazy warm
-   process, time limit, lexical preservation and raw fallback. Both models were measured
+   process, time limit, lexical preservation and raw fallback. Latest transcript now
+   distinguishes applied/unchanged edits, preserved original words, timeout and unavailable
+   outcomes. Real example trials reproduced word-changing edits being safely rejected.
+   Both models were measured
    on fixed nonsensitive text; 1.5B is the initial choice. Synthetic speech → ASR → refinement
    passed offline. The user subsequently reported improved Polished results both with Wi-Fi
    connected and disconnected, while noting processing delay. Broader preservation corpora and
    clean-machine verification remain. Do not claim Phase 2 acceptance is complete yet.
-   Initial loading now begins on the background worker after recording starts, overlapping
-   speech rather than waiting until transcription ends. Speech-model verification/loading
-   now also starts after microphone capture begins, on the same inference worker before
-   polishing-model preparation. Warm inference still costs CPU time.
+   Initial loading begins on the background worker after capture stops to protect audio
+   callbacks. Speech-model preparation precedes polishing-model preparation; the polishing
+   child can load while recognition runs. Warm inference still costs CPU time.
 4. **Phase 3 core implemented:** opt-in per-profile launch upon startup, save rollback,
    cancellable model downloads with owned-job cleanup and per-model locks, exact microphone
    name/API selection, scrollable Settings, and Raw/Result comparison. Disposable registry

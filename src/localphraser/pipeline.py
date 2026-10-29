@@ -11,7 +11,7 @@ import numpy as np
 
 from localphraser.audio import SAMPLE_RATE, Audio, resample_audio
 from localphraser.recognition import Recognizer
-from localphraser.refinement import Refiner, preserve_words
+from localphraser.refinement import RefinementRejected, Refiner, preserve_words
 
 
 class State(StrEnum):
@@ -225,7 +225,16 @@ class Dictation:
         try:
             polished = self.refiner.refine(raw)
             if not preserve_words(raw, polished):
-                raise ValueError("Refinement changed words.")
+                raise RefinementRejected("Refinement changed words.")
+            notice = (
+                "Polishing applied." if polished != raw else "Polishing checked; no changes needed."
+            )
+        except RefinementRejected:
+            polished = raw
+            notice = "Polishing suggested word changes; using raw transcription."
+        except TimeoutError:
+            polished = raw
+            notice = "Polishing timed out; using raw transcription."
         except Exception:
             polished = raw
             notice = "Polishing skipped or unavailable; using raw transcription."
