@@ -211,3 +211,28 @@ def test_settings_startup_preference_and_download_save_guard(app, monkeypatch):
     applied.assert_not_called()
     settings.downloader.phase = "idle"
     settings.close()
+
+
+def test_live_preview_setting_and_non_focusing_draft_indicator(app, monkeypatch):
+    from PySide6.QtCore import Qt
+
+    from localphraser.pipeline import State
+    from localphraser.ui import Indicator
+
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    settings = Settings(Config(), Mock())
+    assert not settings.values().live_preview
+    settings.live_preview.setChecked(True)
+    assert settings.values().live_preview
+    settings.close()
+    indicator = Indicator()
+    indicator.live_preview("<b>" + "x" * 1000)
+    assert "may change" in indicator.text() and len(indicator.text()) < 280
+    assert indicator.textFormat() == Qt.TextFormat.PlainText
+    assert indicator.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
+    indicator.live_preview("")
+    assert indicator.text() == "●  Listening"
+    indicator.display(State.IDLE)
+    assert not indicator.text()
+    indicator.close()
+    indicator.deleteLater()

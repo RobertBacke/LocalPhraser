@@ -595,3 +595,205 @@ def test_polishing_notice_reports_actual_outcome(setup, case):
     assert expected in result.notice and "private" not in result.notice
     if case in ("changed", "timeout", "unavailable"):
         assert result.text == result.raw
+
+
+def enable_live_preview(pipeline, recorder, recognizer):
+    pipeline.live_preview = True
+    pipeline.live_result = Mock()
+    recognizer.preview_ready = True
+    recognizer.preview = Mock(return_value="Recent draft words.")
+    copies = []
+
+    def snapshot():
+        copy = np.full(16000, 0.05, dtype=np.float32)
+        copies.append(copy)
+        return copy
+
+    recorder.preview_audio = Mock(side_effect=snapshot)
+    pipeline.press()
+    pipeline.preview_after = 0
+    return copies
+
+
+def test_live_preview_is_draft_only_and_clears_snapshot(setup):
+    pipeline, recorder, recognizer, insertion, callbacks, _, results = setup
+    copies = enable_live_preview(pipeline, recorder, recognizer)
+    pipeline.request_live_preview()
+    pipeline.preview_pending.result(timeout=5)
+    finish(callbacks)
+    pipeline.live_result.assert_called_once_with("Recent draft words.")
+    assert not copies[0].any() and not insertion.delivered and not results
+    assert pipeline.state == State.RECORDING
+
+
+@pytest.mark.parametrize("reason", ["off", "cold", "idle", "interval", "silent"])
+def test_live_preview_skips_ineligible_capture(setup, reason):
+    pipeline, recorder, recognizer, _, callbacks, _, _ = setup
+    copies = enable_live_preview(pipeline, recorder, recognizer)
+    if reason == "off":
+        pipeline.live_preview = False
+    elif reason == "cold":
+        recognizer.preview_ready = False
+    elif reason == "idle":
+        pipeline.cancel()
+    elif reason == "interval":
+        pipeline.preview_after = float("inf")
+    else:
+        recorder.preview_audio.side_effect = lambda: np.zeros(16000, dtype=np.float32)
+    pipeline.request_live_preview()
+    assert pipeline.preview_pending is None and callbacks.empty()
+    recognizer.preview.assert_not_called()
+    assert not copies
+
+
+def test_live_preview_has_one_request_and_ignores_cancelled_session(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, _ = setup
+    copies = enable_live_preview(pipeline, recorder, recognizer)
+    entered, gate = threading.Event(), threading.Event()
+
+    def preview(audio):
+        entered.set()
+        assert gate.wait(5)
+        return "Stale words."
+
+    recognizer.preview.side_effect = preview
+    pipeline.request_live_preview()
+    future = pipeline.preview_pending
+    try:
+        assert entered.wait(5)
+        pipeline.preview_after = 0
+        pipeline.request_live_preview()
+        assert len(copies) == 1
+        pipeline.cancel()
+        pipeline.press()
+    finally:
+        gate.set()
+    future.result(timeout=5)
+    finish(callbacks)
+    pipeline.live_result.assert_not_called()
+    assert pipeline.preview_pending is None and not copies[0].any()
+
+
+def test_live_preview_failure_keeps_final_transcription_available(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, results = setup
+    copies = enable_live_preview(pipeline, recorder, recognizer)
+    recognizer.preview.side_effect = RuntimeError("private detail")
+    pipeline.request_live_preview()
+    future = pipeline.preview_pending
+    with pytest.raises(RuntimeError):
+        future.result(timeout=5)
+    finish(callbacks)
+    assert pipeline.preview_disabled and not copies[0].any()
+    pipeline.live_result.assert_called_once_with("")
+    pipeline.release()
+    finish(callbacks)
+    assert results[0][0] == "Hello, world."
+
+
+def test_queued_live_preview_is_skipped_after_release_and_audio_is_cleared(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, results = setup
+    copies = enable_live_preview(pipeline, recorder, recognizer)
+    gate = threading.Event()
+    pipeline.executor.submit(lambda: gate.wait(5))
+    try:
+        pipeline.request_live_preview()
+        preview = pipeline.preview_pending
+        pipeline.release()
+    finally:
+        gate.set()
+    preview.result(timeout=5)
+    finish(callbacks)  # Stale draft must not be displayed during final processing.
+    finish(callbacks)
+    recognizer.preview.assert_not_called()
+    pipeline.live_result.assert_not_called()
+    assert not copies[0].any() and results[0][0] == "Hello, world."
+
+
+def test_live_preview_shutdown_clears_snapshot_and_cannot_display_later(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, results = setup
+    copies = enable_live_preview(pipeline, recorder, recognizer)
+    entered, gate = threading.Event(), threading.Event()
+
+    def preview(audio):
+        entered.set()
+        assert gate.wait(5)
+        return "Late draft."
+
+    recognizer.preview.side_effect = preview
+    pipeline.request_live_preview()
+    future = pipeline.preview_pending
+    try:
+        assert entered.wait(5)
+        pipeline.shutdown()
+    finally:
+        gate.set()
+    future.result(timeout=5)
+    assert not copies[0].any() and callbacks.empty() and not results
+    pipeline.live_result.assert_not_called()
+
+
+def test_live_preview_resamples_off_owner_and_clears_both_buffers(setup, monkeypatch):
+    pipeline, recorder, recognizer, _, callbacks, _, _ = setup
+    enable_live_preview(pipeline, recorder, recognizer)
+    recorder.sample_rate = 48000
+    captured = np.full(48000, 0.05, dtype=np.float32)
+    converted = np.ones(16000, dtype=np.float32)
+    recorder.preview_audio.side_effect = lambda: captured
+    owner = threading.get_ident()
+
+    def convert(audio, rate):
+        assert threading.get_ident() != owner and audio is captured and rate == 48000
+        return converted
+
+    monkeypatch.setattr("localphraser.pipeline.resample_audio", convert)
+    pipeline.request_live_preview()
+    pipeline.preview_pending.result(timeout=5)
+    finish(callbacks)
+    assert not captured.any() and not converted.any()
+    recognizer.preview.assert_called_once_with(converted)
+
+
+def test_snapshot_failure_only_disables_preview_for_current_recording(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, _ = setup
+    enable_live_preview(pipeline, recorder, recognizer)
+    recorder.preview_audio.side_effect = RuntimeError("private snapshot error")
+    pipeline.request_live_preview()
+    assert pipeline.preview_disabled and pipeline.state == State.RECORDING
+    assert callbacks.empty()
+    pipeline.cancel()
+    pipeline.press()
+    assert not pipeline.preview_disabled
+
+
+def test_shutdown_zeroes_preview_cancelled_before_worker_start(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, _ = setup
+    copies = enable_live_preview(pipeline, recorder, recognizer)
+    gate = threading.Event()
+    pipeline.executor.submit(lambda: gate.wait(5))
+    try:
+        pipeline.request_live_preview()
+        future = pipeline.preview_pending
+        pipeline.shutdown()
+        assert future.cancelled() and not copies[0].any()
+        assert callbacks.empty()
+    finally:
+        gate.set()
+
+
+def test_shutdown_zeroes_final_audio_cancelled_during_model_preparation(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, results = setup
+    entered, gate = threading.Event(), threading.Event()
+
+    def prepare():
+        entered.set()
+        assert gate.wait(5)
+
+    recognizer.prepare = prepare
+    try:
+        pipeline.press()
+        pipeline.release()
+        assert entered.wait(5)
+        pipeline.shutdown()
+        assert not recorder.audio.any() and callbacks.empty() and not results
+    finally:
+        gate.set()

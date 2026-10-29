@@ -26,6 +26,7 @@ def test_roundtrip(tmp_path):
         model_root=str(tmp_path / "models"),
         vocabulary="Codex, PySide",
         start_at_login=True,
+        live_preview=True,
     )
     path = tmp_path / "settings" / "config.json"
     save_config(config, path)
@@ -45,6 +46,7 @@ def test_roundtrip(tmp_path):
         {"microphone": 1},
         {"keep_microphone_ready": "yes"},
         {"start_at_login": "yes"},
+        {"live_preview": "yes"},
         {"vocabulary": None},
         {"vocabulary": ["Codex"]},
         {"vocabulary": "x" * 301},
@@ -79,5 +81,6 @@ def test_older_settings_preserve_model_and_default_to_no_hints(tmp_path):
     assert config.vocabulary == ""
     assert config.mode == "raw"
     assert config.start_at_login is False
+    assert config.live_preview is False
     assert config.model == "small.en"
     assert config.hotkey == "F9"

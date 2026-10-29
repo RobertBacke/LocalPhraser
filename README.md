@@ -56,8 +56,13 @@ Final text is delivered in checked 32-character batches for longer single-line A
 with a short pause and a bounded wait for the expected caret between batches. Unicode,
 multiline text and providers that fail navigation preflight retain a single checked delivery.
 Changing field, window, caret or modifiers stops delivery; check for partial text before
-copying from Latest transcript. Preview is phrase-based after recording ends, not live
-microphone/token streaming. Polishing still finishes before target delivery.
+copying from Latest transcript. The default preview shows completed phrases after recording
+ends. **Live speech preview (experimental)** can be enabled in Settings and saved. After
+the first successful dictation each launch/settings save, it shows recent draft words in
+the floating indicator while you speak, roughly every two seconds when processing keeps up.
+Drafts may change and stay out of the target app; stopping still transcribes the complete
+recording, polishes it if enabled, and inserts the final text. Preview uses extra CPU and
+can add after-release waiting. It is off by default; no models load while idle.
 Single-click the tray icon to open or restore Settings; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,

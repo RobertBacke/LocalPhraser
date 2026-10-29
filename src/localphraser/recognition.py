@@ -22,9 +22,10 @@ class WhisperRecognizer:
         self.cpu_threads = cpu_threads
         self.vocabulary = vocabulary.strip()
         self._model: Any = None
+        self.preview_ready = False
 
     def prepare(self) -> None:
-        """Load verified local weights on the inference worker, before speech is released."""
+        """Load verified local weights on the inference worker after capture stops."""
         # Also protects against optional tokenizer fallbacks contacting the model hub.
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -48,6 +49,17 @@ class WhisperRecognizer:
 
     def transcribe_stream(self, audio: Audio, partial: Callable[[str], None] | None = None) -> str:
         self.prepare()
+        text = self._decode(audio, partial)
+        self.preview_ready = self.preview_ready or bool(text)
+        return text
+
+    def preview(self, audio: Audio) -> str:
+        # Cold imports/VAD initialization previously starved microphone callbacks.
+        if not self.preview_ready or self._model is None:
+            return ""
+        return self._decode(audio)
+
+    def _decode(self, audio: Audio, partial: Callable[[str], None] | None = None) -> str:
         segments, _ = self._model.transcribe(
             audio,
             language="en",

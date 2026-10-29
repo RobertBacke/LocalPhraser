@@ -633,3 +633,45 @@ requires multiple batches, so a single-dispatch fallback cannot count as a pacin
 Owned Qt real small.en → preview → polishing → insertion and prefilled field checks also
 passed. Broader editor compatibility, actual Codex pacing and live-voice latency still
 require user acceptance.
+
+
+## Experimental live preview while recording (2026-10-29)
+
+The user confirmed gradual delivery worked and felt quicker, then asked about seeing words
+while speaking. Live preview is opt-in and disabled by default. First-use cold ASR/VAD
+preparation stays after capture. Only a successful nonempty final recognition pass enables
+warm draft processing on later recordings. No new model or executor was added.
+
+Before implementation, a metadata-only real-device load trial ran warm `small.en` decoding
+of generated speech alongside microphone capture. All three six-second capture trials had
+no callback flags or watchdog failure. Nine synthetic ASR calls took 1.216–1.462 seconds.
+Microphone samples stayed in RAM and were cleared without being transcribed or saved;
+these small trials do not establish behavior on other devices or CPU loads.
+
+Unit checks cover the six-second independent capture copy, idle exclusion, strict boolean
+setting/legacy defaults, no cold decoding, empty VAD not enabling live speech inference,
+one in-flight request, cadence, silence, snapshot failure, stale/cancelled/released/shutdown
+results, final-result fallback, worker-side rate conversion and zeroing both buffers.
+The new draft/cold-load cases failed against the previous implementation, then passed.
+The initial full suite passed 278 tests including real offline ASR; Ruff/format and mypy checks passed.
+
+`scripts/native_live_preview_check.py --root .cache/models --temp-dir .cache/live-check`
+uses generated speech and an owned Qt controller with real `small.en` and local polishing.
+It refuses cold-capture drafts, requires live drafts while the second recording is active,
+then verifies final content/word preservation and cleared snapshots/UI on exit. Both 16 kHz
+and 48 kHz trials passed, each producing two warm drafts. An owned-widget screenshot was
+inspected for the bounded plain-text non-focusing indicator. No target app or microphone
+input is used by this script. The existing complete-session shutdown check also passed
+three cycles; its assertions now recognize explicit successful polishing outcomes.
+Live-voice quality, broader resource use and immediate first-recording drafts remain open.
+
+
+Shutdown follow-up: two added checks reproduced queued audio remaining uncleared when
+executor shutdown cancelled a task before its worker-side finally block could run. The
+shared completion path now zeros cancelled preview and final-transcription arrays even
+when owner-thread callbacks are suppressed. Both regressions then passed. No audio was
+written to disk. This covers queued-task cleanup; it does not provide secure erasure of
+Python strings, native allocations or OS paging/crash dumps.
+
+After the queued-audio cleanup fix, the full suite passed **280 tests** with the real offline
+ASR test enabled. Ruff, formatting, mypy and the source wheel/archive build also passed.

@@ -2,7 +2,8 @@
 
 Windows x64 desktop MVP. UI and lifecycle run on Qt's owner thread. A single executor
 per pipeline runs model loading/transcription; queued signals marshal results back.
-No audio or transcription files are produced.
+No audio or transcription files are produced. Optional live drafts share the ASR executor;
+there is no second model or inference queue.
 
 ```text
 Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone RAM buffer
@@ -31,7 +32,8 @@ Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone
 - `ui.py`: tray, nonactivating multi-monitor indicator, settings, recovery transcript, UI dispatcher.
 - `main.py`: CLI, one-instance lock, separate online/offline entry paths.
 
-Recording and inference never overlap; repeat events are ignored. Errors return to idle,
+Final recognition and polishing follow capture; repeat events are ignored. Optional warm
+live-preview inference can overlap capture on the same serial executor. Errors return to idle,
 with sanitized messages. Polished mode adds a Polishing state. Text stays available on insertion failures. No automatic retry
 is allowed after input delivery because partial insertion cannot be rolled back safely.
 Microphone callback only copies into bounded memory; a UI watchdog handles duration and
@@ -80,3 +82,24 @@ Custom instructions cannot bypass lexical preservation, which still cannot certi
 The focus-check/input-delivery interval cannot be made atomic. UIA range tracking is provider
 dependent. Selected text and uncertain targets are refused; privileged input is unsupported.
 Do not represent this as universal compatibility or a formal security boundary.
+
+
+## Experimental live speech preview
+
+`live_preview` defaults to false. A successful nonempty final ASR pass marks the recognizer
+ready for warm preview; model preparation or an empty VAD result does not. This avoids the
+cold import/model initialization that previously caused first-recording audio overflow.
+A 100 ms UI watchdog may request a draft every two seconds while recording. The recorder
+copies at most six seconds of published frames; idle/failed streams return no audio.
+One pending preview at a time uses the existing serial ASR executor. Conversion and warm
+ASR happen there; snapshots and converted buffers are cleared in finally blocks. A shared
+completion path also clears audio when shutdown cancels a queued task before it can run.
+
+Draft output only reaches the non-focusing indicator, labeled as recent speech that may
+change. Session generation and recording-state checks reject late drafts after release,
+cancel, a subsequent recording or shutdown. Queued previews skip decoding after release;
+a native preview already running may finish before final transcription can start. Failures
+pause draft processing for that recording while leaving final transcription available.
+Final ASR still reads the complete recording and polishing runs only on that final result.
+Settings changes create a cold recognizer, so another successful dictation is needed before
+live drafts resume. Drafts are neither stable per-token hypotheses nor inserted target text.

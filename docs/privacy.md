@@ -11,6 +11,10 @@ memory paging and OS crash dumps prevent a secure-erasure guarantee. No audio te
 
 ASR receives arrays, not file paths; CPU inference and Silero VAD run locally. The runtime
 sets HF_HUB_OFFLINE and uses a verified local model directory with local_files_only=True.
+Optional live preview copies up to six seconds of the active recording into a short-lived
+RAM snapshot. Warm local ASR produces a revisable draft only in the indicator; snapshots
+are cleared after processing and stale UI updates are discarded. No preview capture or
+model warm-up runs while idle. The full recording remains the input for final dictation.
 No dictated content is logged. Exceptions shown to users are sanitized. No analytics,
 accounts, telemetry, history database, updater, or cloud inference client.
 

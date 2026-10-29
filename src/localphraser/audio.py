@@ -214,6 +214,14 @@ class Recorder:
                 self.cancel()
                 raise
 
+    def preview_audio(self) -> Audio:
+        """Copy at most six seconds of already-published active capture, never idle audio."""
+        with self._lock:
+            if not self.recording or self.failed:
+                return np.empty(0, dtype=np.float32)
+            end = self.position
+            return self.buffer[max(0, end - self.sample_rate * 6) : end].copy()
+
     def stop(self) -> Audio:
         with self._lock:
             try:

@@ -75,7 +75,11 @@ def check(root: Path, temporary: Path, case: str, capture_rate: int, cycles: int
                 if case == "complete":
                     try:
                         result = pending.result()
-                        assert not result.notice and "speech" in result.raw.lower()
+                        assert result.notice in (
+                            "Polishing applied.",
+                            "Polishing checked; no changes needed.",
+                        )
+                        assert "speech" in result.raw.lower()
                     except Exception:
                         failures.append("Synthetic session failed.")
                         app.quit()
@@ -110,7 +114,8 @@ def check(root: Path, temporary: Path, case: str, capture_rate: int, cycles: int
         assert pipeline.closed and backend.process is None
         if case == "complete":
             result = pending.result()
-            assert not result.notice and "speech" in result.raw.lower()
+            assert result.notice in ("Polishing applied.", "Polishing checked; no changes needed.")
+            assert "speech" in result.raw.lower()
         else:
             pending.result()  # Do not silently discard unexpected background exceptions.
         assert not desktop.latest.text.toPlainText() and not desktop.latest.raw.toPlainText()

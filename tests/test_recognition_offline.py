@@ -105,3 +105,34 @@ def test_recognition_emits_cumulative_completed_segments():
         == "Hello world."
     )
     assert previews == ["Hello", "Hello world."]
+
+
+def test_live_preview_never_loads_a_cold_model_and_reuses_warm_decoder():
+    recognizer = WhisperRecognizer(Path("unused"))
+    recognizer.prepare = Mock()
+    audio = np.zeros(16000, dtype=np.float32)
+    assert recognizer.preview(audio) == ""
+    recognizer.prepare.assert_not_called()
+    engine = Mock()
+    engine.transcribe.side_effect = lambda *args, **kw: (
+        iter([SimpleNamespace(text=" recent speech ")]),
+        None,
+    )
+    recognizer._model = engine
+    assert recognizer.preview(audio) == ""
+    engine.transcribe.assert_not_called()
+    assert recognizer.transcribe(audio) == "recent speech"
+    recognizer.prepare.reset_mock()
+    assert recognizer.preview_ready and recognizer.preview(audio) == "recent speech"
+    recognizer.prepare.assert_not_called()
+
+
+def test_empty_vad_result_does_not_enable_first_live_speech_decode():
+    recognizer = WhisperRecognizer(Path("unused"))
+    recognizer._model = Mock()
+    recognizer._model.transcribe.return_value = (iter([]), None)
+    audio = np.zeros(16000, dtype=np.float32)
+    assert recognizer.transcribe(audio) == "" and not recognizer.preview_ready
+    recognizer._model.transcribe.reset_mock()
+    assert recognizer.preview(audio) == ""
+    recognizer._model.transcribe.assert_not_called()

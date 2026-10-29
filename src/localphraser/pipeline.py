@@ -65,6 +65,8 @@ class Dictation:
         raw_result: Callable[[str], None] | None = None,
         timing_result: Callable[[float, float, float], None] | None = None,
         partial_result: Callable[[str], None] | None = None,
+        live_preview: bool = False,
+        live_result: Callable[[str], None] | None = None,
     ):
         self.recorder = recorder
         self.recognizer = recognizer
@@ -77,6 +79,11 @@ class Dictation:
         self.raw_result = raw_result
         self.timing_result = timing_result
         self.partial_result = partial_result
+        self.live_preview = live_preview
+        self.live_result = live_result
+        self.preview_pending: Future[str] | None = None
+        self.preview_after = 0.0
+        self.preview_disabled = False
         self.released_at: float | None = None
         self.state = State.IDLE
         self.target: Any = None
@@ -100,6 +107,12 @@ class Dictation:
             if not self.closed:
                 raise
 
+    def _audio_done(self, future: Future[Any], audio: Audio, callback: Callable[[], None]) -> None:
+        # A cancelled queued task never reaches its worker-side finally block.
+        if future.cancelled():
+            audio.fill(0)
+        self._post(callback)
+
     def press(self) -> None:
         if self.closed or self.state != State.IDLE:
             return
@@ -114,6 +127,8 @@ class Dictation:
                 self.target_error = "Target could not be verified. Open Latest transcript to copy."
         try:
             self.recorder.start()
+            self.preview_after = perf_counter() + 2 if self.live_preview else 0
+            self.preview_disabled = False
             self._state(State.RECORDING)
         except Exception:
             self.recorder.cancel()
@@ -131,6 +146,67 @@ class Dictation:
                     self.target = target
             except Exception:
                 self.target_error = "Target could not be verified. Open Latest transcript to copy."
+
+    def request_live_preview(self) -> None:
+        if (
+            self.closed
+            or self.state != State.RECORDING
+            or not self.live_preview
+            or self.live_result is None
+            or self.preview_disabled
+            or self.preview_pending is not None
+            or getattr(self.recognizer, "preview_ready", False) is not True
+            or perf_counter() < self.preview_after
+        ):
+            return
+        self.preview_after = perf_counter() + 2
+        snapshot = getattr(self.recorder, "preview_audio", None)
+        if not callable(snapshot):
+            return
+        try:
+            audio = snapshot()
+        except Exception:
+            self.preview_disabled = True
+            self.live_result("")
+            return
+        rate = getattr(self.recorder, "sample_rate", SAMPLE_RATE)
+        if audio.size < rate or np.max(np.abs(audio), initial=0) < 0.001:
+            audio.fill(0)
+            return
+        generation = self.generation
+        future = self.executor.submit(self._live_preview, audio, rate, generation)
+        self.preview_pending = future
+        future.add_done_callback(
+            lambda f: self._audio_done(f, audio, lambda: self._live_finished(f, generation))
+        )
+
+    def _live_preview(self, audio: Audio, sample_rate: int, generation: int) -> str:
+        captured = audio
+        try:
+            if self.closed or self.state != State.RECORDING or generation != self.generation:
+                return ""
+            if sample_rate != SAMPLE_RATE:
+                audio = resample_audio(captured, sample_rate)
+            preview = getattr(self.recognizer, "preview", None)
+            text = preview(audio) if callable(preview) else ""
+            return text.strip() if isinstance(text, str) else ""
+        finally:
+            audio.fill(0)
+            if captured is not audio:
+                captured.fill(0)
+
+    def _live_finished(self, future: Future[str], generation: int) -> None:
+        if self.preview_pending is future:
+            self.preview_pending = None
+        if self.closed or self.state != State.RECORDING or generation != self.generation:
+            return
+        try:
+            text = future.result()
+        except Exception:
+            self.preview_disabled = True
+            text = ""
+        if self.live_result is not None:
+            self.live_result(text)
 
     def _prepare_models(self) -> None:
         if self.closed:
@@ -195,7 +271,10 @@ class Dictation:
             self.released_at = perf_counter()
             self.executor.submit(self._prepare_models)
             future = self.executor.submit(self._transcribe, audio, sample_rate)
-            future.add_done_callback(lambda f: self._post(lambda: self._finish(f)))
+            captured = audio
+            future.add_done_callback(
+                lambda f: self._audio_done(f, captured, lambda: self._finish(f))
+            )
         except Exception:
             if audio is not None:
                 audio.fill(0)
@@ -326,6 +405,7 @@ class Dictation:
 
     def shutdown(self) -> None:
         self.closed = True
+        self.preview_pending = None
         self.recorder.close()
         if self.refiner is not None:
             self.refiner.close()

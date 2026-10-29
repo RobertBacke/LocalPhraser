@@ -24,7 +24,13 @@
    A phrase preview and asynchronous insertion are implemented. Following reported
    32-character truncation, UIA pacing now uses a fresh document origin for each batch;
    unsupported providers retain complete checked dispatch. Owned reactive Chrome and
-   prefilled Qt checks passed; actual Codex pacing still needs user acceptance.
+   prefilled Qt checks passed. The user subsequently confirmed gradual delivery worked in
+   their test and felt quicker than all-at-once insertion; broader editor coverage remains.
+   Experimental opt-in live speech preview now shows recent revisable words while speaking
+   after the first successful dictation warms ASR. It reuses one bounded six-second snapshot
+   and the existing worker; final polishing/insertion still happen after stop. Real-device
+   callback-load trials and synthetic 16/48 kHz Qt flow checks passed; live-voice acceptance
+   and broader-device latency/resource profiling remain.
    Cold speech-model loading now waits until
    capture stops after a real-device test reproduced callback overflow during loading.
    The user now reports quick, accurate live dictation with their own microphone. This is

@@ -274,3 +274,17 @@ def test_invalid_or_unchanged_fallback_rate_is_refused(device, rate):
         recorder.prepare()
     device.InputStream.assert_called_once()
     assert recorder.stream is None and recorder.buffer.size == 0
+
+
+def test_preview_copy_is_bounded_independent_and_empty_when_idle(device):
+    recorder = Recorder(None, 10, keep_ready=True)
+    assert not recorder.preview_audio().size
+    recorder.start()
+    recorder.stream.callback(np.ones((8 * 16000, 1), dtype=np.float32), 8 * 16000, None, False)
+    preview = recorder.preview_audio()
+    assert preview.size == 6 * 16000 and preview.all()
+    preview.fill(0)
+    assert recorder.buffer[: recorder.position].all()
+    recorder.stop().fill(0)
+    assert not recorder.preview_audio().size
+    recorder.close()

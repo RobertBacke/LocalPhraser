@@ -100,6 +100,12 @@ class Indicator(QLabel):
     def preview(self, text: str) -> None:
         self._show_text(f"●  Transcribing · preview\n{text[-200:]}")
 
+    def live_preview(self, text: str) -> None:
+        if text:
+            self._show_text(f"●  Listening · recent speech draft (may change)\n{text[-200:]}")
+        else:
+            self.display(State.RECORDING)
+
     def _show_text(self, text: str) -> None:
         self.setText(text)
         self.adjustSize()
@@ -281,6 +287,14 @@ class Settings(QDialog):
             "No audio is captured while idle. Turn off to close the device after each recording."
         )
         form.addRow(self.keep_ready)
+        self.live_preview = QCheckBox("Live speech preview (experimental)")
+        self.live_preview.setChecked(config.live_preview)
+        self.live_preview.setToolTip(
+            "Shows recent words in the floating indicator while recording. "
+            "Available after the first completed dictation each launch/settings save. "
+            "Draft words may change. Uses extra CPU; final text is polished after stopping."
+        )
+        form.addRow(self.live_preview)
         self.start_at_login = QCheckBox("Start LocalPhraser upon startup")
         self.start_at_login.setChecked(config.start_at_login)
         self.start_at_login.setToolTip(
@@ -383,6 +397,7 @@ class Settings(QDialog):
             refinement_prompt=self.refinement_prompt.toPlainText().strip(),
             refinement_timeout=self.refinement_timeout.value(),
             start_at_login=self.start_at_login.isChecked(),
+            live_preview=self.live_preview.isChecked(),
         ).validate()
 
     def save(self) -> None:
@@ -580,6 +595,8 @@ class Desktop:
             raw_result=self.latest.raw.setPlainText,
             timing_result=self.latest.set_timing,
             partial_result=self.indicator.preview,
+            live_preview=config.live_preview,
+            live_result=self.indicator.live_preview,
         )
 
     def notify(self, message: str) -> None:
@@ -629,6 +646,8 @@ class Desktop:
             message = "Microphone disconnected or audio stopped arriving. Recording cancelled."
             self.latest.record_error(message)
             self.notify(message)
+        else:
+            self.pipeline.request_live_preview()
 
     def toggle(self) -> None:
         if self.pipeline.state == State.RECORDING:

@@ -23,8 +23,13 @@ the target worker rather than blocking Qt. Longer single-line ASCII output uses
 Supported UI Automation editors rebuild the expected position from a fresh document range,
 so saved range anchors moving during edits do not double-advance the expected caret.
 Unsupported navigation or a prefix over 32,000 character units uses one checked dispatch.
-Final typing starts after recognition and optional polishing finish; this is gradual
-delivery, not live microphone captions.
+Final typing starts after recognition and optional polishing finish. To see recent words
+while speaking, enable Live speech preview (experimental) in Settings and Save. The first
+successful dictation warms the model; drafts start on following recordings until settings
+change or the app exits. They update roughly every two seconds when CPU processing keeps
+up, may revise wording, and do not alter the target app. A draft failure pauses preview for
+that recording. This optional work can delay the final result; switch it off if capture or
+latency gets worse on your device.
 The target gets up to 300 ms to process the previous batch; the GUI wait is capped at
 30 seconds and timeout revokes further delivery. Native provider calls cannot be forcibly
 interrupted. Unicode and newlines also use a single dispatch. App rendering varies. A moved target or expired deadline
