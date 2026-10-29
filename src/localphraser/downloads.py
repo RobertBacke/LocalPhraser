@@ -85,7 +85,7 @@ class ModelDownload(QObject):
     def _completed(self, exit_code: int, status: QProcess.ExitStatus) -> None:
         if self.phase == "download":
             if exit_code == 0 and status == QProcess.ExitStatus.NormalExit and not self.cancelled:
-                self._finish(True, "Model installed and verified. Save to use it.")
+                self._finish(True, "Model installed and verified. Save if you changed settings.")
                 return
             self.phase = "cleanup"
             self.message.emit("Cleaning partial download…")

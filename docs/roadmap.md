@@ -32,7 +32,9 @@
    **Phase 4 foundation implemented:** checked portable ZIP plus SHA-256, first-run guide,
    manual Windows preview workflow (upload off by default), contributor/bug-report guidance,
    troubleshooting and release checklist. A per-user unsigned installer and disposable-runner
-   install/launch/reinstall/uninstall checks are implemented. Signing, exact bundled licensing,
+   install/launch/reinstall/uninstall checks are implemented. First-launch profiles now download
+   the default speech model once with visible cancellation, automatic readiness and manual retry.
+   Signing, exact bundled licensing,
    clean consumer-machine and sustained-session acceptance still block release readiness.
 6. macOS/Linux adapters after the Windows workflow proves dependable. No remote publication
    or stable release without explicit authorization and acceptance evidence.

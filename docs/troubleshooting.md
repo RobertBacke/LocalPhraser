@@ -65,3 +65,14 @@ preview may be flagged as unrecognized. Compare its SHA-256 sidecar before use. 
 in DLLs from unrelated software or run the app elevated to bypass unsupported input targets.
 Report the Windows version and whether source/frozen launch failed, without private audio,
 transcripts, model weights, credentials or personal screenshots.
+
+
+## A rebuilt EXE asks for a model again
+
+The normal EXE uses the default profile under `%LOCALAPPDATA%\LocalPhraser`. A development
+command with `--config .cache/dev/config.json` uses a different profile and may point to
+`.cache/models`. Open Settings, choose that existing model directory and the matching model,
+then Save; or start the EXE with the same absolute `--config` path as your old command.
+Do not run two copies with competing shortcuts. A new profile now downloads base.en once
+on first launch. Cancel or failure leaves manual retry available via Download speech model;
+later launches never retry automatically. Offline first use requires a model already installed.

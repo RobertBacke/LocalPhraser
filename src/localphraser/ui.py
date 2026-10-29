@@ -35,6 +35,7 @@ from localphraser.audio import Recorder, microphones
 from localphraser.config import DEFAULT_PROMPT, MODELS, REFINEMENT_MODELS, Config, save_config
 from localphraser.downloads import ModelDownload
 from localphraser.hotkey import Hotkey
+from localphraser.models import FILES
 from localphraser.pipeline import Dictation, State
 from localphraser.recognition import WhisperRecognizer
 from localphraser.refinement import LocalRefiner
@@ -168,6 +169,11 @@ class Settings(QDialog):
         description = QLabel("Hold your shortcut. Speak naturally. Release to transcribe locally.")
         description.setWordWrap(True)
         layout.addWidget(description)
+        self.setup_notice = QLabel()
+        self.setup_notice.setWordWrap(True)
+        self.setup_notice.hide()
+        self.automatic_setup = False
+        layout.addWidget(self.setup_notice)
         form = QFormLayout()
         form.setVerticalSpacing(14)
         self.hotkey = ShortcutRecorder(config.hotkey, begin_capture, end_capture)
@@ -382,6 +388,15 @@ class Settings(QDialog):
         self.install.setEnabled(True)
         self.install_refinement.setEnabled(True)
         self.cancel_download.setEnabled(False)
+        if self.automatic_setup:
+            self.automatic_setup = False
+            self.setup_notice.setText(
+                "Speech model ready. Hold your shortcut to dictate; no Save step is needed "
+                "unless you changed settings."
+                if success
+                else "First-launch setup paused. Use Download speech model to retry when ready. "
+                "Later launches will not retry automatically."
+            )
 
     def reject(self) -> None:
         self.hotkey.cancel_capture()
@@ -402,8 +417,11 @@ class Settings(QDialog):
 class Desktop:
     pipeline: Dictation
 
-    def __init__(self, app: QApplication, config: Config, config_path: Path):
+    def __init__(
+        self, app: QApplication, config: Config, config_path: Path, *, first_launch: bool = False
+    ):
         self.closing = False
+        self.first_launch_setup_started = False
         self.app = app
         self.config = config
         self.config_path = config_path
@@ -415,7 +433,7 @@ class Desktop:
         self.indicator = Indicator()
         self.settings: Settings | None = None
         self.tray = QSystemTrayIcon(app_icon(), app)
-        self.tray.setToolTip("LocalPhraser · Ready")
+        self.tray.setToolTip("LocalPhraser")
         menu = QMenu()
         self.status = menu.addAction(f"Ready · {config.mode.title()} mode")
         self.status.setEnabled(False)
@@ -433,7 +451,7 @@ class Desktop:
         self.tray.activated.connect(self.activated)
         self.insertion = TargetWorker()
         self.pipeline = self.make_pipeline(config)
-        self.hotkey = Hotkey(lambda: self.pipeline.press(), lambda: self.pipeline.release())
+        self.hotkey = Hotkey(self.press, lambda: self.pipeline.release())
         app.installNativeEventFilter(self.hotkey)
         self.hotkey_error = ""
         try:
@@ -445,10 +463,52 @@ class Desktop:
         self.watchdog.timeout.connect(self.check_audio)
         self.tray.show()
         app.aboutToQuit.connect(self.shutdown)
-        if self.hotkey_error or not (Path(config.model_root) / config.model).exists():
+        self.state_changed(State.IDLE, "")
+        if first_launch and not self.speech_model_present():
+            QTimer.singleShot(0, self.start_first_launch_setup)
+        elif self.hotkey_error or not self.speech_model_present():
             QTimer.singleShot(0, self.show_settings)
         if self.hotkey_error:
             QTimer.singleShot(100, lambda: self.notify(self.hotkey_error))
+
+    def speech_model_present(self) -> bool:
+        # Readiness here is a quick local presence check. Recognition still verifies
+        # all hashes before loading; the installer verifies hashes before publishing.
+        folder = Path(self.config.model_root) / self.config.model
+        return all((folder / name).is_file() for name in (*FILES, "localphraser-manifest.json"))
+
+    def start_first_launch_setup(self) -> None:
+        if self.closing or self.first_launch_setup_started or self.speech_model_present():
+            return
+        self.first_launch_setup_started = True
+        self.show_settings()
+        if self.settings is None:
+            return
+        self.settings.setup_notice.setText(
+            "First launch: downloading the default base.en speech model from Hugging Face. "
+            "Internet is needed for this setup only. You can cancel; retry using Download "
+            "speech model. Dictation becomes available when installation finishes. "
+            "Already have models? Cancel, then choose their directory and Save."
+        )
+        self.settings.setup_notice.show()
+        self.settings.automatic_setup = True
+        self.settings.download()
+
+    def model_download_finished(self, success: bool, cancelled: bool) -> None:
+        if self.closing:
+            return
+        self.state_changed(self.pipeline.state, "")
+        if success and self.speech_model_present():
+            self.notify("Speech model ready. Hold your shortcut to dictate.")
+
+    def press(self) -> None:
+        if self.closing:
+            return
+        if not self.speech_model_present():
+            self.show_settings()
+            self.notify("Speech model required. Finish setup in Settings before dictating.")
+            return
+        self.pipeline.press()
 
     def make_pipeline(self, config: Config) -> Dictation:
         self.recorder = Recorder(
@@ -487,8 +547,13 @@ class Desktop:
         )
 
     def state_changed(self, state: State, message: str) -> None:
-        self.status.setText(f"{state.value} · {self.config.mode.title()} mode")
-        self.tray.setToolTip(f"LocalPhraser · {state.value}")
+        label = (
+            "Speech model required"
+            if state == State.IDLE and not self.speech_model_present()
+            else state.value
+        )
+        self.status.setText(f"{label} · {self.config.mode.title()} mode")
+        self.tray.setToolTip(f"LocalPhraser · {label}")
         self.tray.setIcon(app_icon(state == State.RECORDING))
         self.indicator.display(state)
         self.toggle_action.setText(
@@ -514,7 +579,9 @@ class Desktop:
         if self.pipeline.state == State.RECORDING:
             self.pipeline.release()
         elif self.pipeline.state == State.IDLE:
-            self.pipeline.press()
+            self.press()
+            if self.pipeline.state != State.RECORDING:
+                return
             # Tray interaction has changed focus: always use manual copy for this path.
             self.pipeline._clear_target()
             self.pipeline.target_error = "Tray recording finished. Open Latest transcript to copy."
@@ -544,6 +611,7 @@ class Desktop:
         self.settings = Settings(
             self.config, self.apply, self.begin_shortcut_capture, self.end_shortcut_capture
         )
+        self.settings.downloader.finished.connect(self.model_download_finished)
         self.settings.show()
         self.settings.raise_()
         self.settings.activateWindow()

@@ -66,3 +66,13 @@ The PyInstaller specification restricts its build-process PATH to the Python run
 Windows directories before dependency discovery. A reproduced build failure came from an
 unrelated Poppler ICU DLL on the host PATH shadowing Windows ICU. Do not remove this isolation
 without rechecking the frozen Qt launch on a clean build. No global PATH settings are changed.
+
+
+First-launch setup is tied to absence of the selected configuration file, not EXE location.
+The main entry point writes the default config before constructing Desktop and passes an
+explicit first_launch flag. Smoke launches neither persist that config nor allow automatic
+setup. A new normal profile downloads base.en once, using the same owned cancellable process
+and integrity verification as manual setup. Existing models skip downloading. Later launches,
+including after a failure, stay offline until an explicit Download action. Recognition remains
+local-only and verifies hashes before loading. Presence checks used for UI readiness do not
+substitute for that integrity check. No model directories are scanned or silently migrated.

@@ -25,7 +25,12 @@ cleared on exit. They are not written to settings or disk.
 Clipboard is untouched by automatic insertion. Explicit Copy transfers data to the Windows
 clipboard; OS clipboard history or sync may retain that copy outside LocalPhraser.
 
-Only explicit `install-model`, `install-refiner`, and Settings download actions initiate network requests. The installer uses
+On the first normal launch of a new configuration profile, the app opens Settings and starts
+one visible download of the default `base.en` speech model if it is absent. Cancel is available.
+The configuration is persisted before downloading; failure, cancellation and later launches
+never trigger automatic retries. Existing profiles and `--smoke-test` never start this setup.
+Only that first-launch setup, explicit `install-model` / `install-refiner`, and Settings download
+actions initiate network requests. Download workers use
 Hugging Face Hub HTTPS metadata/download endpoints and their redirected storage/CDN endpoints
 to fetch Systran speech or publisher Qwen GGUF artifacts. It records repository/revision/hashes. No speech is supplied.
 Installer download metadata may reside under the chosen model directory. Installation occurs

@@ -35,6 +35,12 @@ size and RAM usage have not yet been benchmarked.
 4. The indicator shows listening/transcribing. Verified targets receive Unicode input.
 5. If the field cannot be verified or focus/caret changes, use tray → Latest transcript → Copy.
 
+Opening the EXE uses `%LOCALAPPDATA%\LocalPhraser\config.json` and its model directory.
+An earlier development command with `--config .cache/dev/config.json` uses a separate profile.
+To reuse those settings, launch the EXE with that same absolute `--config` path, or choose the
+existing model directory in Settings and Save. Rebuilt EXEs share the normal default profile;
+models do not need downloading for every build. No project-folder scan or silent migration occurs.
+
 The tray provides start/stop recording, cancellation, latest transcript, settings, and Quit.
 Single-click the tray icon to open or restore Settings; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
@@ -69,7 +75,8 @@ Models/configuration default to `%LOCALAPPDATA%\LocalPhraser`; custom `--config`
 are supported. Model installation resolves and records an immutable repository commit,
 checks upstream LFS SHA-256 values, writes a local hash manifest, and publishes the model
 directory only after verification. Runtime verifies hashes before first load and refuses
-missing/damaged models. It never downloads them implicitly.
+missing/damaged models. Recognition itself never downloads them. A new profile starts
+one visible model setup download; later launches do not retry automatically.
 
 ```powershell
 .venv\Scripts\python.exe -m localphraser verify-model base.en

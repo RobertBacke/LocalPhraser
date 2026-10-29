@@ -5,9 +5,12 @@ This is a development preview, not a stable release. Keep the entire folder toge
 1. Run the preview installer, or extract the ZIP to a permanent folder.
    Keep the portable folder together; do not run the app from inside the ZIP.
 2. Open LocalPhraser.exe. Windows may identify this unsigned app as unrecognized.
-3. In Settings, choose a speech model and Download it. This setup step needs internet.
-   No account or API key is needed. Models can be large; allow enough disk space.
-4. Save. Place the cursor in a text field, hold CapsLock, speak, then release it.
+3. A new profile downloads base.en automatically in Settings. This first setup needs internet.
+   Wait for "Speech model ready." No account or API key is needed. You can Cancel;
+   retry with Download speech model. Later launches do not automatically retry.
+   Already have models? Cancel, select their directory in Settings, then Save.
+4. Place the cursor in a text field, hold CapsLock, speak, then release it.
+   Save is needed only if you changed settings; the default model works as soon as installed.
 5. Open Settings or Latest transcript from the system tray icon. Quit there to exit.
 
 Raw mode is the default. Experimental Polished mode needs its own model download and

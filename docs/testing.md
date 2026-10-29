@@ -295,3 +295,21 @@ wizard and running-app upgrade behavior still need consumer-machine acceptance t
 passed the full workflow for source commit `29f2ea3`, including real installer compilation
 and install/launch/reinstall/uninstall checks. Artifact upload was disabled. This runner is
 Windows Server; passing here does not establish Windows 10/11 consumer acceptance.
+
+
+## Automatic first-launch speech setup (2026-10-29)
+
+Local suite: 167 passed, one optional local-model test skipped. Ruff check/format and mypy
+passed. New coverage checks profile persistence before setup, no automatic retries for an
+existing profile, smoke-test suppression, refusal to download when config saving fails,
+cancellation without re-entry, skipping preinstalled files, recording blocked before setup,
+and readiness without saving after installation. Fixture model bytes only test presence;
+they are not represented as inference/integrity evidence.
+
+A separate real Windows source-app check used an owned workspace profile, base.en, an
+isolated model root, Ctrl+Shift+F10, and microphone preparation disabled. First launch
+started one real download, completed manifest/hash verification, and reached readiness
+without Save (exit 0). Relaunch used the same persisted profile, started no download, and
+passed with Python socket connect/connect_ex denied (exit 0). No microphone recording,
+text insertion, actual user startup registration, or private transcript was involved.
+This is not a native-library packet audit or a clean consumer-machine test.

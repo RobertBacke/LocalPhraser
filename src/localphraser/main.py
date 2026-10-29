@@ -1,4 +1,4 @@
-"""Entry points separate explicit online installation from offline desktop operation."""
+"""Visible first-launch/manual model setup is separate from offline dictation."""
 
 import argparse
 import os
@@ -12,6 +12,7 @@ from localphraser.config import (
     REFINEMENT_MODELS,
     data_dir,
     load_config,
+    save_config,
 )
 
 
@@ -162,14 +163,19 @@ def main() -> int:
     if not QSystemTrayIcon.isSystemTrayAvailable() and not args.smoke_test:
         QMessageBox.warning(None, "LocalPhraser", "A Windows system tray is required.")
         return 1
+    first_launch = not args.config.exists() and not args.smoke_test
     try:
         config = load_config(args.config)
-    except ValueError as exc:
+        # Persist before starting setup: failure/cancellation must not cause automatic
+        # networking again on every launch. Existing profiles are never overwritten.
+        if first_launch:
+            save_config(config, args.config)
+    except (ValueError, OSError) as exc:
         QMessageBox.warning(None, "Invalid settings", str(exc))
         return 1
     if args.smoke_test:
         config = replace(config, keep_microphone_ready=False)
-    desktop = Desktop(app, config, args.config)
+    desktop = Desktop(app, config, args.config, first_launch=first_launch)
     if args.smoke_test:
         QTimer.singleShot(1500, app.quit)
     code = app.exec()
