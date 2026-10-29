@@ -101,7 +101,7 @@ class TargetWorker:
             cancelled.set()
 
     def insert_async(self, token: int, text: str) -> Future[None]:
-        duration = min(30.0, self.timeout + len(text) / 500)
+        duration = min(30.0, self.timeout + len(text) / 200)
         deadline = time.monotonic() + duration
         cancelled = threading.Event()
         result: Future[None] = Future()

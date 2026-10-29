@@ -132,6 +132,10 @@ class WindowSnapshot:
     caret_rect: tuple[int, int, int, int]
 
 
+class CaretNotReady(ValueError):
+    """No input sent: a preceding batch may still be advancing the caret."""
+
+
 class WindowsInsertion:
     def __init__(self) -> None:
         import uiautomation as automation
@@ -247,16 +251,24 @@ class WindowsInsertion:
         if not self.api.IsWindow(target.hwnd) or self.api.GetForegroundWindow() != target.hwnd:
             raise ValueError("Target window changed.")
         if isinstance(target, NativeTarget):
-            if self._native_target(target.hwnd) != target:
-                raise ValueError("Native field or caret changed.")
+            current = self._native_target(target.hwnd)
+            if (
+                current is None
+                or current.edit != target.edit
+                or current.process_id != target.process_id
+            ):
+                raise ValueError("Native field changed.")
+            if current.caret != target.caret:
+                raise CaretNotReady("Native field or caret changed.")
         else:
             control, caret = self._selection()
             if (
                 control.ProcessId != target.process_id
                 or tuple(control.GetRuntimeId()) != target.runtime_id
-                or not caret.Compare(target.caret)
             ):
-                raise ValueError("Target field or caret changed.")
+                raise ValueError("Target field changed.")
+            if not caret.Compare(target.caret):
+                raise CaretNotReady("Target field or caret changed.")
         # Do not release user-held modifiers or send text while they are held.
         if any(self.api.GetAsyncKeyState(k) & 0x8000 for k in (0x10, 0x11, 0x12, 0x5B, 0x5C)):
             raise ValueError("Release modifier keys before insertion.")
@@ -294,34 +306,24 @@ class WindowsInsertion:
             while True:
                 if not permitted() or self.api.GetForegroundWindow() != target.hwnd:
                     raise ValueError("Insertion cancelled or target changed.")
+                ready = True
                 if isinstance(target, NativeTarget):
                     expected: Target | NativeTarget = NativeTarget(
                         target.hwnd, target.process_id, target.edit, target.caret + offset
                     )
-                    observed = self._native_target(target.hwnd)
-                    if (
-                        observed is None
-                        or observed.edit != target.edit
-                        or observed.process_id != target.process_id
-                    ):
-                        raise ValueError("Target field changed.")
-                    ready = observed == expected
                 else:
                     caret = target.caret.Clone()
                     if caret.textRange.CompareEndpoints(0, caret.textRange, 1) != 0:
                         raise ValueError("Original caret tracking changed; delivery stopped.")
                     moved = caret.Move(0, offset, waitTime=0)
-                    control, current = self._selection()
-                    if (
-                        control.ProcessId != target.process_id
-                        or tuple(control.GetRuntimeId()) != target.runtime_id
-                    ):
-                        raise ValueError("Target field changed.")
-                    ready = moved == offset and current.Compare(caret)
+                    ready = moved == offset
                     expected = Target(target.hwnd, target.process_id, target.runtime_id, caret)
                 if ready:
-                    break
+                    try:
+                        self.insert(expected, text[offset : offset + 32], permitted)
+                        break
+                    except CaretNotReady:
+                        pass  # This check sent no input. Never retry SendInput failures.
                 if time.monotonic() >= settle_deadline:
                     raise ValueError("Target caret did not reach the expected insertion position.")
                 time.sleep(0.01)
-            self.insert(expected, text[offset : offset + 32], permitted)

@@ -54,7 +54,7 @@ through later successful dictations, until Clear or exit.
 While transcribing, the non-focusing indicator previews completed recognized phrases.
 Final text is delivered in checked 32-character batches for longer single-line ASCII text,
 with a short pause and a bounded wait for the expected caret between batches. Unicode,
-multiline text and unsupported character navigation retain a single checked delivery.
+multiline text and providers that fail navigation preflight retain a single checked delivery.
 Changing field, window, caret or modifiers stops delivery; check for partial text before
 copying from Latest transcript. Preview is phrase-based after recording ends, not live
 microphone/token streaming. Polishing still finishes before target delivery.

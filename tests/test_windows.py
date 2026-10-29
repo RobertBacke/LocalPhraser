@@ -224,3 +224,12 @@ def test_paced_delivery_does_not_resume_after_observed_field_change(monkeypatch)
     with pytest.raises(ValueError, match="field changed"):
         insertion.insert_gradually(NativeTarget(123, 42, 456, 0), "a" * 80, lambda: True)
     assert insertion.api.SendInput.call_count == 1
+
+
+def test_paced_partial_send_is_never_retried():
+    insertion, _, _ = insertion_fixture()
+    insertion._native_target = lambda hwnd: NativeTarget(123, 42, 456, 0)
+    insertion.api.SendInput.return_value = 1
+    with pytest.raises(RuntimeError, match="partially delivered"):
+        insertion.insert_gradually(NativeTarget(123, 42, 456, 0), "a" * 80, lambda: True)
+    insertion.api.SendInput.assert_called_once()

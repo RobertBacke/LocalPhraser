@@ -530,7 +530,7 @@ key is not rewritten automatically; older registrations can be toggled off/on wi
 The disposable registry command round-trip passed with host permissions; sandbox registry
 access was refused, and the actual Run key was untouched.
 
-Local suite: 247 passed, process exit 0, including real small.en/VAD with Python network
+Local suite: 248 passed, process exit 0, including real small.en/VAD with Python network
 connections denied. Ruff check/format, mypy and source archive/wheel builds passed. Coverage
 includes manual/background visibility, cold startup grace, retained/cleared error state,
 plain-text bounded previews, preview owner dispatch/shutdown suppression, asynchronous
@@ -560,3 +560,12 @@ exposed as a Window role and were correctly refused; the corrected child-edit fi
 matches the supported field contract. No field checks were relaxed. The Windows venv
 redirector's Popen PID differs from the actual GUI host, so field ownership uses the
 verified window's native process identity rather than assuming the launcher PID.
+
+The 2,600-character isolated Chrome trial exposed an overly short paced-delivery deadline.
+Repeated UIA validation during settling was consolidated into the same final guarded
+insert check; only a dedicated no-input caret-mismatch exception can be polled again.
+SendInput errors/partial delivery are never retried. The length allowance is now two
+seconds plus one second per 200 characters, capped at 30 seconds. Exact delivery passed
+in 11.094 seconds, followed by selected-text refusal after explicitly waiting for Chrome's
+asynchronous selection to settle. This measures delivery, not ASR latency. Additional
+tests cover partial-send non-retry and immediate cancellation on an observed field change.

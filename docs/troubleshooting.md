@@ -20,7 +20,7 @@ the target worker rather than blocking Qt. Longer single-line ASCII output is pa
 32-character batches, checking the expected caret and original field before each batch.
 The target gets up to 300 ms to process the previous batch; the GUI wait is capped at
 30 seconds and timeout revokes further delivery. Native provider calls cannot be forcibly
-interrupted. Unsupported navigation, Unicode and newlines
+interrupted. Unavailable navigation preflight, Unicode and newlines
 use the existing single dispatch. App rendering varies. A moved target or expired deadline
 stops further delivery; partial text may remain, so inspect before copying and never retry
 automatically. No clipboard contents are changed.
