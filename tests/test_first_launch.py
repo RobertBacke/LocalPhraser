@@ -132,3 +132,13 @@ def test_preinstalled_model_skips_automatic_download(desktop):
     publish_fixture_model(desktop)
     desktop.start_first_launch_setup()
     ui.ModelDownload.start.assert_not_called()
+
+
+def test_audio_watchdog_cancels_unhealthy_capture_without_transcribing(desktop):
+    desktop.recorder = Mock()
+    desktop.recorder.full.is_set.return_value = False
+    desktop.recorder.healthy.return_value = False
+    desktop.check_audio()
+    desktop.pipeline.cancel.assert_called_once()
+    desktop.pipeline.release.assert_not_called()
+    assert "Recording cancelled" in desktop.notify.call_args.args[0]

@@ -18,7 +18,9 @@ from localphraser.refinement_models import verify_refiner
 from localphraser.ui import Desktop
 
 
-def check(root: Path, temporary: Path, case: str, capture_rate: int) -> None:
+def check(root: Path, temporary: Path, case: str, capture_rate: int, cycles: int = 1) -> None:
+    if not 1 <= cycles <= 100 or (cycles != 1 and case != "complete"):
+        raise ValueError("Use 1-100 cycles; repeated cycles require the complete case.")
     verify_model(root / "base.en")
     verify_refiner("qwen2.5-1.5b", root)
     temporary.mkdir(parents=True, exist_ok=True)
@@ -29,6 +31,7 @@ def check(root: Path, temporary: Path, case: str, capture_rate: int) -> None:
     )
     failures = []
     reached = False
+    completed = 0
     started = time.monotonic()
 
     # These substitutions prevent native keyboard registration and make unintended
@@ -46,10 +49,12 @@ def check(root: Path, temporary: Path, case: str, capture_rate: int) -> None:
         pipeline = desktop.pipeline
         backend = pipeline.refiner
         assert backend is not None
+        reference = None
         if case == "loading":
             pending = pipeline.executor.submit(pipeline._prepare_models)
         else:
-            audio = synthetic_audio(temporary, capture_rate)
+            reference = synthetic_audio(temporary, capture_rate)
+            audio = reference.copy()
             pipeline._state(State.TRANSCRIBING)
             pipeline.executor.submit(pipeline._prepare_models)
             pending = pipeline.executor.submit(pipeline._transcribe, audio, capture_rate)
@@ -60,16 +65,37 @@ def check(root: Path, temporary: Path, case: str, capture_rate: int) -> None:
         timer.setInterval(10)
 
         def poll() -> None:
-            nonlocal reached
+            nonlocal reached, pending, completed
             reached = (
                 (case == "loading" and backend.process is not None)
                 or (case == "polishing" and backend.inflight)
                 or (case == "complete" and pending.done() and pipeline.state == State.IDLE)
             )
             if reached:
+                if case == "complete":
+                    try:
+                        result = pending.result()
+                        assert not result.notice and "speech" in result.raw.lower()
+                    except Exception:
+                        failures.append("Synthetic session failed.")
+                        app.quit()
+                        return
+                    completed += 1
+                    if completed < cycles:
+                        pipeline._state(State.TRANSCRIBING)
+                        assert reference is not None
+                        audio = reference.copy()
+                        pending = pipeline.executor.submit(
+                            pipeline._transcribe, audio, capture_rate
+                        )
+                        pending.add_done_callback(
+                            lambda result: pipeline._post(lambda: pipeline._finish(result))
+                        )
+                        reached = False
+                        return
                 timer.stop()
                 app.quit()
-            elif time.monotonic() - started > 45:
+            elif time.monotonic() - started > 45 * cycles:
                 failures.append("Target shutdown stage was not reached.")
                 app.quit()
 
@@ -78,6 +104,8 @@ def check(root: Path, temporary: Path, case: str, capture_rate: int) -> None:
         code = app.exec()
         timer.stop()
         pipeline.executor.shutdown(wait=True)
+        if reference is not None:
+            reference.fill(0)
         assert code == 0 and reached and not failures
         assert pipeline.closed and backend.process is None
         if case == "complete":
@@ -87,7 +115,7 @@ def check(root: Path, temporary: Path, case: str, capture_rate: int) -> None:
             pending.result()  # Do not silently discard unexpected background exceptions.
         assert not desktop.latest.text.toPlainText() and not desktop.latest.raw.toPlainText()
         del desktop
-    print(f"Owned Qt shutdown check passed: {case}; no microphone or insertion.")
+    print(f"Owned Qt shutdown check passed: {case}; {cycles} cycles; no microphone or insertion.")
 
 
 if __name__ == "__main__":
@@ -95,8 +123,9 @@ if __name__ == "__main__":
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--temp-dir", type=Path, required=True)
     parser.add_argument("--case", choices=("loading", "polishing", "complete"), required=True)
+    parser.add_argument("--cycles", type=int, default=1, help="Repeat complete sessions (1-100)")
     parser.add_argument(
         "--capture-rate", type=int, choices=(16000, 44100, 48000, 96000), default=48000
     )
     args = parser.parse_args()
-    check(args.root.resolve(), args.temp_dir.resolve(), args.case, args.capture_rate)
+    check(args.root.resolve(), args.temp_dir.resolve(), args.case, args.capture_rate, args.cycles)

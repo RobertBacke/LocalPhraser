@@ -32,6 +32,12 @@ cannot be distinguished and are omitted. Older saved names work only when unambi
 reselect the device if needed. Hot-plug races and drivers needing another sample rate still
 need broader acceptance. Check Windows microphone permission and default input settings.
 
+The app cancels recording if the stream stops or no audio callbacks arrive for three seconds,
+even if the driver still reports it as active. It clears the incomplete capture rather than
+transcribing it. Reconnect/select the microphone and press the shortcut to retry. Quiet audio
+does not trigger this timeout while frames continue arriving. Severe scheduling stalls can
+also trigger cancellation; this threshold is a recovery policy, not a driver-repair guarantee.
+
 ## Download cancelled or failed
 
 Use Cancel download and wait for cleanup before saving/closing Settings or retrying.

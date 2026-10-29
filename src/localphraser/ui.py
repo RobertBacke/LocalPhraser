@@ -590,7 +590,7 @@ class Desktop:
             self.pipeline.release()
         elif not self.recorder.healthy():
             self.pipeline.cancel()
-            self.notify("Microphone disconnected or stopped. Recording cancelled.")
+            self.notify("Microphone disconnected or audio stopped arriving. Recording cancelled.")
 
     def toggle(self) -> None:
         if self.pipeline.state == State.RECORDING:

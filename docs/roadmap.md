@@ -18,6 +18,8 @@
    Latest transcript now shows per-stage and total after-release timing in memory. A small
    synthetic base.en/small.en and 4/8-thread comparison is recorded in testing.md; broader
    human-speech accuracy and isolated latency benchmarks remain necessary.
+   The user now reports quick, accurate live dictation with their own microphone. This is
+   qualitative acceptance on their current setup, not a broad-device performance claim.
 3. **Phase 2 experimental build implemented:** optional Qwen2.5 0.5B/1.5B Q4 CPU polishing,
    Raw/Polished selection, custom instructions, explicit verified downloads, lazy warm
    process, time limit, lexical preservation and raw fallback. Both models were measured
@@ -34,6 +36,9 @@
    name/API selection, scrollable Settings, and Raw/Result comparison. Disposable registry
    and actual installer cancellation checks passed. Actual sign-in launch, wider device/driver,
    accessibility and multi-monitor acceptance remain; optional dark/light styling is deferred.
+   Capture now cancels if callbacks stop for three seconds, including drivers still reporting
+   active. Quiet frames stay healthy. Simulated stall/recovery and a ten-cycle real-model
+   Qt session check passed; actual device-unplug and longer consumer sessions remain.
 5. Release: license/source inventory, locked dependencies, installable signed/unsigned artifact
    policy, clean-machine checks, release notes, contribution templates and benchmark evidence.
    **Phase 4 foundation implemented:** checked portable ZIP plus SHA-256, first-run guide,

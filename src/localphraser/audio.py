@@ -4,6 +4,7 @@ import json
 import threading
 from collections import Counter
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any
 
 import numpy as np
@@ -13,6 +14,7 @@ Audio = npt.NDArray[np.float32]
 SAMPLE_RATE = 16000
 MAX_CAPTURE_RATE = 96000
 INVALID_SAMPLE_RATE = -9997  # PortAudio's paInvalidSampleRate.
+CALLBACK_TIMEOUT = 3.0
 
 
 def resample_audio(audio: Audio, sample_rate: int) -> Audio:
@@ -131,6 +133,7 @@ class Recorder:
         self.first_frame = threading.Event()
         self.stream: Any = None
         self.recording = False
+        self.last_frame_at: float | None = None
         self.closed = False
         self._lock = threading.RLock()
         self._callback_stop: Any = RuntimeError
@@ -141,6 +144,7 @@ class Recorder:
         count = min(frames, self.limit - self.position)
         self.buffer[self.position : self.position + count] = indata[:count, 0]
         self.position += count
+        self.last_frame_at = monotonic()
         self.first_frame.set()
         if self.position == self.limit:
             self.full.set()
@@ -198,6 +202,7 @@ class Recorder:
             self.failed = False
             self.full.clear()
             self.first_frame.clear()
+            self.last_frame_at = monotonic()
             try:
                 self.stream.start()
                 self.recording = True
@@ -208,6 +213,8 @@ class Recorder:
     def stop(self) -> Audio:
         with self._lock:
             try:
+                if self.recording and not self.healthy():
+                    self.failed = True
                 if self.stream is not None:
                     try:
                         self.stream.stop()
@@ -224,6 +231,7 @@ class Recorder:
                 return self.buffer[: self.position].copy()
             finally:
                 self.recording = False
+                self.last_frame_at = None
                 self.buffer.fill(0)
                 self.position = 0
                 if self.stream is None:
@@ -244,6 +252,7 @@ class Recorder:
             finally:
                 self.stream = None
                 self.recording = False
+                self.last_frame_at = None
                 self.position = 0
                 self.buffer.fill(0)
                 self.buffer = np.empty(0, dtype=np.float32)
@@ -254,4 +263,18 @@ class Recorder:
             self.cancel()
 
     def healthy(self) -> bool:
-        return bool(self.stream is not None and (self.stream.active or self.full.is_set()))
+        if self.stream is None or not self.recording or self.failed:
+            return False
+        if self.full.is_set():
+            return True
+        try:
+            active = self.stream.active
+        except Exception:
+            active = False
+        if (
+            not active
+            or self.last_frame_at is None
+            or monotonic() - self.last_frame_at > CALLBACK_TIMEOUT
+        ):
+            self.failed = True
+        return not self.failed

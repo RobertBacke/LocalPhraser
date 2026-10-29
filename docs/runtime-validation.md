@@ -84,6 +84,7 @@ Latest transcript is cleared during shutdown. It does not save or load a user pr
 .venv\Scripts\python.exe -X faulthandler scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/shutdown-check --case loading
 .venv\Scripts\python.exe -X faulthandler scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/shutdown-check --case polishing
 .venv\Scripts\python.exe -X faulthandler scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/shutdown-check --case complete
+.venv\Scripts\python.exe -X faulthandler scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/shutdown-check --case complete --cycles 10
 ```
 
 This helper requires base.en and Qwen2.5 1.5B already installed. Its default synthetic
@@ -91,3 +92,8 @@ capture rate is 48 kHz; use --capture-rate 16000 for the direct path. Run each c
 separate process and require exit 0, including interpreter/native teardown. These short
 trials are reproduction tools; success does not identify or rule out the older intermittent
 native shutdown crash, nor does it replace sustained sessions on consumer hardware.
+For repeated warm sessions, --cycles accepts 1-100 with --case complete. Each cycle must
+produce recognized speech and a preserving polishing result; only generated audio is used.
+The same Desktop/models remain alive across cycles; latest text is replaced, then cleared
+on shutdown. The GUI watchdog allows 45 seconds per requested cycle overall; native calls
+still require an external process timeout when diagnosing hangs.

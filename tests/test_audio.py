@@ -59,6 +59,7 @@ def test_audio_overflow_fails_and_cleans(device):
     recorder.start()
     stream = recorder.stream
     stream.callback(np.ones((100, 1), dtype=np.float32), 100, None, True)
+    assert not recorder.healthy()
     with pytest.raises(RuntimeError):
         recorder.stop()
     assert stream.closed
@@ -121,6 +122,86 @@ def test_prepare_cannot_reopen_after_shutdown(device):
     assert recorder.stream is None
     with pytest.raises(RuntimeError, match="closed"):
         recorder.start()
+
+
+@pytest.mark.parametrize("has_frames", [False, True])
+def test_active_stream_without_recent_frames_is_unhealthy(device, monkeypatch, has_frames):
+    clock = [100.0]
+    monkeypatch.setattr("localphraser.audio.monotonic", lambda: clock[0], raising=False)
+    recorder = Recorder(None, 120)
+    recorder.start()
+    stream = recorder.stream
+    assert recorder.healthy()
+    if has_frames:
+        clock[0] = 101.0
+        stream.callback(np.ones((100, 1), dtype=np.float32), 100, None, False)
+        clock[0] = 103.0
+        assert recorder.healthy()
+    clock[0] += 3.1
+    assert stream.active
+    assert not recorder.healthy()
+    recorder.cancel()
+    assert stream.closed and not recorder.buffer.size
+
+
+def test_release_after_callback_stall_refuses_partial_audio(device, monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("localphraser.audio.monotonic", lambda: clock[0], raising=False)
+    recorder = Recorder(None, 120, keep_ready=True)
+    recorder.start()
+    stream, buffer = recorder.stream, recorder.buffer
+    stream.callback(np.ones((5000, 1), dtype=np.float32), 5000, None, False)
+    clock[0] = 104.0
+    with pytest.raises(RuntimeError, match="interrupted"):
+        recorder.stop()
+    assert stream.closed and recorder.stream is None
+    assert not buffer.any() and not recorder.buffer.size
+
+
+def test_silent_frames_keep_stream_healthy_and_reuse_resets_clock(device, monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("localphraser.audio.monotonic", lambda: clock[0])
+    recorder = Recorder(None, 120, keep_ready=True)
+    recorder.start()
+    stream = recorder.stream
+    for _ in range(10):
+        clock[0] += 1
+        stream.callback(np.zeros((100, 1), dtype=np.float32), 100, None, False)
+        assert recorder.healthy()
+    recorder.stop().fill(0)
+    clock[0] += 60
+    recorder.start()
+    assert recorder.stream is stream and recorder.healthy()
+    recorder.cancel()
+
+
+def test_complete_capture_is_not_treated_as_stalled(device, monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("localphraser.audio.monotonic", lambda: clock[0])
+    recorder = Recorder(None, 1)
+    recorder.start()
+    with pytest.raises(device.CallbackStop):
+        recorder.stream.callback(np.ones((16000, 1), dtype=np.float32), 16000, None, False)
+    clock[0] += 10
+    assert recorder.healthy()
+    audio = recorder.stop()
+    assert audio.size == 16000
+    audio.fill(0)
+
+
+def test_stall_latches_failure_until_cancel_and_new_recording(device, monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("localphraser.audio.monotonic", lambda: clock[0])
+    recorder = Recorder(None, 120)
+    recorder.start()
+    clock[0] += 4
+    assert not recorder.healthy()
+    recorder.stream.callback(np.ones((100, 1), dtype=np.float32), 100, None, False)
+    assert not recorder.healthy()
+    recorder.cancel()
+    recorder.start()
+    assert recorder.healthy()
+    recorder.cancel()
 
 
 def test_default_rate_fallback_is_inactive_bounded_and_reused(device):

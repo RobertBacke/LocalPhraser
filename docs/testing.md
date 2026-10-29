@@ -489,3 +489,28 @@ Observed Raw total was 3.1 seconds (2.9 recognition); Polished total was 6.7 sec
 GUI harness lacked a Windows multiprocessing entry guard and failed; the corrected guarded
 Polished harness passed. This was a harness correction, not an application fix or a sustained
 session reliability claim.
+
+## Callback-stall recovery and repeated sessions (2026-10-29)
+
+The user reports that live microphone dictation now feels quick and fairly accurate. This
+is qualitative feedback on the user's current setup, without a new timed speech corpus.
+
+Three added tests first reproduced the old behavior: an active stream without initial or
+subsequent callbacks stayed healthy, and stop returned partial audio after a stall. They
+failed before the fix and passed afterwards. The recorder now tracks monotonic callback
+arrival time, latches an interrupted capture after three seconds without frames, and checks
+health before returning stopped audio. Existing GUI watchdog cancellation clears the buffer;
+retry opens/reinitializes the stream. No callbacks, logs or transcripts are created while idle.
+
+Local suite: 226 passed, process exit 0, including the real small.en/VAD test with Python
+connections denied. Added coverage includes silent-frame liveness, idle stream reuse with
+clock reset, failure latching/recovery, completed sample-limit capture after a delayed GUI
+poll, and GUI cancellation without transcription. Ruff check/format and mypy passed.
+
+The extended owned Qt helper completed ten consecutive synthetic 48 kHz sessions through
+real worker-side conversion, base.en recognition and Qwen2.5 1.5B refinement in one Desktop,
+then exited 0. The helper registers no hotkey, captures no microphone, inserts no text and
+does not load/save user settings. Each cycle checks speech content and no polishing fallback.
+This is a short repeated-session check, not proof of hours-long memory stability or resolution
+of the previously observed intermittent native shutdown issue. Driver-stall tests use an
+injected active stream and virtual clock; actual physical device unplug still needs acceptance.

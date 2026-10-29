@@ -67,6 +67,8 @@ audio capture or pre-roll buffer. Disable this setting to close the device after
 recording. Windows may show microphone access while the device is open, depending on the
 driver. Audio starts before background accessibility verification; initial hardware setup
 and driver latency can still affect the first recording after launch.
+If the device stops delivering audio frames for three seconds, recording is cancelled and
+its audio cleared. Ordinary silence still supplies frames and does not trigger this timeout.
 
 ## Models and offline use
 
