@@ -150,11 +150,7 @@ def test_gradual_delivery_validates_entire_message_before_any_input():
     insertion.api.SendInput.assert_not_called()
 
 
-@pytest.mark.parametrize("moved_caret", [False, True])
-def test_gradual_uia_tracks_expected_caret_and_stops_on_user_move(monkeypatch, moved_caret):
-    monkeypatch.setattr("localphraser.windows.time.sleep", lambda _: None)
-    clock = iter(range(1000))
-    monkeypatch.setattr("localphraser.windows.time.monotonic", lambda: next(clock) / 10)
+def test_uia_delivery_sends_complete_text_when_provider_moves_saved_caret():
     insertion, _, target = insertion_fixture()
     position = [0]
     control = insertion._selection.return_value[0]
@@ -165,7 +161,8 @@ def test_gradual_uia_tracks_expected_caret_and_stops_on_user_move(monkeypatch, m
             self.textRange = self
 
         def Clone(self):
-            return Range(self.value)
+            # Some providers update existing range anchors when the document changes.
+            return Range(position[0])
 
         def Move(self, unit, count, waitTime=0):
             self.value += count
@@ -181,17 +178,13 @@ def test_gradual_uia_tracks_expected_caret_and_stops_on_user_move(monkeypatch, m
     insertion._selection = lambda: (control, Range(position[0]))
 
     def send(count, events, size):
-        position[0] += count // 2 + int(moved_caret)
+        position[0] += count // 2
         return count
 
     insertion.api.SendInput.side_effect = send
-    if moved_caret:
-        with pytest.raises(ValueError, match="caret"):
-            insertion.insert_gradually(target, "a" * 80, lambda: True)
-        assert insertion.api.SendInput.call_count == 1
-    else:
-        insertion.insert_gradually(target, "a" * 80, lambda: True)
-        assert insertion.api.SendInput.call_count == 3
+    insertion.insert_gradually(target, "a" * 2600, lambda: True)
+    insertion.api.SendInput.assert_called_once()
+    assert position[0] == 2600
 
 
 @pytest.mark.parametrize("suffix", ["é", "\n"])

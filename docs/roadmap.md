@@ -21,9 +21,10 @@
    Manual launches now show Settings, new startup commands use --background, and the last
    sanitized error survives later dictations in memory. A reproduced slow-driver-start
    watchdog timeout is fixed; the user's first-dictation failure still needs live retesting.
-   A phrase preview and asynchronous paced ASCII delivery are implemented. Owned EDIT, Qt
-   and isolated Chrome textarea tests passed; other provider/Unicode behaviors remain bounded
-   fallbacks or manual recovery.
+   A phrase preview and asynchronous insertion are implemented. Following reported
+   32-character truncation, paced ASCII output is restricted to native EDIT controls;
+   UIA editors use a complete checked dispatch. Cold speech-model loading now waits until
+   capture stops after a real-device test reproduced callback overflow during loading.
    The user now reports quick, accurate live dictation with their own microphone. This is
    qualitative acceptance on their current setup, not a broad-device performance claim.
 3. **Phase 2 experimental build implemented:** optional Qwen2.5 0.5B/1.5B Q4 CPU polishing,

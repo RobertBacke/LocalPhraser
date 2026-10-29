@@ -10,18 +10,21 @@ to add the new background flag; normal launch does not silently rewrite registry
 A cold driver start no longer consumes the callback-stall grace period before capture is
 ready. This fixes a reproduced timeout path, not every possible first-recording failure.
 Latest transcript retains the last sanitized error through later successes until Clear/exit.
-If the first dictation still fails, check that message and whether a transcript was recovered.
+A real-device cold-start test also reproduced an input overflow while speech-model loading
+overlapped capture. Loading now waits until recording stops; first transcription therefore
+includes cold loading time. Overflow and disconnected-device checks remain enabled.
 
 ## Output appears unevenly
 
 Recognized phrases appear in the non-focusing preview after release as the engine produces
 them; the model does not emit live per-token microphone captions. Final insertion runs on
-the target worker rather than blocking Qt. Longer single-line ASCII output is paced in
-32-character batches, checking the expected caret and original field before each batch.
+the target worker rather than blocking Qt. Native Windows EDIT controls pace longer
+single-line ASCII output in 32-character batches, checking the expected caret and original
+field before each batch. Browser and Qt editors use one complete checked dispatch because
+UI Automation caret ranges can change when their documents update.
 The target gets up to 300 ms to process the previous batch; the GUI wait is capped at
 30 seconds and timeout revokes further delivery. Native provider calls cannot be forcibly
-interrupted. Unavailable navigation preflight, Unicode and newlines
-use the existing single dispatch. App rendering varies. A moved target or expired deadline
+interrupted. Unicode and newlines also use a single dispatch. App rendering varies. A moved target or expired deadline
 stops further delivery; partial text may remain, so inspect before copying and never retry
 automatically. No clipboard contents are changed.
 

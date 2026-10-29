@@ -91,7 +91,7 @@ was **10.299 s**, warm **3.172 s**. Audio generation/decoding occurs before thos
 microphone activation, target verification, and insertion are excluded. No personal audio
 or transcripts were recorded or printed. Real microphone end-to-end p50/p95 remains open.
 
-## Overlapping first-use model loading
+## Historical overlapping first-use model loading
 
 On the same host, `benchmark_refinement.py --prepare-lead 4` starts the 1.5B child, waits
 four seconds to simulate speaking time, then submits the same fixed texts. First-request
@@ -100,7 +100,9 @@ The four-second lead is excluded from 1.661 s: total work was not reduced, and t
 not controlled end-to-end microphone measurements. The following requests took 0.916,
 1.442, 1.133 and 0.922 s, respectively; all five edits passed the unchanged guard.
 Sampled peak child RSS was 1,773.0 MiB. Preparation can hide cold loading during speech,
-but does not speed up warm token generation or eliminate ASR processing time.
+but does not speed up warm token generation or eliminate ASR processing time. This
+overlap is now disabled during capture: a real microphone cold-start trial reproduced
+input overflow during speech-model imports. Loading waits until capture stops.
 
 The Phase 3 unsigned portable ZIP measured **121.1 MiB**, excluding ASR/LLM setup downloads.
 This is a compressed artifact size, distinct from the earlier folder size and process RSS.

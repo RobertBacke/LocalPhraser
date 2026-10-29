@@ -334,7 +334,7 @@ def test_shutdown_during_polishing_cannot_deliver_late_result(setup):
     backend.close.assert_called_once()
 
 
-def test_model_preparation_runs_after_audio_start_without_blocking_recording(setup):
+def test_polishing_preparation_waits_until_recording_stops(setup):
     pipeline, recorder, _, _, callbacks, _, results = setup
     owner = threading.get_ident()
     started, gate = threading.Event(), threading.Event()
@@ -343,6 +343,7 @@ def test_model_preparation_runs_after_audio_start_without_blocking_recording(set
     def prepare():
         assert threading.get_ident() != owner
         assert recorder.started == 1
+        assert pipeline.state == State.TRANSCRIBING
         started.set()
         assert gate.wait(5)
 
@@ -351,9 +352,11 @@ def test_model_preparation_runs_after_audio_start_without_blocking_recording(set
     pipeline.refiner = backend
     try:
         pipeline.press()
-        assert started.wait(5)
+        pipeline.executor.submit(lambda: None).result(timeout=5)
+        assert not started.is_set()
         assert pipeline.state == State.RECORDING
         pipeline.release()
+        assert started.wait(5)
         assert pipeline.state == State.TRANSCRIBING
     finally:
         gate.set()
@@ -386,7 +389,7 @@ def test_minimum_recording_duration_uses_actual_capture_rate(setup):
     assert not recorder.audio.any()
 
 
-def test_speech_model_loading_overlaps_recording_on_inference_worker(setup):
+def test_speech_model_loading_waits_until_recording_stops(setup):
     pipeline, recorder, recognizer, _, callbacks, _, results = setup
     owner = threading.get_ident()
     started, gate = threading.Event(), threading.Event()
@@ -395,6 +398,7 @@ def test_speech_model_loading_overlaps_recording_on_inference_worker(setup):
     def prepare():
         assert threading.get_ident() != owner
         assert recorder.started == 1
+        assert pipeline.state == State.TRANSCRIBING
         calls.append(("prepare", threading.get_ident()))
         started.set()
         assert gate.wait(5)
@@ -407,9 +411,11 @@ def test_speech_model_loading_overlaps_recording_on_inference_worker(setup):
     recognizer.transcribe = transcribe
     try:
         pipeline.press()
-        assert started.wait(5)
+        pipeline.executor.submit(lambda: None).result(timeout=5)
+        assert not started.is_set()
         assert pipeline.state == State.RECORDING
         pipeline.release()
+        assert started.wait(5)
         assert pipeline.state == State.TRANSCRIBING
         assert len(calls) == 1
     finally:
@@ -443,6 +449,7 @@ def test_shutdown_during_speech_preparation_skips_polishing(setup):
     recognizer.prepare = prepare
     try:
         pipeline.press()
+        pipeline.release()
         assert started.wait(5)
         pipeline.shutdown()
     finally:

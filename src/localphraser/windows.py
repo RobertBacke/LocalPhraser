@@ -288,17 +288,11 @@ class WindowsInsertion:
         # Validate the whole message before any delivery. Character-unit navigation
         # varies for Unicode/newlines, so those retain the single checked dispatch.
         unicode_inputs(text)
-        if len(text) <= 32 or not text.isascii() or "\n" in text:
+        # UIA ranges can move or be invalidated when editors update their document.
+        # Use one checked dispatch rather than risk stopping after the first batch.
+        if isinstance(target, Target) or len(text) <= 32 or not text.isascii() or "\n" in text:
             self.insert(target, text, permitted)
             return
-        if isinstance(target, Target):
-            try:
-                probe = target.caret.Clone()
-                if probe.Move(0, 0, waitTime=0) != 0:
-                    raise ValueError("Unsupported character navigation.")
-            except Exception:
-                self.insert(target, text, permitted)
-                return
         for offset in range(0, len(text), 32):
             if offset:
                 time.sleep(0.02)  # Give the target's input and paint queues time to advance.
@@ -306,24 +300,14 @@ class WindowsInsertion:
             while True:
                 if not permitted() or self.api.GetForegroundWindow() != target.hwnd:
                     raise ValueError("Insertion cancelled or target changed.")
-                ready = True
-                if isinstance(target, NativeTarget):
-                    expected: Target | NativeTarget = NativeTarget(
-                        target.hwnd, target.process_id, target.edit, target.caret + offset
-                    )
-                else:
-                    caret = target.caret.Clone()
-                    if caret.textRange.CompareEndpoints(0, caret.textRange, 1) != 0:
-                        raise ValueError("Original caret tracking changed; delivery stopped.")
-                    moved = caret.Move(0, offset, waitTime=0)
-                    ready = moved == offset
-                    expected = Target(target.hwnd, target.process_id, target.runtime_id, caret)
-                if ready:
-                    try:
-                        self.insert(expected, text[offset : offset + 32], permitted)
-                        break
-                    except CaretNotReady:
-                        pass  # This check sent no input. Never retry SendInput failures.
+                expected = NativeTarget(
+                    target.hwnd, target.process_id, target.edit, target.caret + offset
+                )
+                try:
+                    self.insert(expected, text[offset : offset + 32], permitted)
+                    break
+                except CaretNotReady:
+                    pass  # This check sent no input. Never retry SendInput failures.
                 if time.monotonic() >= settle_deadline:
                     raise ValueError("Target caret did not reach the expected insertion position.")
                 time.sleep(0.01)

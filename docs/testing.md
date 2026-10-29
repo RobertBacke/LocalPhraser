@@ -569,3 +569,34 @@ seconds plus one second per 200 characters, capped at 30 seconds. Exact delivery
 in 11.094 seconds, followed by selected-text refusal after explicitly waiting for Chrome's
 asynchronous selection to settle. This measures delivery, not ASR latency. Additional
 tests cover partial-send non-retry and immediate cancellation on an observed field change.
+
+
+## First-use overflow and partial delivery follow-up (2026-10-29)
+
+The user reported first-use microphone cancellation and output stopping after 32 ASCII
+characters. A real-device metadata-only trial reproduced an input overflow 3.828 seconds
+into the first recording while cold `small.en` preparation ran; subsequent recordings had
+no callback status flags. No audio was saved or transcribed in these hardware trials.
+After moving preparation until after capture stops, three eight-second recordings had
+no overflow or watchdog failure. Device-disconnection and overflow checks remain enabled.
+The first after-release transcription now includes cold model loading time.
+
+The exact cutoff was not reproduced in the owned Chrome/Qt editors. A regression fixture
+models a UIA provider updating its saved caret anchor after input: the previous code stops
+after its first batch; the revised code sends the complete message in one checked dispatch.
+Paced typing remains available for native EDIT controls. Phrase previews remain enabled;
+smooth final typing in UIA editors is deferred until reliable caret tracking is available.
+Neither partial SendInput failures nor changed targets are retried.
+
+`scripts/native_browser_check.py` creates an isolated Chrome profile and an owned reactive
+contenteditable field with an existing draft. It passed exact delivery of 2,736 synthetic
+characters and selected-text refusal. The fixture preserves whitespace and waits for the
+browser to process queued input before comparing its synthetic text. An owned Qt editor
+also passed generated speech through real `small.en`, phrase preview, local polishing and
+complete insertion, with a clean exit. Native EDIT paced insertion and a prefilled Qt field check also passed.
+These are not acceptance tests of the user's actual Codex draft or voice. Retesting a fresh
+launch and a long message in the user's original applications remains necessary.
+
+Both new regressions were run against the previous implementation and failed, then passed
+with the changes. The full local suite passed 247 tests, including the real offline speech
+model test; Ruff, formatting and mypy checks passed.

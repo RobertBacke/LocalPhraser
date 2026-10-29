@@ -8,7 +8,7 @@ No audio or transcription files are produced.
 Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone RAM buffer
   → background accessibility verification (concurrent with recording) → shortcut release
   → one ASR worker (local directory only) → optional polishing child → target-worker recheck
-  → checked paced ASCII batches / single Unicode batch OR manual-copy recovery
+  → checked native ASCII batches / single UIA or Unicode batch OR manual-copy recovery
 ```
 
 - `config.py`: validated immutable settings, atomic JSON saves.
@@ -39,10 +39,10 @@ disconnection. Audio starts before accessibility calls, which execute on a dedic
 worker. The UI retains only opaque target tokens; COM ranges never cross threads. Target
 verification times out to manual recovery after two seconds, and late targets are discarded.
 The final insertion stage runs asynchronously on the target worker. Longer single-line
-ASCII text uses 32-character batches with a 20 ms minimum interval and up to 300 ms caret
+ASCII text in native EDIT controls uses 32-character batches with a 20 ms minimum interval and up to 300 ms caret
 settling per batch. Field, focus, selection, modifiers and permission are checked again;
-UIA character navigation must match the expected position. Unicode/newlines and unsupported
-navigation retain the single checked SendInput dispatch. A length-based overall deadline
+UIA-backed editors always use one checked SendInput dispatch because document updates can
+move or invalidate stored caret ranges. Unicode/newlines also use one dispatch. A length-based overall deadline
 is capped at 30 seconds; timeout revokes permission and preserves full text for recovery.
 The legacy synchronous developer port keeps its two-second wait. An isolated process for forcibly terminating
 a hung native provider remains release hardening; threads cannot interrupt such calls.
@@ -59,9 +59,9 @@ registry value, with rollback if configuration persistence fails. Normal launche
 reconcile registration. New microphone identities combine exact name/API rather than relying
 on ambiguous PortAudio substring matching or a persistent numeric index.
 Phase 2 adds an independent Refiner protocol. Raw mode never loads llama.cpp. Polished
-mode starts a spawn child on the existing background executor after the microphone starts
-and keeps its model warm. Preparation loads the model without sending any text; recording
-and ASR can overlap that loading. Raw mode does not prepare a model. The ASR executor waits on
+mode starts a spawn child on the existing background executor after capture stops
+and keeps its model warm. Preparation loads the model without sending any text;
+ASR can overlap that loading. Raw mode does not prepare a model. The ASR executor waits on
 a bounded pipe reply while the GUI remains responsive. Timeout/close terminates the child.
 The pipe reader owns closing its handle: closing it from the UI while Windows polls it
 reproduced an INVALID_HANDLE crash and is explicitly avoided. Shutdown suppresses queued
