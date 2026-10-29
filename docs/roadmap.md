@@ -17,8 +17,11 @@
    Raw/Polished selection, custom instructions, explicit verified downloads, lazy warm
    process, time limit, lexical preservation and raw fallback. Both models were measured
    on fixed nonsensitive text; 1.5B is the initial choice. Synthetic speech → ASR → refinement
-   passed offline. Real-voice Polished acceptance, broader preservation corpora and
+   passed offline. The user subsequently reported improved Polished results both with Wi-Fi
+   connected and disconnected, while noting processing delay. Broader preservation corpora and
    clean-machine verification remain. Do not claim Phase 2 acceptance is complete yet.
+   Initial loading now begins on the background worker after recording starts, overlapping
+   speech rather than waiting until transcription ends. Warm inference still costs CPU time.
 4. Desktop polish: opt-in login startup, stronger model lifecycle/cancellation, device identity,
    accessibility and multi-monitor verification. Add screenshots after verified UI capture.
    Settings now scroll with Save/Cancel outside the scroll area; Raw/Result tabs support

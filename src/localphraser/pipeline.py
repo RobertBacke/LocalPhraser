@@ -111,6 +111,10 @@ class Dictation:
             self.recorder.cancel()
             self._error("Cannot open microphone. Check device and Windows microphone permissions.")
             return
+        if self.refiner is not None:
+            # Spawn/loading happens on the existing worker after audio has started.
+            # The child can load while the user speaks; Raw mode never starts it.
+            self.executor.submit(self.refiner.prepare)
         # Audio is already buffered while potentially slow accessibility checks run.
         if self.auto_insert and snapshot is not None:
             try:

@@ -23,6 +23,7 @@ TOKENS = re.compile(
 
 
 class Refiner(Protocol):
+    def prepare(self) -> None: ...
     def refine(self, text: str) -> str: ...
     def close(self) -> None: ...
 
@@ -138,30 +139,41 @@ class LocalRefiner:
             self.process.close()
             self.process = None
 
+    def _start_locked(self) -> None:
+        if self.closed:
+            raise RuntimeError("Refinement has closed.")
+        if self.process is None or not self.process.is_alive():
+            self._stop_locked()
+            parent, child = self.context.Pipe()
+            process = self.context.Process(
+                target=refinement_worker,
+                args=(child, self.name, str(self.root), self.threads, self.prompt),
+                daemon=True,
+            )
+            try:
+                process.start()
+            except Exception:
+                parent.close()
+                child.close()
+                raise
+            child.close()
+            self.process, self.connection = process, parent
+
+    def prepare(self) -> None:
+        """Start loading locally without receiving or generating any transcript text."""
+        with self.lifecycle:
+            if self.closed:
+                raise RuntimeError("Refinement has closed.")
+            if not self.inflight:
+                self._start_locked()
+
     def refine(self, text: str) -> str:
         if not 0 < len(text) <= MAX_INPUT_CHARS:
             raise ValueError("Input outside refinement limits.")
         with self.lifecycle:
-            if self.closed:
-                raise RuntimeError("Refinement has closed.")
             if self.inflight:
                 raise RuntimeError("Refinement is already running.")
-            if self.process is None or not self.process.is_alive():
-                self._stop_locked()
-                parent, child = self.context.Pipe()
-                process = self.context.Process(
-                    target=refinement_worker,
-                    args=(child, self.name, str(self.root), self.threads, self.prompt),
-                    daemon=True,
-                )
-                try:
-                    process.start()
-                except Exception:
-                    parent.close()
-                    child.close()
-                    raise
-                child.close()
-                self.process, self.connection = process, parent
+            self._start_locked()
             connection = self.connection
             self.inflight = True
         assert connection is not None

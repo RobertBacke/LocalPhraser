@@ -33,6 +33,10 @@ in a separate process; dictation remains offline. Development package installati
 contacts package registries, but it is not application runtime traffic.
 
 Optional polishing passes text over a private multiprocessing pipe to a local CPU worker.
+Its model starts loading in the background after the first Polished recording begins,
+without receiving audio or transcript text. Text is sent only after recognition finishes.
+Preparation may continue after a cancelled recording, keeping the model ready for later use;
+switching to Raw or quitting releases it.
 It uses only verified local GGUF files; Python socket connections are disabled in that
 worker. It does not start a network listener or use llama.cpp's model downloader. Prompts
 are not placed in shell commands, process arguments, temporary files, or a disk cache.

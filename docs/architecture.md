@@ -48,7 +48,9 @@ Shutdown cancels capture and ignores worker results. Native inference cannot cur
 interrupted; Python executor shutdown allows the native call to finish before process exit.
 Models remain warm for repeated use; changing settings releases the previous pipeline.
 Phase 2 adds an independent Refiner protocol. Raw mode never loads llama.cpp. Polished
-mode starts a spawn child on first use and keeps its model warm; the ASR executor waits on
+mode starts a spawn child on the existing background executor after the microphone starts
+and keeps its model warm. Preparation loads the model without sending any text; recording
+and ASR can overlap that loading. Raw mode does not prepare a model. The ASR executor waits on
 a bounded pipe reply while the GUI remains responsive. Timeout/close terminates the child.
 The pipe reader owns closing its handle: closing it from the UI while Windows polls it
 reproduced an INVALID_HANDLE crash and is explicitly avoided. Shutdown suppresses queued

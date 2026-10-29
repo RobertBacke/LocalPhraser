@@ -211,7 +211,8 @@ also passed offline. Per-model text outcomes and timings are in performance.md.
 
 Polished mode remains experimental: real-voice cross-app acceptance, a larger corpus,
 punctuation/meaning preservation evaluation, sustained shutdown trials, and clean-machine
-builds are pending. The user has verified Raw mode workflows, not yet Polished mode.
+builds are pending. At the end of this initial build, the user had verified Raw mode
+workflows; subsequent Polished feedback is recorded below.
 
 Final local validation: **129 tests passed with exit 0**, including the optional real
 `small.en` offline check; the preceding 128-test run also exited 0 after explicit fixture
@@ -219,3 +220,22 @@ teardown. Ruff check/format and mypy (15 source modules) passed. Wheel/sdist and
 Phase 2 folder executable built. The frozen executable passed both GUI `--smoke-test`
 with Polished selected (no capture) and `check-refiner` using actual 1.5B inference twice
 (both exit 0). These are same-host checks, not a clean-machine release certification.
+
+## Polished user trial and overlapping model preparation
+
+The user reports that Polished seems better than Raw, and works with Wi-Fi connected and
+disconnected, but processing takes a noticeable amount of time. This is qualitative live
+acceptance evidence on this machine, not measured word error rate or latency.
+
+Model preparation now starts on the existing worker only after microphone recording begins.
+It sends no warm-up text, and actual refinement reuses the prepared child. Tests cover
+audio starting first, recording/release remaining responsive while preparation is pending,
+preparation errors preserving transcription/raw fallback, reuse without stale responses,
+and closed preparers never reopening. **132 tests passed with exit 0**, including the real
+`small.en` offline check. Ruff, formatting and mypy passed. The five real 1.5B fixed-text
+trials remained accepted; measured timings and limits are in performance.md.
+The owned Qt desktop check also passed with explicit model preparation before real ASR
+and polishing, followed by clean shutdown, without microphone use or insertion. Source
+wheel/sdist and the updated unsigned folder build completed. Frozen GUI smoke and real
+1.5B `check-refiner` both exited 0. Actual microphone capture while loading and real-voice
+release-to-result latency for this preparation update remain user acceptance work.

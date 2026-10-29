@@ -27,6 +27,9 @@ def main() -> None:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--timeout", type=int, default=15)
+    parser.add_argument(
+        "--prepare-lead", type=float, default=0, help="Simulated speaking time during loading"
+    )
     args = parser.parse_args()
     backend = LocalRefiner(args.model, args.root, args.threads, DEFAULT_PROMPT, args.timeout)
     stopped = threading.Event()
@@ -49,6 +52,9 @@ def main() -> None:
     sampler.start()
     results = []
     try:
+        if args.prepare_lead > 0:
+            backend.prepare()
+            time.sleep(args.prepare_lead)
         for name, text in CASES:
             reused = backend.process is not None and backend.process.is_alive()
             started = time.perf_counter()
@@ -75,6 +81,7 @@ def main() -> None:
                 "model": args.model,
                 "quantization": "Q4_K_M",
                 "threads": args.threads,
+                "prepare_lead_seconds": args.prepare_lead,
                 "os": platform.platform(),
                 "processor": platform.processor(),
                 "logical_cpus": psutil.cpu_count(),

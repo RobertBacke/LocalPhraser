@@ -116,3 +116,22 @@ def test_long_input_does_not_start_a_worker(tmp_path):
     with pytest.raises(ValueError):
         backend.refine("x" * 3001)
     assert backend.process is None
+
+
+def test_prepare_starts_worker_without_sending_text_and_reuses_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(refinement, "refinement_worker", echo_worker)
+    backend = LocalRefiner("fixture", tmp_path, 1, DEFAULT_PROMPT, 5)
+    try:
+        backend.prepare()
+        first = backend.process.pid
+        backend.prepare()
+        assert backend.process.pid == first
+        # The echo fixture responds to every message. Any warm-up text sent by
+        # prepare would leave a stale response and make this assertion fail.
+        assert backend.refine("actual request") == "ACTUAL REQUEST."
+        assert backend.process.pid == first
+    finally:
+        backend.close()
+    with pytest.raises(RuntimeError):
+        backend.prepare()
+    assert backend.process is None

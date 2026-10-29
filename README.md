@@ -3,9 +3,11 @@
 Free, open-source, offline push-to-talk dictation for Windows 10/11. Original application
 code is MIT licensed, © 2026 Robert Backe.
 
-**Early development / Phase 1 implementation. Not a stable release.** A user has verified
+**Early development / experimental Phase 2. Not a stable release.** A user has verified
 microphone dictation, insertion in Codex and Chrome, offline use, and focus/selection safety.
 Broader acceptance and clean-machine testing remain. See [testing](docs/testing.md).
+The user also reports better results with Polished mode, including with Wi-Fi disconnected,
+with noticeable processing delay.
 
 ![Settings preview](assets/settings.png)
 
@@ -105,7 +107,10 @@ Use `--root <your-model-directory>` for a custom model location. Alternatively c
 Save when installation finishes. The development Polished executable includes the CPU
 runtime; models are separate explicit downloads. No local HTTP server or cloud API is used.
 
-Polishing runs in a lazy, reusable child process. The configurable limit is 15 seconds by
+Polishing runs in a reusable child process, prepared in the background once a Polished
+recording starts so model loading can overlap speaking and transcription. No transcript
+is sent until recognition finishes. Raw mode does not start this process.
+The configurable limit is 15 seconds by
 default, including the cold model load; timeout, missing runtime/model, truncated output,
 changed words/numbers, or inputs over 3,000 characters fall back to raw transcription.
 The first build permits punctuation, capitalization, and removing `um`, `uh`, `erm`, `hmm`;

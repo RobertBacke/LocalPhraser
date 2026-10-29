@@ -329,3 +329,45 @@ def test_shutdown_during_polishing_cannot_deliver_late_result(setup):
     assert callbacks.empty()
     assert not insertion.delivered and not results
     backend.close.assert_called_once()
+
+
+def test_model_preparation_runs_after_audio_start_without_blocking_recording(setup):
+    pipeline, recorder, _, _, callbacks, _, results = setup
+    owner = threading.get_ident()
+    started, gate = threading.Event(), threading.Event()
+    backend = Mock()
+
+    def prepare():
+        assert threading.get_ident() != owner
+        assert recorder.started == 1
+        started.set()
+        assert gate.wait(5)
+
+    backend.prepare.side_effect = prepare
+    backend.refine.side_effect = lambda text: text
+    pipeline.refiner = backend
+    try:
+        pipeline.press()
+        assert started.wait(5)
+        assert pipeline.state == State.RECORDING
+        pipeline.release()
+        assert pipeline.state == State.TRANSCRIBING
+    finally:
+        gate.set()
+    finish(callbacks)
+    finish(callbacks)
+    assert results[0][0] == "Hello, world."
+
+
+def test_preparation_error_does_not_prevent_transcription_or_raw_fallback(setup):
+    pipeline, _, _, _, callbacks, _, results = setup
+    backend = Mock()
+    backend.prepare.side_effect = OSError("private model-loading error")
+    backend.refine.side_effect = OSError("private model-loading error")
+    pipeline.refiner = backend
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    finish(callbacks)
+    assert results[0][0] == "Hello, world."
+    assert "using raw" in results[0][1] and "private" not in results[0][1]
