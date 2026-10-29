@@ -59,6 +59,9 @@ def main() -> int:
     runtime.add_argument("--root", type=Path, default=data_dir() / "models")
     runtime.add_argument("--model", choices=MODELS, default="base.en")
     runtime.add_argument("--polishing-model", choices=REFINEMENT_MODELS)
+    runtime.add_argument(
+        "--capture-rate", type=int, choices=(16000, 44100, 48000, 96000), default=16000
+    )
     runtime.add_argument("--report", type=Path, required=True, help="New JSON report file")
     parser.add_argument("--config", type=Path, default=data_dir() / "config.json")
     parser.add_argument(
@@ -70,7 +73,9 @@ def main() -> int:
         from localphraser.diagnostics import write_runtime_report
 
         try:
-            return write_runtime_report(args.report, args.root, args.model, args.polishing_model)
+            return write_runtime_report(
+                args.report, args.root, args.model, args.polishing_model, args.capture_rate
+            )
         except (OSError, ValueError):
             print(
                 "Runtime report could not be written. Choose a new writable JSON file.",

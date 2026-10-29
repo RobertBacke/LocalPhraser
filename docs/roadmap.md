@@ -9,7 +9,9 @@
    microphone sample-rate compatibility and bounded accessibility-call responsiveness.
    Initial device-start measurements, inactive-stream reuse and background accessibility
    verification are implemented. Immediate-speech acceptance and broader driver measurements
-   remain; shortcut selection now uses a focused key/chord recorder.
+   remain; shortcut selection now uses a focused key/chord recorder. Unsupported-rate
+   drivers now get a bounded default-rate fallback and worker-side conversion; synthetic
+   rate/aliasing checks and an inactive real-device open passed. Broader devices remain.
    The user subsequently confirmed the shortcut picker works and opening-word capture
    improved. Optional vocabulary hints now guide local recognition of names/technical terms;
    measured accuracy gains still require representative speech evaluation.
@@ -37,7 +39,8 @@
    Offline runtime inventory, wheel notice collection, supplemental source hashes and
    stale-inventory packaging checks are implemented. Native files now have wheel RECORD
    hash attribution; opt-in synthetic Raw/Polished runtime diagnostics support frozen
-   consumer-machine validation with sanitized reports. Exact native-source review, signing,
+   consumer-machine validation with sanitized reports. Owned Qt shutdown checks exercise
+   closing during loading, polishing and normal completion with synthetic 48 kHz speech. Exact native-source review, signing,
    clean consumer-machine and sustained-session acceptance still block release readiness.
 6. macOS/Linux adapters after the Windows workflow proves dependable. No remote publication
    or stable release without explicit authorization and acceptance evidence.

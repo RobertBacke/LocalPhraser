@@ -27,6 +27,10 @@ $check = Start-Process -FilePath .\LocalPhraser.exe -ArgumentList $arguments -Wi
 $check.ExitCode
 ```
 
+Add `--capture-rate 48000` (or 44100/96000) to generate synthetic speech at that rate and
+exercise the same conversion used for compatible microphone fallback. This simulates the
+sample-rate path without using a device.
+
 Add `--polishing-model qwen2.5-1.5b` to exercise polishing after installing that model.
 Repeat with different report names to check initialization/shutdown across process launches.
 The windowed EXE has no console output; inspect the JSON report after the process exits.
@@ -47,6 +51,7 @@ audio array is cleared at cleanup. No personal audio is used.
 
 - `model_verification`: missing/damaged speech model, or failure before synthetic generation.
 - `synthetic_speech`: missing/broken SAPI voice, decoding, temporary storage or native dependency.
+- `audio_conversion`: rate conversion failed.
 - `recognition`: backend failure or absence of the two expected synthetic marker words.
 - `polishing`: backend/deadline failure or rejected word changes. Production dictation uses
   its Raw fallback for rejected edits.
@@ -65,3 +70,24 @@ polishing loading overlaps generation/recognition, so these are not standalone c
 benchmarks. Native speech inference and SAPI calls currently have no overall interruptible
 deadline. A passed CLI cycle does not resolve the previously observed intermittent native
 GUI/test-process shutdown failure. Continue the manual [release checklist](release-checklist.md).
+
+
+## Owned Qt shutdown checks (source development environment)
+
+`scripts/native_shutdown_check.py` runs an isolated owned Qt Desktop with real local models,
+then quits while the refiner is loading, while it is polishing, or after normal completion.
+The helper disables keyboard registration, hides its tray, disallows microphone start and
+sets automatic insertion off. It supplies only generated synthetic speech to the worker;
+Latest transcript is cleared during shutdown. It does not save or load a user profile.
+
+```powershell
+.venv\Scripts\python.exe -X faulthandler scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/shutdown-check --case loading
+.venv\Scripts\python.exe -X faulthandler scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/shutdown-check --case polishing
+.venv\Scripts\python.exe -X faulthandler scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/shutdown-check --case complete
+```
+
+This helper requires base.en and Qwen2.5 1.5B already installed. Its default synthetic
+capture rate is 48 kHz; use --capture-rate 16000 for the direct path. Run each case in a
+separate process and require exit 0, including interpreter/native teardown. These short
+trials are reproduction tools; success does not identify or rule out the older intermittent
+native shutdown crash, nor does it replace sustained sessions on consumer hardware.

@@ -8,7 +8,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from localphraser.audio import SAMPLE_RATE, Audio
+from localphraser.audio import SAMPLE_RATE, Audio, resample_audio
 from localphraser.recognition import Recognizer
 from localphraser.refinement import Refiner, preserve_words
 
@@ -165,25 +165,34 @@ class Dictation:
     def release(self) -> None:
         if self.closed or self.state != State.RECORDING:
             return
+        audio = None
         try:
             audio = self.recorder.stop()
-            if audio.size < SAMPLE_RATE // 5 or np.max(np.abs(audio), initial=0) < 0.001:
+            sample_rate = getattr(self.recorder, "sample_rate", SAMPLE_RATE)
+            if audio.size < sample_rate // 5 or np.max(np.abs(audio), initial=0) < 0.001:
                 audio.fill(0)
                 self._clear_target()
                 self._state(State.IDLE, "No speech captured.")
                 return
             self._state(State.TRANSCRIBING)
-            future = self.executor.submit(self._transcribe, audio)
+            future = self.executor.submit(self._transcribe, audio, sample_rate)
             future.add_done_callback(lambda f: self._post(lambda: self._finish(f)))
         except Exception:
+            if audio is not None:
+                audio.fill(0)
             self.recorder.cancel()
             self._error("Recording failed. Check the microphone and try again.")
 
-    def _transcribe(self, audio: Audio) -> Transcript:
+    def _transcribe(self, audio: Audio, sample_rate: int = SAMPLE_RATE) -> Transcript:
+        captured = audio
         try:
+            if sample_rate != SAMPLE_RATE:
+                audio = resample_audio(captured, sample_rate)
             raw = self.recognizer.transcribe(audio).strip()
         finally:
             audio.fill(0)
+            if captured is not audio:
+                captured.fill(0)
         if not raw or self.refiner is None or self.closed:
             return Transcript(raw, raw)
         self._post(lambda: None if self.closed else self._state(State.POLISHING))
@@ -204,7 +213,7 @@ class Dictation:
             transcript = future.result()
             text = transcript.text.strip()
         except Exception:
-            self._error("Transcription failed. Verify the installed model or reinstall it.")
+            self._error("Transcription failed. Check the speech model and microphone settings.")
             return
         if not text:
             self._clear_target()

@@ -76,3 +76,18 @@ and integrity verification as manual setup. Existing models skip downloading. La
 including after a failure, stay offline until an explicit Download action. Recognition remains
 local-only and verifies hashes before loading. Presence checks used for UI readiness do not
 substitute for that integrity check. No model directories are scanned or silently migrated.
+
+
+Microphone capture still prefers 16 kHz. Only PortAudio paInvalidSampleRate (-9997) triggers
+one retry at the selected device's reported integral default rate in 8-96 kHz; other errors
+are not retried as format failures. A second failure is reported normally. The inactive
+stream is opened before allocating its bounded duration-sized buffer. No idle callbacks
+or pre-roll are introduced. Native-rate capture may use more RAM, bounded by the existing
+300-second maximum (115.2 MB of float32 capture at 96 kHz, before result copies).
+
+Release snapshots the capture rate, uses it for the 200 ms minimum duration, and passes it
+to the ASR worker. PyAV resamples in one-second source chunks and flushes the filter tail;
+conversion does not run on the Qt owner thread or PortAudio callback. Explicit Python/AV
+working buffers are cleared and both native/converted arrays are cleared after recognition,
+including errors. Native library internals are released normally; this is not a secure
+memory-erasure guarantee. Conversion uses already-bundled PyAV and adds no download/runtime.

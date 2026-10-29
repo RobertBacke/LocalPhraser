@@ -11,6 +11,52 @@ import numpy.typing as npt
 
 Audio = npt.NDArray[np.float32]
 SAMPLE_RATE = 16000
+MAX_CAPTURE_RATE = 96000
+INVALID_SAMPLE_RATE = -9997  # PortAudio's paInvalidSampleRate.
+
+
+def resample_audio(audio: Audio, sample_rate: int) -> Audio:
+    """Convert bounded mono capture to Whisper's rate on the inference worker."""
+    if not 8000 <= sample_rate <= MAX_CAPTURE_RATE:
+        raise ValueError("Unsupported capture sample rate.")
+    if audio.ndim != 1 or audio.dtype != np.float32 or len(audio) > sample_rate * 300:
+        raise ValueError("Invalid or oversized capture buffer.")
+    if sample_rate == SAMPLE_RATE or not len(audio):
+        return audio
+    import av
+
+    resampler = av.AudioResampler(format="fltp", layout="mono", rate=SAMPLE_RATE)
+    chunks = []
+
+    def collect(frames: Any) -> None:
+        for frame in frames:
+            array = None
+            try:
+                array = frame.to_ndarray()
+                chunks.append(array.reshape(-1).copy())
+            finally:
+                if array is not None:
+                    array.fill(0)
+                for plane in frame.planes:
+                    plane.update(bytes(plane.buffer_size))
+
+    try:
+        # Bound temporary AV allocations instead of constructing one recording-sized frame.
+        for offset in range(0, len(audio), sample_rate):
+            frame = av.AudioFrame.from_ndarray(
+                audio[None, offset : offset + sample_rate], format="fltp", layout="mono"
+            )
+            frame.sample_rate = sample_rate
+            try:
+                collect(resampler.resample(frame))
+            finally:
+                for plane in frame.planes:
+                    plane.update(bytes(plane.buffer_size))
+        collect(resampler.resample(None))
+        return np.concatenate(chunks) if chunks else np.empty(0, dtype=np.float32)
+    finally:
+        for chunk in chunks:
+            chunk.fill(0)
 
 
 @dataclass(frozen=True)
@@ -74,6 +120,8 @@ def resolve_microphone(value: str | None) -> int | None:
 class Recorder:
     def __init__(self, device: str | None, max_seconds: int, keep_ready: bool = False):
         self.device = device
+        self.max_seconds = max_seconds
+        self.sample_rate = SAMPLE_RATE
         self.limit = max_seconds * SAMPLE_RATE
         self.keep_ready = keep_ready
         self.buffer: Audio = np.empty(0, dtype=np.float32)
@@ -105,17 +153,38 @@ class Recorder:
         with self._lock:
             if self.closed or self.stream is not None:
                 return
-            self.buffer = np.zeros(self.limit, dtype=np.float32)
             self._callback_stop = sd.CallbackStop
             try:
-                self.stream = sd.InputStream(
-                    samplerate=SAMPLE_RATE,
-                    channels=1,
-                    dtype="float32",
-                    device=resolve_microphone(self.device),
-                    latency="low",
-                    callback=self._callback,
-                )
+                device = resolve_microphone(self.device)
+
+                def open_stream(rate: int) -> Any:
+                    return sd.InputStream(
+                        samplerate=rate,
+                        channels=1,
+                        dtype="float32",
+                        device=device,
+                        latency="low",
+                        callback=self._callback,
+                    )
+
+                self.sample_rate = SAMPLE_RATE
+                try:
+                    self.stream = open_stream(SAMPLE_RATE)
+                except sd.PortAudioError as exc:
+                    if len(exc.args) < 2 or exc.args[1] != INVALID_SAMPLE_RATE:
+                        raise
+                    native = float(sd.query_devices(device, "input")["default_samplerate"])
+                    if (
+                        not np.isfinite(native)
+                        or not native.is_integer()
+                        or not 8000 <= native <= MAX_CAPTURE_RATE
+                        or native == SAMPLE_RATE
+                    ):
+                        raise ValueError("Microphone default sample rate is unsupported.") from exc
+                    self.sample_rate = int(native)
+                    self.stream = open_stream(self.sample_rate)
+                self.limit = self.max_seconds * self.sample_rate
+                self.buffer = np.zeros(self.limit, dtype=np.float32)
             except Exception:
                 self.cancel()
                 raise

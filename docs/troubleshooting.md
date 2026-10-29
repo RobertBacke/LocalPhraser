@@ -76,3 +76,14 @@ then Save; or start the EXE with the same absolute `--config` path as your old c
 Do not run two copies with competing shortcuts. A new profile now downloads base.en once
 on first launch. Cancel or failure leaves manual retry available via Download speech model;
 later launches never retry automatically. Offline first use requires a model already installed.
+
+
+## A microphone driver does not accept 16 kHz
+
+The app now retries once at that device's reported default sample rate when PortAudio
+specifically reports an unsupported rate. Rates from 8 to 96 kHz are supported, with local
+conversion to 16 kHz before recognition. No setting is required. The same duration limit
+applies. Device permission, unavailable-device, channel-count and other errors still need
+normal troubleshooting; they are not treated as sample-rate failures. Devices with a
+reported default above 96 kHz remain unsupported by this fallback. Driver/hot-plug behavior
+still needs broader hardware testing.

@@ -393,3 +393,29 @@ passed for source commit `d8b43a8`: tests/checks, frozen build, native inventory
 frozen missing-model diagnostic/report, portable packaging and installer install/reinstall/
 uninstall acceptance. Binary artifact upload was disabled. This does not replace real
 model checks on clean Windows 10/11 consumer machines or the remaining release review.
+
+
+## Capture-rate compatibility and owned Qt shutdown trials (2026-10-29)
+
+Local suite: 209 passed, one optional local-model test skipped. Ruff check/format and mypy
+passed for 18 source modules. Coverage includes native-rate inactive stream fallback and
+reuse, duration bounds/minimums at the actual capture rate, no retry for unrelated errors,
+invalid fallback rates, real resampling at 8/32/44.1/48/96 kHz, chunk continuity, speech-band
+tone preservation and above-Nyquist filtering. Worker-thread conversion and clearing of
+both captured/converted buffers are checked on success, conversion error and ASR error.
+
+A real default-device test forced only the first 16 kHz attempt to raise the documented
+unsupported-rate error, then opened the device's reported 44.1 kHz stream inactive. No
+stream start/callback occurred; the stream was closed and its buffer cleared. This verifies
+an inactive real-device fallback open, not a naturally failing driver or live recording.
+
+The owned source Qt helper passed six separate 16 kHz process trials (two each for quit
+during loading, during polishing, and normal completion), followed by three 48 kHz trials
+(one per case), all exit 0. Keyboard registration was disabled, tray hidden, microphone
+start forbidden and auto-insertion off. The 48 kHz complete/polishing cases used generated
+speech through real worker-side conversion, ASR and local refinement. The opt-in source
+check-runtime --capture-rate 48000 also passed cold/warm recognition and polishing with
+local base.en and Qwen2.5 1.5B (exit 0). No personal audio or editor input was used.
+
+The previously intermittent native shutdown failure was not reproduced. Nine clean owned
+Qt process exits do not establish its root cause or complete sustained-session acceptance.

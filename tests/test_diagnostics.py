@@ -14,7 +14,7 @@ from localphraser.main import main
 def runtime(monkeypatch, tmp_path):
     audio = np.ones(16000, dtype=np.float32)
     monkeypatch.setattr(diagnostics, "verify_model", Mock())
-    monkeypatch.setattr(diagnostics, "synthetic_audio", lambda directory: audio)
+    monkeypatch.setattr(diagnostics, "synthetic_audio", lambda directory, rate: audio)
     recognizer = Mock()
     recognizer.transcribe.return_value = "local speech recognition keeps my words on this computer"
     monkeypatch.setattr(diagnostics, "WhisperRecognizer", Mock(return_value=recognizer))
@@ -45,6 +45,23 @@ def test_polished_preservation_and_cleanup(runtime):
     assert refiner.refine.call_count == 2
     refiner.close.assert_called_once()
     assert not audio.any()
+
+
+def test_synthetic_native_rate_is_converted_before_recognition(runtime, monkeypatch):
+    root, _, recognizer, _, _ = runtime
+    native = np.ones(48000, dtype=np.float32)
+    monkeypatch.setattr(diagnostics, "synthetic_audio", lambda directory, rate: native)
+    observed = []
+
+    def transcribe(audio):
+        assert audio.shape == (16000,)
+        observed.append(audio)
+        return "speech on this computer"
+
+    recognizer.transcribe.side_effect = transcribe
+    result = diagnostics.runtime_check(root, "base.en", None, root, 48000)
+    assert result["status"] == "passed" and result["synthetic_capture_rate"] == 48000
+    assert not native.any() and not observed[0].any()
 
 
 def test_private_error_text_is_not_serialized_and_buffers_are_cleared(runtime):

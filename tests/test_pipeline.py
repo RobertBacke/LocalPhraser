@@ -371,3 +371,13 @@ def test_preparation_error_does_not_prevent_transcription_or_raw_fallback(setup)
     finish(callbacks)
     assert results[0][0] == "Hello, world."
     assert "using raw" in results[0][1] and "private" not in results[0][1]
+
+
+def test_minimum_recording_duration_uses_actual_capture_rate(setup):
+    pipeline, recorder, _, insertion, _, _, results = setup
+    recorder.sample_rate = 48000
+    recorder.audio = np.full(4800, 0.05, dtype=np.float32)  # 100 ms, below the 200 ms minimum.
+    pipeline.press()
+    pipeline.release()
+    assert pipeline.state == State.IDLE and not results and not insertion.delivered
+    assert not recorder.audio.any()

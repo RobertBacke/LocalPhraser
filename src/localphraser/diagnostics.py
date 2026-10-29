@@ -13,7 +13,7 @@ from unittest.mock import patch
 import numpy as np
 
 from localphraser import __version__
-from localphraser.audio import Audio
+from localphraser.audio import SAMPLE_RATE, Audio, resample_audio
 from localphraser.config import DEFAULT_PROMPT
 from localphraser.models import verify_model
 from localphraser.recognition import WhisperRecognizer
@@ -22,7 +22,7 @@ from localphraser.refinement import LocalRefiner, preserve_words
 SYNTHETIC_TEXT = "Local speech recognition keeps my words on this computer."
 
 
-def synthetic_audio(directory: Path) -> Audio:
+def synthetic_audio(directory: Path, sample_rate: int = SAMPLE_RATE) -> Audio:
     """Use an installed Windows SAPI voice; remove its generated WAV before inference."""
     import av
     import comtypes.client
@@ -38,7 +38,7 @@ def synthetic_audio(directory: Path) -> Audio:
         finally:
             stream.Close()
         with av.open(str(wav)) as container:
-            resampler = av.AudioResampler(format="fltp", layout="mono", rate=16000)
+            resampler = av.AudioResampler(format="fltp", layout="mono", rate=sample_rate)
             arrays = [
                 frame.to_ndarray().flatten()
                 for incoming in container.decode(audio=0)
@@ -52,7 +52,13 @@ def deny_connection(*args: object, **kwargs: object) -> None:
     raise RuntimeError("Runtime check attempted a Python network connection.")
 
 
-def runtime_check(root: Path, model: str, refiner_model: str | None, temporary: Path) -> dict:
+def runtime_check(
+    root: Path,
+    model: str,
+    refiner_model: str | None,
+    temporary: Path,
+    capture_rate: int = SAMPLE_RATE,
+) -> dict:
     result: dict[str, Any] = {
         "schema": 1,
         "application_version": __version__,
@@ -61,6 +67,7 @@ def runtime_check(root: Path, model: str, refiner_model: str | None, temporary: 
         "python": platform.python_version(),
         "speech_model": model,
         "polishing_model": refiner_model,
+        "synthetic_capture_rate": capture_rate,
         "status": "failed",
         "stage": "model_verification",
         "checks": [],
@@ -69,6 +76,7 @@ def runtime_check(root: Path, model: str, refiner_model: str | None, temporary: 
         "packet audit or accuracy benchmark.",
     }
     audio: Audio | None = None
+    captured: Audio | None = None
     refiner = None
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -82,7 +90,9 @@ def runtime_check(root: Path, model: str, refiner_model: str | None, temporary: 
                 refiner = LocalRefiner(refiner_model, root, 4, DEFAULT_PROMPT, 30)
                 refiner.prepare()
             result["stage"] = "synthetic_speech"
-            audio = synthetic_audio(temporary)
+            captured = synthetic_audio(temporary, capture_rate)
+            result["stage"] = "audio_conversion"
+            audio = resample_audio(captured, capture_rate)
             recognizer = WhisperRecognizer(root / model)
             for label in ("cold", "warm"):
                 result["stage"] = "recognition"
@@ -109,6 +119,8 @@ def runtime_check(root: Path, model: str, refiner_model: str | None, temporary: 
         finally:
             if audio is not None:
                 audio.fill(0)
+            if captured is not None and captured is not audio:
+                captured.fill(0)
             if refiner is not None:
                 try:
                     refiner.close()
@@ -117,13 +129,19 @@ def runtime_check(root: Path, model: str, refiner_model: str | None, temporary: 
     return result
 
 
-def write_runtime_report(report: Path, root: Path, model: str, refiner: str | None) -> int:
+def write_runtime_report(
+    report: Path,
+    root: Path,
+    model: str,
+    refiner: str | None,
+    capture_rate: int = SAMPLE_RATE,
+) -> int:
     if report.suffix.lower() != ".json":
         raise ValueError("Choose a new JSON report file.")
     report.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation refuses existing settings, model files or earlier reports.
     with report.open("x", encoding="utf-8") as stream:
-        result = runtime_check(root, model, refiner, report.parent)
+        result = runtime_check(root, model, refiner, report.parent, capture_rate)
         json.dump(result, stream, indent=2)
         stream.write("\n")
     return 0 if result["status"] == "passed" else 1

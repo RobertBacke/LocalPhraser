@@ -49,6 +49,8 @@ and automatic insertion. Raw mode is the default. Optional Polished mode adds lo
 punctuation, capitalization, and hesitation removal. **Start LocalPhraser upon startup** is opt-in:
 enable it in Settings and Save after choosing a permanent application location.
 Microphones use exact device names and audio APIs; ambiguous duplicates are refused.
+If a driver rejects 16 kHz input, capture retries at its default rate (8-96 kHz) and
+converts to 16 kHz on the background worker. Recording limits still use elapsed seconds.
 To choose a shortcut, click its **Change…** button and press Caps Lock, F1–F11, or a
 modifier combination; **Save** applies it. Esc or moving focus away cancels selection.
 Dictation is suspended while choosing, and Caps Lock selection does not toggle capitalization.
