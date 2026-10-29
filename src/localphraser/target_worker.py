@@ -100,6 +100,53 @@ class TargetWorker:
             # boundary. Once the caller stops waiting, late work must stay revoked.
             cancelled.set()
 
+    def insert_async(self, token: int, text: str) -> Future[None]:
+        duration = min(30.0, self.timeout + len(text) / 500)
+        deadline = time.monotonic() + duration
+        cancelled = threading.Event()
+        result: Future[None] = Future()
+        guard = threading.Lock()
+
+        def expired() -> None:
+            cancelled.set()
+            with guard:
+                if not result.done():
+                    result.set_exception(
+                        TimeoutError("Insertion timed out; check for partial text.")
+                    )
+
+        timer = threading.Timer(duration, expired)
+        timer.daemon = True
+
+        def work() -> None:
+            target = self.targets.pop(token)
+            self.native.insert_gradually(
+                target,
+                text,
+                permitted=lambda: (
+                    not self.closed and not cancelled.is_set() and time.monotonic() < deadline
+                ),
+            )
+
+        def completed(future: Future[None]) -> None:
+            timer.cancel()
+            cancelled.set()
+            with guard:
+                if not result.done():
+                    try:
+                        result.set_result(future.result())
+                    except Exception as exc:
+                        result.set_exception(exc)
+
+        timer.start()
+        try:
+            self.executor.submit(work).add_done_callback(completed)
+        except RuntimeError:
+            timer.cancel()
+            cancelled.set()
+            result.set_exception(RuntimeError("Target worker is closed."))
+        return result
+
     def close(self) -> None:
         if self.closed:
             return

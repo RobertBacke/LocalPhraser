@@ -18,6 +18,12 @@
    Latest transcript now shows per-stage and total after-release timing in memory. A small
    synthetic base.en/small.en and 4/8-thread comparison is recorded in testing.md; broader
    human-speech accuracy and isolated latency benchmarks remain necessary.
+   Manual launches now show Settings, new startup commands use --background, and the last
+   sanitized error survives later dictations in memory. A reproduced slow-driver-start
+   watchdog timeout is fixed; the user's first-dictation failure still needs live retesting.
+   A phrase preview and asynchronous paced ASCII delivery are implemented. Owned EDIT, Qt
+   and isolated Chrome textarea tests passed; other provider/Unicode behaviors remain bounded
+   fallbacks or manual recovery.
    The user now reports quick, accurate live dictation with their own microphone. This is
    qualitative acceptance on their current setup, not a broad-device performance claim.
 3. **Phase 2 experimental build implemented:** optional Qwen2.5 0.5B/1.5B Q4 CPU polishing,

@@ -42,9 +42,22 @@ existing model directory in Settings and Save. Rebuilt EXEs share the normal def
 models do not need downloading for every build. No project-folder scan or silent migration occurs.
 
 The tray provides start/stop recording, cancellation, latest transcript, settings, and Quit.
+Opening the EXE manually shows Settings so launch is visible. Closing Settings leaves the
+tray utility running. `--background` starts quietly; new launch-upon-startup registrations
+include it. Older startup registrations can be refreshed by toggling startup off, Save,
+then on and Save again.
 Latest transcript shows recognition, polishing, and total time after releasing the shortcut.
 The total includes remaining model loading and target checks, so it can exceed the two
 stage times. Timings are held in memory and cleared with the transcript.
+The last sanitized recording/transcription/insertion error also stays in Latest transcript
+through later successful dictations, until Clear or exit.
+While transcribing, the non-focusing indicator previews completed recognized phrases.
+Final text is delivered in checked 32-character batches for longer single-line ASCII text,
+with a short pause and a bounded wait for the expected caret between batches. Unicode,
+multiline text and unsupported character navigation retain a single checked delivery.
+Changing field, window, caret or modifiers stops delivery; check for partial text before
+copying from Latest transcript. Preview is phrase-based after recording ends, not live
+microphone/token streaming. Polishing still finishes before target delivery.
 Single-click the tray icon to open or restore Settings; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,

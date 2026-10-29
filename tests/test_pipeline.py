@@ -495,3 +495,68 @@ def test_stage_timings_include_polishing_failure_time(setup, monkeypatch, fallba
     result = pipeline.executor.submit(pipeline._transcribe, recorder.audio).result(timeout=5)
     assert result.recognition_seconds == 2.0 and result.polishing_seconds == 3.0
     assert bool(result.notice) == fallback
+
+
+def test_segment_previews_dispatch_without_inserting_partial_text(setup):
+    pipeline, _, recognizer, insertion, callbacks, _, results = setup
+    previews = []
+    pipeline.partial_result = previews.append
+
+    def stream(audio, partial):
+        partial("Hello")
+        partial("Hello world")
+        assert not insertion.delivered
+        return "Hello, world."
+
+    recognizer.transcribe_stream = stream
+    pipeline.press()
+    pipeline.release()
+    pipeline.executor.submit(lambda: None).result(timeout=5)
+    assert not previews and not results
+    finish(callbacks)
+    finish(callbacks)
+    assert previews == ["Hello", "Hello world"] and not insertion.delivered
+    finish(callbacks)
+    assert insertion.delivered == ["Hello, world."]
+
+
+def test_queued_preview_is_ignored_after_shutdown(setup):
+    pipeline, _, _, _, callbacks, _, _ = setup
+    pipeline.partial_result = Mock()
+    pipeline.state = State.TRANSCRIBING
+    pipeline._partial("Hello")
+    pipeline.shutdown()
+    finish(callbacks)
+    pipeline.partial_result.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_async_delivery_leaves_owner_responsive_until_completion(setup, failure):
+    pipeline, _, _, insertion, callbacks, _, results = setup
+    delivery = Future()
+    insertion.insert_async = Mock(return_value=delivery)
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    assert pipeline.state == State.INSERTING and not results
+    if failure:
+        delivery.set_exception(TimeoutError())
+    else:
+        delivery.set_result(None)
+    assert not results
+    finish(callbacks)
+    assert pipeline.state == State.IDLE and results[0][0] == "Hello, world."
+    assert (results[0][1] == "Inserted.") != failure
+
+
+def test_async_delivery_completion_is_ignored_after_shutdown(setup):
+    pipeline, _, _, insertion, callbacks, _, results = setup
+    delivery = Future()
+    insertion.insert_async = Mock(return_value=delivery)
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    assert pipeline.state == State.INSERTING
+    pipeline.shutdown()
+    delivery.set_result(None)
+    assert callbacks.empty() and not results

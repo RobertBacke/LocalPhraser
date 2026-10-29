@@ -36,6 +36,8 @@ def backend(monkeypatch):
                 raise ValueError("Expired")
             self.delivered.append(text)
 
+        insert_gradually = insert
+
     native = Native()
     monkeypatch.setattr("localphraser.target_worker.WindowsInsertion", lambda: native)
     monkeypatch.setitem(
@@ -107,3 +109,16 @@ def test_wait_timeout_revokes_insertion_even_before_clock_deadline(backend, monk
     barrier(worker)
     assert not native.delivered
     assert worker.targets == {}
+
+
+def test_async_insertion_timeout_cancels_late_work(backend):
+    worker, native = backend
+    token = worker.capture(123).result(timeout=2)
+    native.insert_gate.clear()
+    worker.timeout = 0.01
+    future = worker.insert_async(token, "x")
+    with pytest.raises(TimeoutError):
+        future.result(timeout=2)
+    native.insert_gate.set()
+    barrier(worker)
+    assert not native.delivered and worker.targets == {}

@@ -67,6 +67,9 @@ def main() -> int:
     parser.add_argument(
         "--smoke-test", action="store_true", help="Launch briefly without microphone use"
     )
+    parser.add_argument(
+        "--background", action="store_true", help="Start quietly in the system tray"
+    )
     args = parser.parse_args()
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
     if args.command == "check-runtime":
@@ -198,7 +201,13 @@ def main() -> int:
         return 1
     if args.smoke_test:
         config = replace(config, keep_microphone_ready=False)
-    desktop = Desktop(app, config, args.config, first_launch=first_launch)
+    desktop = Desktop(
+        app,
+        config,
+        args.config,
+        first_launch=first_launch,
+        show_on_launch=not args.background and not args.smoke_test,
+    )
     if args.smoke_test:
         QTimer.singleShot(1500, app.quit)
     code = app.exec()

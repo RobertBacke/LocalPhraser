@@ -204,6 +204,26 @@ def test_stall_latches_failure_until_cancel_and_new_recording(device, monkeypatc
     recorder.cancel()
 
 
+def test_slow_cold_stream_start_gets_full_first_callback_grace(device, monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("localphraser.audio.monotonic", lambda: clock[0])
+    recorder = Recorder(None, 120)
+    recorder.prepare()
+    stream = recorder.stream
+
+    def slow_start():
+        clock[0] += 4
+        stream.active = True
+
+    stream.start = slow_start
+    recorder.start()
+    assert recorder.healthy()
+    clock[0] += 2
+    assert recorder.healthy()
+    stream.callback(np.zeros((100, 1), dtype=np.float32), 100, None, False)
+    recorder.cancel()
+
+
 def test_default_rate_fallback_is_inactive_bounded_and_reused(device):
     original = device.InputStream
     attempts = []

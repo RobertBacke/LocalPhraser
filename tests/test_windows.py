@@ -112,3 +112,115 @@ def test_caret_snapshot_change_during_start_rejects_new_target():
     with pytest.raises(ValueError, match="Focus changed"):
         insertion.capture(expected)
     insertion._selection.assert_not_called()
+
+
+@pytest.mark.parametrize("change", [None, "caret", "window", "expired"])
+def test_gradual_native_delivery_rechecks_every_batch(monkeypatch, change):
+    monkeypatch.setattr("localphraser.windows.time.sleep", lambda _: None)
+    insertion, _, _ = insertion_fixture()
+    position = [10]
+    insertion._native_target = lambda hwnd: NativeTarget(123, 42, 456, position[0])
+
+    def send(count, events, size):
+        position[0] += count // 2
+        if change == "caret":
+            position[0] += 1
+        elif change == "window":
+            insertion.api.GetForegroundWindow.return_value = 999
+        return count
+
+    insertion.api.SendInput.side_effect = send
+
+    def allowed():
+        return change != "expired" or insertion.api.SendInput.call_count == 0
+
+    if change:
+        with pytest.raises(ValueError):
+            insertion.insert_gradually(NativeTarget(123, 42, 456, 10), "a" * 80, allowed)
+        assert insertion.api.SendInput.call_count == 1
+    else:
+        insertion.insert_gradually(NativeTarget(123, 42, 456, 10), "a" * 80, allowed)
+        assert insertion.api.SendInput.call_count == 3 and position[0] == 90
+
+
+def test_gradual_delivery_validates_entire_message_before_any_input():
+    insertion, _, target = insertion_fixture()
+    with pytest.raises(ValueError):
+        insertion.insert_gradually(target, "a" * 80 + "\t", lambda: True)
+    insertion.api.SendInput.assert_not_called()
+
+
+@pytest.mark.parametrize("moved_caret", [False, True])
+def test_gradual_uia_tracks_expected_caret_and_stops_on_user_move(monkeypatch, moved_caret):
+    monkeypatch.setattr("localphraser.windows.time.sleep", lambda _: None)
+    clock = iter(range(1000))
+    monkeypatch.setattr("localphraser.windows.time.monotonic", lambda: next(clock) / 10)
+    insertion, _, target = insertion_fixture()
+    position = [0]
+    control = insertion._selection.return_value[0]
+
+    class Range:
+        def __init__(self, value):
+            self.value = value
+            self.textRange = self
+
+        def Clone(self):
+            return Range(self.value)
+
+        def Move(self, unit, count, waitTime=0):
+            self.value += count
+            return count
+
+        def CompareEndpoints(self, *args):
+            return 0
+
+        def Compare(self, other):
+            return self.value == other.value
+
+    target.caret = Range(0)
+    insertion._selection = lambda: (control, Range(position[0]))
+
+    def send(count, events, size):
+        position[0] += count // 2 + int(moved_caret)
+        return count
+
+    insertion.api.SendInput.side_effect = send
+    if moved_caret:
+        with pytest.raises(ValueError, match="caret"):
+            insertion.insert_gradually(target, "a" * 80, lambda: True)
+        assert insertion.api.SendInput.call_count == 1
+    else:
+        insertion.insert_gradually(target, "a" * 80, lambda: True)
+        assert insertion.api.SendInput.call_count == 3
+
+
+@pytest.mark.parametrize("suffix", ["é", "\n"])
+def test_unicode_and_multiline_use_single_checked_delivery(suffix):
+    insertion, _, target = insertion_fixture()
+    insertion.insert = Mock()
+    insertion.insert_gradually(target, "a" * 80 + suffix, lambda: True)
+    insertion.insert.assert_called_once()
+
+
+def test_paced_delivery_does_not_resume_after_observed_field_change(monkeypatch):
+    monkeypatch.setattr("localphraser.windows.time.sleep", lambda _: None)
+    insertion, _, _ = insertion_fixture()
+    position = [0]
+    changed = [False]
+
+    def native(hwnd):
+        if changed[0]:
+            changed[0] = False  # Even an immediate return must not resume insertion.
+            return NativeTarget(123, 42, 999, position[0])
+        return NativeTarget(123, 42, 456, position[0])
+
+    def send(count, events, size):
+        position[0] += count // 2
+        changed[0] = True
+        return count
+
+    insertion._native_target = native
+    insertion.api.SendInput.side_effect = send
+    with pytest.raises(ValueError, match="field changed"):
+        insertion.insert_gradually(NativeTarget(123, 42, 456, 0), "a" * 80, lambda: True)
+    assert insertion.api.SendInput.call_count == 1

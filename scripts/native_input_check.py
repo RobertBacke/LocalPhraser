@@ -16,6 +16,16 @@ from localphraser.target_worker import TargetWorker
 from localphraser.windows import WindowsInsertion, user32
 
 
+def fixture_text() -> str:
+    if "--gradual" in sys.argv:
+        return "LocalPhraser gradual typing keeps every word in order. " * 4
+    return (
+        "LocalPhraser Unicode café"
+        if "--qt" in sys.argv or "--qt-fixture" in sys.argv
+        else "LocalPhraser Unicode 😀"
+    )
+
+
 def qt_fixture() -> None:
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication, QTextEdit, QVBoxLayout, QWidget
@@ -47,7 +57,7 @@ def qt_fixture() -> None:
             print(json.dumps({"text": text}), flush=True)
 
     def check() -> None:
-        if edit.toPlainText() == "LocalPhraser Unicode café":
+        if edit.toPlainText() == fixture_text():
             timer.stop()
             report()
 
@@ -134,6 +144,7 @@ def main() -> None:
             else "--rich-fixture"
             if "--rich" in sys.argv
             else "--fixture",
+            *(["--gradual"] if "--gradual" in sys.argv else []),
         ],
         stdout=subprocess.PIPE,
         text=True,
@@ -163,15 +174,20 @@ def main() -> None:
         if api.GetForegroundWindow() != handles["window"]:
             raise RuntimeError("Fixture could not gain foreground. No input was sent.")
         target = capture()
-        expected_text = (
-            "LocalPhraser Unicode café" if handles.get("qt") else "LocalPhraser Unicode 😀"
-        )
-        insertion.insert(target, expected_text)
+        expected_text = fixture_text()
+        if "--gradual" in sys.argv and worker:
+            worker.insert_async(target, expected_text).result(timeout=30)
+        elif "--gradual" in sys.argv:
+            native.insert_gradually(target, expected_text, permitted=lambda: True)
+        else:
+            insertion.insert(target, expected_text)
         time.sleep(0.1)
         if handles.get("qt"):
             observed = json.loads(child.stdout.readline())["text"]
         else:
-            buffer = ct.create_unicode_buffer(100)
+            buffer = ct.create_unicode_buffer(
+                max(100, len(expected_text.encode("utf-16-le")) // 2 + 1)
+            )
             result = ct.c_size_t()
             assert api.SendMessageTimeoutW(
                 handles["edit"],

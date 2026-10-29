@@ -153,16 +153,36 @@ def test_polishing_settings_and_both_transcripts(app, monkeypatch):
     assert latest.text.toPlainText() == "Hello, world."
     assert latest.raw.toPlainText() == "hello world"
     latest.set_timing(2, 1, 4.5)
+    latest.record_error("Recording failed.")
     assert "After release: 4.5s" in latest.timing.text()
     assert "Recognition: 2.0s" in latest.timing.text()
     assert "Polishing: 1.0s" in latest.timing.text()
     latest.set_transcript("Next result.", "Inserted.")
+    assert latest.last_error.text() == "Last error: Recording failed."
     assert not latest.timing.text()
     latest.set_timing(1, 0, 1)
     latest.clear()
     assert not latest.text.toPlainText() and not latest.raw.toPlainText()
+    assert not latest.last_error.text()
     assert not latest.timing.text()
     latest.close()
+
+
+def test_partial_indicator_is_plain_text_bounded_and_cleared(app):
+    from PySide6.QtCore import Qt
+
+    from localphraser.pipeline import State
+    from localphraser.ui import Indicator
+
+    indicator = Indicator()
+    indicator.preview("<b>" + "x" * 1000)
+    assert indicator.textFormat() == Qt.TextFormat.PlainText
+    assert len(indicator.text()) < 250
+    assert indicator.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
+    indicator.display(State.IDLE)
+    assert not indicator.text() and not indicator.isVisible()
+    indicator.close()
+    indicator.deleteLater()
 
 
 def test_polished_settings_scroll_without_hiding_save(app, monkeypatch):

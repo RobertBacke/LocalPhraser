@@ -1,6 +1,7 @@
 """Windows integration. No keyboard hooks, clipboard paste, or focus activation."""
 
 import ctypes as ct
+import time
 from collections.abc import Callable
 from ctypes import wintypes as wt
 from dataclasses import dataclass
@@ -268,3 +269,59 @@ class WindowsInsertion:
             raise RuntimeError(
                 "Input was blocked or partially delivered; do not retry automatically."
             )
+
+    def insert_gradually(
+        self, target: Target | NativeTarget, text: str, permitted: Callable[[], bool]
+    ) -> None:
+        # Validate the whole message before any delivery. Character-unit navigation
+        # varies for Unicode/newlines, so those retain the single checked dispatch.
+        unicode_inputs(text)
+        if len(text) <= 32 or not text.isascii() or "\n" in text:
+            self.insert(target, text, permitted)
+            return
+        if isinstance(target, Target):
+            try:
+                probe = target.caret.Clone()
+                if probe.Move(0, 0, waitTime=0) != 0:
+                    raise ValueError("Unsupported character navigation.")
+            except Exception:
+                self.insert(target, text, permitted)
+                return
+        for offset in range(0, len(text), 32):
+            if offset:
+                time.sleep(0.02)  # Give the target's input and paint queues time to advance.
+            settle_deadline = time.monotonic() + 0.3
+            while True:
+                if not permitted() or self.api.GetForegroundWindow() != target.hwnd:
+                    raise ValueError("Insertion cancelled or target changed.")
+                if isinstance(target, NativeTarget):
+                    expected: Target | NativeTarget = NativeTarget(
+                        target.hwnd, target.process_id, target.edit, target.caret + offset
+                    )
+                    observed = self._native_target(target.hwnd)
+                    if (
+                        observed is None
+                        or observed.edit != target.edit
+                        or observed.process_id != target.process_id
+                    ):
+                        raise ValueError("Target field changed.")
+                    ready = observed == expected
+                else:
+                    caret = target.caret.Clone()
+                    if caret.textRange.CompareEndpoints(0, caret.textRange, 1) != 0:
+                        raise ValueError("Original caret tracking changed; delivery stopped.")
+                    moved = caret.Move(0, offset, waitTime=0)
+                    control, current = self._selection()
+                    if (
+                        control.ProcessId != target.process_id
+                        or tuple(control.GetRuntimeId()) != target.runtime_id
+                    ):
+                        raise ValueError("Target field changed.")
+                    ready = moved == offset and current.Compare(caret)
+                    expected = Target(target.hwnd, target.process_id, target.runtime_id, caret)
+                if ready:
+                    break
+                if time.monotonic() >= settle_deadline:
+                    raise ValueError("Target caret did not reach the expected insertion position.")
+                time.sleep(0.01)
+            self.insert(expected, text[offset : offset + 32], permitted)

@@ -8,7 +8,7 @@ No audio or transcription files are produced.
 Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone RAM buffer
   → background accessibility verification (concurrent with recording) → shortcut release
   → one ASR worker (local directory only) → optional polishing child → target-worker recheck
-  → one Unicode SendInput batch OR latest-transcript/manual-copy recovery
+  → checked paced ASCII batches / single Unicode batch OR manual-copy recovery
 ```
 
 - `config.py`: validated immutable settings, atomic JSON saves.
@@ -38,8 +38,13 @@ Microphone callback only copies into bounded memory; a UI watchdog handles durat
 disconnection. Audio starts before accessibility calls, which execute on a dedicated MTA
 worker. The UI retains only opaque target tokens; COM ranges never cross threads. Target
 verification times out to manual recovery after two seconds, and late targets are discarded.
-The final insertion stage waits up to two seconds, with a deadline checked before SendInput
-to prevent delayed delivery after a timeout. An isolated process for forcibly terminating
+The final insertion stage runs asynchronously on the target worker. Longer single-line
+ASCII text uses 32-character batches with a 20 ms minimum interval and up to 300 ms caret
+settling per batch. Field, focus, selection, modifiers and permission are checked again;
+UIA character navigation must match the expected position. Unicode/newlines and unsupported
+navigation retain the single checked SendInput dispatch. A length-based overall deadline
+is capped at 30 seconds; timeout revokes permission and preserves full text for recovery.
+The legacy synchronous developer port keeps its two-second wait. An isolated process for forcibly terminating
 a hung native provider remains release hardening; threads cannot interrupt such calls.
 
 By default an additional worker prepares an inactive input stream at startup/settings save.

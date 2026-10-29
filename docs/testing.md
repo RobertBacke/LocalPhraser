@@ -514,3 +514,49 @@ does not load/save user settings. Each cycle checks speech content and no polish
 This is a short repeated-session check, not proof of hours-long memory stability or resolution
 of the previously observed intermittent native shutdown issue. Driver-stall tests use an
 injected active stream and virtual clock; actual physical device unplug still needs acceptance.
+
+## Visible launch, cold-start grace and progressive output (2026-10-29)
+
+The user reports silent manual startup, frequent first-dictation errors, and uneven rendering
+of long output. A virtual-clock regression reproduced a cold stream.start blocking for four
+seconds and exhausting the old callback deadline before Listening. It failed before the fix
+and passed after moving the no-first-frame grace to successful start return. This is a real
+reproduced path, not confirmation of the exact error on the user's microphone. The latest
+sanitized error now remains in Latest transcript through successes, until Clear/exit.
+
+Manual launches request visible Settings; background and smoke launches stay quiet unless
+setup/errors require attention. New startup commands include --background. The actual Run
+key is not rewritten automatically; older registrations can be toggled off/on with Save.
+The disposable registry command round-trip passed with host permissions; sandbox registry
+access was refused, and the actual Run key was untouched.
+
+Local suite: 247 passed, process exit 0, including real small.en/VAD with Python network
+connections denied. Ruff check/format, mypy and source archive/wheel builds passed. Coverage
+includes manual/background visibility, cold startup grace, retained/cleared error state,
+plain-text bounded previews, preview owner dispatch/shutdown suppression, asynchronous
+delivery completion/failure/shutdown, per-batch native/UIA caret/focus/deadline checks,
+timeout cancellation and whole-message validation before input. Incomplete direct-construction
+resampling test fixtures were updated for the new optional preview port.
+
+Five synthetic 48 kHz source GUI sessions with base.en/Qwen1.5B passed through the actual
+preview-enabled recognizer and shutdown (exit 0); no microphone or external insertion used.
+Owned native EDIT and Qt UIA fixtures passed paced ASCII delivery and selected-text refusal.
+An isolated newly created Chrome profile/owned named textarea also passed exact paced
+ASCII delivery and subsequent selected-text refusal; unrelated fields were not read/typed.
+The owned input checks used normal host permissions because sandbox SendInput is blocked.
+
+An early paced test observed only 28 of the first 32 characters processed after SendInput
+returned, motivating the bounded caret-settling wait. The longer fixture needed a larger
+read buffer; UIA endpoint comparison uses the underlying COM range because the installed
+wrapper forwards its argument incorrectly. Corrected EDIT/Qt/Chrome trials passed.
+These tests do not certify Codex's provider, every Chrome field, or the user's first session.
+Preview is completed phrases after release, not token-level live captions. Unicode/newlines
+use single delivery; partial output can remain after a changed target/timeout, with no retry.
+
+A combined source GUI trial also passed synthetic small.en recognition, preview, Qwen1.5B
+polishing and asynchronous paced insertion into an owned external Qt child text-edit field,
+with exact final text and clean exit. Earlier combined harnesses used a top-level QTextEdit
+exposed as a Window role and were correctly refused; the corrected child-edit fixture
+matches the supported field contract. No field checks were relaxed. The Windows venv
+redirector's Popen PID differs from the actual GUI host, so field ownership uses the
+verified window's native process identity rather than assuming the launcher PID.

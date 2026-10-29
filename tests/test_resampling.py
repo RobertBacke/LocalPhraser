@@ -49,6 +49,7 @@ def test_pipeline_resamples_off_owner_thread_and_clears_both_buffers(monkeypatch
     from localphraser.pipeline import Dictation
 
     pipeline = object.__new__(Dictation)
+    pipeline.partial_result = None
     pipeline.refiner = None
     pipeline.closed = False
     pipeline.recognizer = Mock()
@@ -77,6 +78,7 @@ def test_conversion_failure_also_clears_original_buffer(monkeypatch):
     from localphraser.pipeline import Dictation
 
     pipeline = object.__new__(Dictation)
+    pipeline.partial_result = None
     captured = np.ones(48000, dtype=np.float32)
     monkeypatch.setattr("localphraser.pipeline.resample_audio", Mock(side_effect=RuntimeError()))
     with pytest.raises(RuntimeError):
@@ -90,6 +92,7 @@ def test_recognizer_failure_clears_native_and_converted_buffers():
     from localphraser.pipeline import Dictation
 
     pipeline = object.__new__(Dictation)
+    pipeline.partial_result = None
     captured = np.ones(48000, dtype=np.float32)
     observed = []
 

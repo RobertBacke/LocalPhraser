@@ -24,7 +24,7 @@ def startup_command(config_path: Path) -> str:
                 "Launch upon startup requires pythonw.exe or the Windows folder build."
             )
         arguments = [str(executable), "-m", "localphraser"]
-    arguments += ["--config", str(config_path.resolve())]
+    arguments += ["--background", "--config", str(config_path.resolve())]
     command = subprocess.list2cmdline(arguments)
     if len(command.encode("utf-16-le")) // 2 > 260:
         raise ValueError("Startup paths exceed Windows' 260-character Run command limit.")

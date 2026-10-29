@@ -64,6 +64,7 @@ class Dictation:
         refiner: Refiner | None = None,
         raw_result: Callable[[str], None] | None = None,
         timing_result: Callable[[float, float, float], None] | None = None,
+        partial_result: Callable[[str], None] | None = None,
     ):
         self.recorder = recorder
         self.recognizer = recognizer
@@ -75,6 +76,7 @@ class Dictation:
         self.refiner = refiner
         self.raw_result = raw_result
         self.timing_result = timing_result
+        self.partial_result = partial_result
         self.released_at: float | None = None
         self.state = State.IDLE
         self.target: Any = None
@@ -206,7 +208,10 @@ class Dictation:
         try:
             if sample_rate != SAMPLE_RATE:
                 audio = resample_audio(captured, sample_rate)
-            raw = self.recognizer.transcribe(audio).strip()
+            if self.partial_result is not None:
+                raw = self.recognizer.transcribe_stream(audio, self._partial).strip()
+            else:
+                raw = self.recognizer.transcribe(audio).strip()
         finally:
             audio.fill(0)
             if captured is not audio:
@@ -225,6 +230,15 @@ class Dictation:
             polished = raw
             notice = "Polishing skipped or unavailable; using raw transcription."
         return Transcript(raw, polished, notice, recognition_seconds, perf_counter() - started)
+
+    def _partial(self, text: str) -> None:
+        self._post(
+            lambda: (
+                self.partial_result(text)
+                if not self.closed and self.state == State.TRANSCRIBING and self.partial_result
+                else None
+            )
+        )
 
     def _finish(self, future: Future[Transcript]) -> None:
         if self.closed:
@@ -246,6 +260,13 @@ class Dictation:
         if self.auto_insert and self.target is not None:
             self._state(State.INSERTING)
             try:
+                asynchronous = getattr(self.insertion, "insert_async", None)
+                if callable(asynchronous):
+                    delivery = asynchronous(self.target, text)
+                    delivery.add_done_callback(
+                        lambda f: self._post(lambda: self._inserted(f, transcript))
+                    )
+                    return
                 self.insertion.insert(self.target, text)
                 notice = "Inserted."
             except Exception:
@@ -253,12 +274,27 @@ class Dictation:
                 notice = (
                     "Insertion was not confirmed. Check the target before copying the transcript."
                 )
+        self._deliver_result(transcript, notice)
+
+    def _inserted(self, future: Future[None], transcript: Transcript) -> None:
+        if self.closed:
+            return
+        try:
+            future.result()
+            notice = "Inserted."
+        except Exception:
+            notice = "Insertion was not confirmed. Check the target before copying the transcript."
+        self._deliver_result(transcript, notice)
+
+    def _deliver_result(self, transcript: Transcript, notice: str) -> None:
+        if self.auto_insert and notice != "Inserted.":
+            self._state(State.ERROR, notice)
         self._clear_target()
         if self.raw_result is not None:
             self.raw_result(transcript.raw)
         if transcript.notice:
             notice = f"{transcript.notice} {notice}"
-        self.result(text, notice)
+        self.result(transcript.text.strip(), notice)
         if self.timing_result is not None:
             total = (
                 perf_counter() - self.released_at

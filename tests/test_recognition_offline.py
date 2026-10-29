@@ -84,3 +84,24 @@ def test_failed_prepare_can_retry_at_transcription(monkeypatch, tmp_path):
     assert recognizer._model is None
     assert recognizer.transcribe(np.zeros(16000, dtype=np.float32)) == ""
     assert factory.call_count == 2
+
+
+def test_recognition_emits_cumulative_completed_segments():
+    recognizer = WhisperRecognizer(Path("unused-local-model"))
+    recognizer._model = Mock()
+    recognizer._model.transcribe.return_value = (
+        iter(
+            [
+                SimpleNamespace(text=" Hello "),
+                SimpleNamespace(text=" "),
+                SimpleNamespace(text=" world. "),
+            ]
+        ),
+        None,
+    )
+    previews = []
+    assert (
+        recognizer.transcribe_stream(np.zeros(16000, dtype=np.float32), previews.append)
+        == "Hello world."
+    )
+    assert previews == ["Hello", "Hello world."]

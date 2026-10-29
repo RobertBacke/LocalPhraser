@@ -82,6 +82,9 @@ class Indicator(QLabel):
             | Qt.WindowType.WindowTransparentForInput
         )
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setWordWrap(True)
+        self.setMaximumWidth(560)
         self.setStyleSheet(
             "background: #20332e; color: white; padding: 12px 22px;"
             "border-radius: 12px; font-size: 14px;"
@@ -89,9 +92,16 @@ class Indicator(QLabel):
 
     def display(self, state: State) -> None:
         if state == State.IDLE:
+            self.clear()
             self.hide()
             return
-        self.setText(f"●  {state.value}")
+        self._show_text(f"●  {state.value}")
+
+    def preview(self, text: str) -> None:
+        self._show_text(f"●  Transcribing · preview\n{text[-200:]}")
+
+    def _show_text(self, text: str) -> None:
+        self.setText(text)
         self.adjustSize()
         screen = QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
         if screen:
@@ -112,6 +122,9 @@ class Latest(QDialog):
         self.timing = QLabel()
         self.timing.setWordWrap(True)
         layout.addWidget(self.timing)
+        self.last_error = QLabel()
+        self.last_error.setWordWrap(True)
+        layout.addWidget(self.last_error)
         self.text = QTextEdit()
         self.text.setReadOnly(True)
         self.text.setAcceptRichText(False)
@@ -140,11 +153,15 @@ class Latest(QDialog):
         self.raw.clear()
         self.notice.setText("Transcript cleared.")
         self.timing.clear()
+        self.last_error.clear()
 
     def set_transcript(self, text: str, notice: str) -> None:
         self.text.setPlainText(text)
         self.notice.setText(notice)
         self.timing.clear()
+
+    def record_error(self, message: str) -> None:
+        self.last_error.setText(f"Last error: {message}")
 
     def set_timing(self, recognition: float, polishing: float, total: float) -> None:
         self.timing.setText(
@@ -434,7 +451,13 @@ class Desktop:
     pipeline: Dictation
 
     def __init__(
-        self, app: QApplication, config: Config, config_path: Path, *, first_launch: bool = False
+        self,
+        app: QApplication,
+        config: Config,
+        config_path: Path,
+        *,
+        first_launch: bool = False,
+        show_on_launch: bool = False,
     ):
         self.closing = False
         self.first_launch_setup_started = False
@@ -482,7 +505,7 @@ class Desktop:
         self.state_changed(State.IDLE, "")
         if first_launch and not self.speech_model_present():
             QTimer.singleShot(0, self.start_first_launch_setup)
-        elif self.hotkey_error or not self.speech_model_present():
+        elif show_on_launch or self.hotkey_error or not self.speech_model_present():
             QTimer.singleShot(0, self.show_settings)
         if self.hotkey_error:
             QTimer.singleShot(100, lambda: self.notify(self.hotkey_error))
@@ -556,6 +579,7 @@ class Desktop:
             ),
             raw_result=self.latest.raw.setPlainText,
             timing_result=self.latest.set_timing,
+            partial_result=self.indicator.preview,
         )
 
     def notify(self, message: str) -> None:
@@ -564,6 +588,8 @@ class Desktop:
         )
 
     def state_changed(self, state: State, message: str) -> None:
+        if state == State.ERROR and message:
+            self.latest.record_error(message)
         label = (
             "Speech model required"
             if state == State.IDLE and not self.speech_model_present()
@@ -590,7 +616,9 @@ class Desktop:
             self.pipeline.release()
         elif not self.recorder.healthy():
             self.pipeline.cancel()
-            self.notify("Microphone disconnected or audio stopped arriving. Recording cancelled.")
+            message = "Microphone disconnected or audio stopped arriving. Recording cancelled."
+            self.latest.record_error(message)
+            self.notify(message)
 
     def toggle(self) -> None:
         if self.pipeline.state == State.RECORDING:
@@ -706,7 +734,7 @@ class Desktop:
         self.insertion.close()
         self.audio_preparer.shutdown(wait=False, cancel_futures=True)
         self.latest.clear()
-        self.indicator.hide()
+        self.indicator.display(State.IDLE)
         self.tray.hide()
         if self.settings:
             self.settings.downloader.shutdown()

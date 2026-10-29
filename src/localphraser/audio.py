@@ -205,6 +205,10 @@ class Recorder:
             self.last_frame_at = monotonic()
             try:
                 self.stream.start()
+                # Cold driver startup may block; allow the full callback grace
+                # after it returns, without overwriting a callback's timestamp.
+                if not self.first_frame.is_set():
+                    self.last_frame_at = monotonic()
                 self.recording = True
             except Exception:
                 self.cancel()

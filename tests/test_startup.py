@@ -74,16 +74,17 @@ def test_startup_quotes_paths_and_uses_windowless_source_runtime(monkeypatch):
     command = startup.startup_command(config)
     assert command.startswith(f'"{pythonw}" -m localphraser')
     assert f'--config "{config}"' in command
+    assert "--background" in command
     monkeypatch.setattr(Path, "is_file", lambda path: False)
     with pytest.raises(ValueError, match="pythonw"):
         startup.startup_command(config)
 
 
 def test_frozen_startup_and_overlong_paths(tmp_path, monkeypatch):
-    executable = tmp_path / "LocalPhraser.exe"
+    executable = Path("C:/Apps/LocalPhraser.exe")
     monkeypatch.setattr(sys, "executable", str(executable))
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    assert " -m localphraser" not in startup.startup_command(tmp_path / "config.json")
+    assert " -m localphraser" not in startup.startup_command(Path("C:/Settings/config.json"))
     with pytest.raises(ValueError, match="260"):
         startup.startup_command(tmp_path / ("x" * 240) / "config.json")
 

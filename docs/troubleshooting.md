@@ -1,5 +1,30 @@
 # Troubleshooting
 
+## Launch or first dictation is confusing
+
+Manual EXE launches now show Settings. Closing it keeps the app in the system tray;
+--background is intended for quiet startup. A second launch of the same configuration
+reports the running instance. Older startup entries need startup toggled off/on with Save
+to add the new background flag; normal launch does not silently rewrite registry entries.
+
+A cold driver start no longer consumes the callback-stall grace period before capture is
+ready. This fixes a reproduced timeout path, not every possible first-recording failure.
+Latest transcript retains the last sanitized error through later successes until Clear/exit.
+If the first dictation still fails, check that message and whether a transcript was recovered.
+
+## Output appears unevenly
+
+Recognized phrases appear in the non-focusing preview after release as the engine produces
+them; the model does not emit live per-token microphone captions. Final insertion runs on
+the target worker rather than blocking Qt. Longer single-line ASCII output is paced in
+32-character batches, checking the expected caret and original field before each batch.
+The target gets up to 300 ms to process the previous batch; the GUI wait is capped at
+30 seconds and timeout revokes further delivery. Native provider calls cannot be forcibly
+interrupted. Unsupported navigation, Unicode and newlines
+use the existing single dispatch. App rendering varies. A moved target or expired deadline
+stops further delivery; partial text may remain, so inspect before copying and never retry
+automatically. No clipboard contents are changed.
+
 ## Nothing is inserted
 
 Open tray → Latest transcript. Switching windows, moving the cursor, selecting existing text,

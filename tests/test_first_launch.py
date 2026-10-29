@@ -55,6 +55,16 @@ def test_profile_save_failure_prevents_auto_download(launch, monkeypatch):
     assert not path.exists() and not observed
 
 
+def test_manual_launch_is_visible_and_background_or_smoke_launch_is_quiet(launch):
+    run, _, observed = launch
+    assert run() == 0
+    assert observed[-1][1]["show_on_launch"]
+    assert run("--background") == 0
+    assert not observed[-1][1]["show_on_launch"]
+    assert run("--smoke-test") == 0
+    assert not observed[-1][1]["show_on_launch"]
+
+
 class FixtureHotkey(QAbstractNativeEventFilter):
     def __init__(self, *args):
         super().__init__()
@@ -72,7 +82,7 @@ class FixtureHotkey(QAbstractNativeEventFilter):
 
 
 @pytest.fixture
-def desktop(app, monkeypatch, tmp_path):
+def desktop(app, monkeypatch, tmp_path, request):
     monkeypatch.setattr(ui, "Hotkey", FixtureHotkey)
     monkeypatch.setattr(ui, "TargetWorker", Mock())
     monkeypatch.setattr(ui, "microphones", lambda: [])
@@ -82,7 +92,10 @@ def desktop(app, monkeypatch, tmp_path):
     monkeypatch.setattr(ui.Desktop, "make_pipeline", lambda *args: pipeline)
     monkeypatch.setattr(ui.ModelDownload, "start", Mock())
     controller = ui.Desktop(
-        app, replace(Config(), model_root=str(tmp_path / "models")), tmp_path / "config.json"
+        app,
+        replace(Config(), model_root=str(tmp_path / "models")),
+        tmp_path / "config.json",
+        show_on_launch=getattr(request, "param", False),
     )
     app.processEvents()
     yield controller
@@ -101,6 +114,11 @@ def publish_fixture_model(desktop):
     folder.mkdir(parents=True)
     for name in (*FILES, "localphraser-manifest.json"):
         (folder / name).write_bytes(b"presence fixture; not inference")
+
+
+@pytest.mark.parametrize("desktop", [True], indirect=True)
+def test_visible_manual_desktop_shows_settings(desktop):
+    assert desktop.settings is not None and desktop.settings.isVisible()
 
 
 def test_first_setup_downloads_once_and_cancel_does_not_restart(desktop):

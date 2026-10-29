@@ -1,6 +1,7 @@
 """Lazy CPU inference. A model name is never passed to the runtime downloader."""
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -10,6 +11,9 @@ from localphraser.audio import Audio
 class Recognizer(Protocol):
     def prepare(self) -> None: ...
     def transcribe(self, audio: Audio) -> str: ...
+    def transcribe_stream(
+        self, audio: Audio, partial: Callable[[str], None] | None = None
+    ) -> str: ...
 
 
 class WhisperRecognizer:
@@ -40,6 +44,9 @@ class WhisperRecognizer:
             )
 
     def transcribe(self, audio: Audio) -> str:
+        return self.transcribe_stream(audio)
+
+    def transcribe_stream(self, audio: Audio, partial: Callable[[str], None] | None = None) -> str:
         self.prepare()
         segments, _ = self._model.transcribe(
             audio,
@@ -50,4 +57,11 @@ class WhisperRecognizer:
             temperature=0,
             hotwords=self.vocabulary or None,
         )
-        return " ".join(segment.text.strip() for segment in segments).strip()
+        parts = []
+        for segment in segments:
+            text = segment.text.strip()
+            if text:
+                parts.append(text)
+                if partial is not None:
+                    partial(" ".join(parts))
+        return " ".join(parts)
