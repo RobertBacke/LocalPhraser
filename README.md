@@ -42,6 +42,9 @@ existing model directory in Settings and Save. Rebuilt EXEs share the normal def
 models do not need downloading for every build. No project-folder scan or silent migration occurs.
 
 The tray provides start/stop recording, cancellation, latest transcript, settings, and Quit.
+Latest transcript shows recognition, polishing, and total time after releasing the shortcut.
+The total includes remaining model loading and target checks, so it can exceed the two
+stage times. Timings are held in memory and cleared with the transcript.
 Single-click the tray icon to open or restore Settings; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
@@ -176,6 +179,11 @@ synthetic speech and writes a small report without microphone capture or transcr
 See [runtime validation](docs/runtime-validation.md) for usage and limits.
 
 ## Limitations and contribution
+
+Development rebuilds use the same `dist/LocalPhraser/LocalPhraser.exe` location. Quit that
+copy before rebuilding its folder; keep the bundled libraries beside it. Settings and
+downloaded models live separately and are reused. Older experimental build folders are
+not updated automatically.
 
 Windows x64 is the first target; macOS/Linux adapters are not implemented. Text insertion
 requires a standard Windows EDIT control or a focused Edit/Document control with usable

@@ -4,6 +4,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
+from time import perf_counter
 from typing import Any, Protocol
 
 import numpy as np
@@ -41,6 +42,8 @@ class Transcript:
     raw: str
     text: str
     notice: str = ""
+    recognition_seconds: float = 0
+    polishing_seconds: float = 0
 
 
 class Dictation:
@@ -60,6 +63,7 @@ class Dictation:
         auto_insert: bool = True,
         refiner: Refiner | None = None,
         raw_result: Callable[[str], None] | None = None,
+        timing_result: Callable[[float, float, float], None] | None = None,
     ):
         self.recorder = recorder
         self.recognizer = recognizer
@@ -70,6 +74,8 @@ class Dictation:
         self.auto_insert = auto_insert
         self.refiner = refiner
         self.raw_result = raw_result
+        self.timing_result = timing_result
+        self.released_at: float | None = None
         self.state = State.IDLE
         self.target: Any = None
         self.target_future: Future[Any] | None = None
@@ -185,6 +191,7 @@ class Dictation:
                 self._state(State.IDLE, "No speech captured.")
                 return
             self._state(State.TRANSCRIBING)
+            self.released_at = perf_counter()
             future = self.executor.submit(self._transcribe, audio, sample_rate)
             future.add_done_callback(lambda f: self._post(lambda: self._finish(f)))
         except Exception:
@@ -194,6 +201,7 @@ class Dictation:
             self._error("Recording failed. Check the microphone and try again.")
 
     def _transcribe(self, audio: Audio, sample_rate: int = SAMPLE_RATE) -> Transcript:
+        started = perf_counter()
         captured = audio
         try:
             if sample_rate != SAMPLE_RATE:
@@ -203,18 +211,20 @@ class Dictation:
             audio.fill(0)
             if captured is not audio:
                 captured.fill(0)
+        recognition_seconds = perf_counter() - started
         if not raw or self.refiner is None or self.closed:
-            return Transcript(raw, raw)
+            return Transcript(raw, raw, recognition_seconds=recognition_seconds)
         self._post(lambda: None if self.closed else self._state(State.POLISHING))
+        started = perf_counter()
+        notice = ""
         try:
             polished = self.refiner.refine(raw)
             if not preserve_words(raw, polished):
                 raise ValueError("Refinement changed words.")
-            return Transcript(raw, polished)
         except Exception:
-            return Transcript(
-                raw, raw, "Polishing skipped or unavailable; using raw transcription."
-            )
+            polished = raw
+            notice = "Polishing skipped or unavailable; using raw transcription."
+        return Transcript(raw, polished, notice, recognition_seconds, perf_counter() - started)
 
     def _finish(self, future: Future[Transcript]) -> None:
         if self.closed:
@@ -249,6 +259,13 @@ class Dictation:
         if transcript.notice:
             notice = f"{transcript.notice} {notice}"
         self.result(text, notice)
+        if self.timing_result is not None:
+            total = (
+                perf_counter() - self.released_at
+                if self.released_at is not None
+                else transcript.recognition_seconds + transcript.polishing_seconds
+            )
+            self.timing_result(transcript.recognition_seconds, transcript.polishing_seconds, total)
         self._state(State.IDLE, notice)
 
     def _error(self, message: str) -> None:

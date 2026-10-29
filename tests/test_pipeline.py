@@ -450,3 +450,48 @@ def test_shutdown_during_speech_preparation_skips_polishing(setup):
     pipeline.executor.shutdown(wait=True)
     backend.prepare.assert_not_called()
     assert callbacks.empty() and not results and not insertion.delivered
+
+
+def test_release_timing_includes_preparation_and_owner_dispatch_wait(setup, monkeypatch):
+    pipeline, _, recognizer, _, callbacks, _, results = setup
+    clock = [0.0]
+    monkeypatch.setattr("localphraser.pipeline.perf_counter", lambda: clock[0])
+    pipeline.timing_result = Mock()
+
+    def prepare():
+        clock[0] = 1.0
+
+    def transcribe(audio):
+        clock[0] = 3.0
+        return "Hello, world."
+
+    recognizer.prepare = prepare
+    recognizer.transcribe = transcribe
+    # Queue the complete session before preparation can advance the test clock.
+    gate = threading.Event()
+    pipeline.executor.submit(lambda: gate.wait(5))
+    try:
+        pipeline.press()
+        pipeline.release()
+    finally:
+        gate.set()
+    pipeline.executor.submit(lambda: None).result(timeout=5)
+    clock[0] = 5.0
+    finish(callbacks)
+    assert results[0][0] == "Hello, world."
+    pipeline.timing_result.assert_called_once_with(2.0, 0, 5.0)
+
+
+@pytest.mark.parametrize("fallback", [False, True])
+def test_stage_timings_include_polishing_failure_time(setup, monkeypatch, fallback):
+    pipeline, recorder, _, _, _, _, _ = setup
+    clock = iter((10.0, 12.0, 15.0, 18.0))
+    monkeypatch.setattr("localphraser.pipeline.perf_counter", lambda: next(clock))
+    pipeline.refiner = Mock()
+    if fallback:
+        pipeline.refiner.refine.side_effect = TimeoutError()
+    else:
+        pipeline.refiner.refine.return_value = "Hello world!"
+    result = pipeline.executor.submit(pipeline._transcribe, recorder.audio).result(timeout=5)
+    assert result.recognition_seconds == 2.0 and result.polishing_seconds == 3.0
+    assert bool(result.notice) == fallback

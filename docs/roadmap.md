@@ -15,6 +15,9 @@
    The user subsequently confirmed the shortcut picker works and opening-word capture
    improved. Optional vocabulary hints now guide local recognition of names/technical terms;
    measured accuracy gains still require representative speech evaluation.
+   Latest transcript now shows per-stage and total after-release timing in memory. A small
+   synthetic base.en/small.en and 4/8-thread comparison is recorded in testing.md; broader
+   human-speech accuracy and isolated latency benchmarks remain necessary.
 3. **Phase 2 experimental build implemented:** optional Qwen2.5 0.5B/1.5B Q4 CPU polishing,
    Raw/Polished selection, custom instructions, explicit verified downloads, lazy warm
    process, time limit, lexical preservation and raw fallback. Both models were measured

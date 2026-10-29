@@ -109,6 +109,9 @@ class Latest(QDialog):
         self.notice = QLabel("No transcript yet. Only the latest result is held in memory.")
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
+        self.timing = QLabel()
+        self.timing.setWordWrap(True)
+        layout.addWidget(self.timing)
         self.text = QTextEdit()
         self.text.setReadOnly(True)
         self.text.setAcceptRichText(False)
@@ -136,10 +139,23 @@ class Latest(QDialog):
         self.text.clear()
         self.raw.clear()
         self.notice.setText("Transcript cleared.")
+        self.timing.clear()
 
     def set_transcript(self, text: str, notice: str) -> None:
         self.text.setPlainText(text)
         self.notice.setText(notice)
+        self.timing.clear()
+
+    def set_timing(self, recognition: float, polishing: float, total: float) -> None:
+        self.timing.setText(
+            f"After release: {total:.1f}s · Recognition: {recognition:.1f}s · "
+            f"Polishing: {polishing:.1f}s"
+        )
+        self.timing.setToolTip(
+            "Total includes any remaining model loading, recognition, polishing and target checks. "
+            "Recognition includes audio conversion; polishing includes any remaining polishing "
+            "model loading. Timings stay in memory with the latest transcript."
+        )
 
 
 class Settings(QDialog):
@@ -539,6 +555,7 @@ class Desktop:
                 else None
             ),
             raw_result=self.latest.raw.setPlainText,
+            timing_result=self.latest.set_timing,
         )
 
     def notify(self, message: str) -> None:

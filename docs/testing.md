@@ -454,3 +454,38 @@ and warm inference at 0.692 seconds. This identifies loading work that can overl
 it is not a controlled before/after benchmark, a hardware-wide speed claim or a microphone
 latency measurement. Short recordings may still wait for loading; native loading remains
 noninterruptible and may delay process exit. Cancelled/silent first recordings may load weights.
+
+## Recognition profiling and visible stage timings (2026-10-29)
+
+Local suite: 219 passed, process exit 0, including the real small.en model/VAD test with
+Python socket connections denied. Ruff check/format and mypy passed. Tests distinguish
+recognition/polishing time from total after-release time, including preparation/dispatch
+wait and polishing failure time. Latest transcript clears its timings on replacement,
+Clear and shutdown; timings are not written to configuration or logs.
+
+Three fixed Windows SAPI samples (grocery sentence, technical/negation sentence, and faster
+speech containing an appointment time) were run three times per configuration, with Python
+socket connections denied. Durations were 6.72, 9.00 and 6.62 seconds. Median ASR seconds:
+
+| Model / CPU threads | Grocery | Technical | Faster |
+| --- | --- | --- | --- |
+| base.en / 4 | 0.759 | 0.808 | 0.812 |
+| small.en / 4 | 2.186 | 2.415 | 2.528 |
+| small.en / 8 | 2.219 | 2.160 | 2.258 |
+
+All three repeats produced the same normalized word-edit counts per sample: base.en
+0/0/3, small.en 0/1/3 at both thread counts, against 19/20/25 reference words. Normalization
+lowercases and removes punctuation; number formatting can count as an error. This tiny,
+single-voice synthetic sample does not establish model accuracy for human speech or accents.
+Eight threads helped two cases modestly and slightly regressed one; defaults/user settings
+were retained. Preparation was 1.214 seconds for base.en and 2.241/2.494 seconds for small.en
+at four/eight threads. These sequential observations are not isolated hardware benchmarks.
+
+Owned source GUI sessions used generated audio in place of microphone capture and disabled
+hotkey registration/automatic insertion. Raw and Polished with small.en completed and exited
+0, cleared audio/latest text/timings on shutdown, and displayed the timing breakdown.
+Observed Raw total was 3.1 seconds (2.9 recognition); Polished total was 6.7 seconds
+(3.0 recognition, 3.7 polishing), with a build running concurrently. An initial standalone
+GUI harness lacked a Windows multiprocessing entry guard and failed; the corrected guarded
+Polished harness passed. This was a harness correction, not an application fix or a sustained
+session reliability claim.

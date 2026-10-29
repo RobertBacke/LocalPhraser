@@ -152,8 +152,16 @@ def test_polishing_settings_and_both_transcripts(app, monkeypatch):
     latest.set_transcript("Hello, world.", "Inserted.")
     assert latest.text.toPlainText() == "Hello, world."
     assert latest.raw.toPlainText() == "hello world"
+    latest.set_timing(2, 1, 4.5)
+    assert "After release: 4.5s" in latest.timing.text()
+    assert "Recognition: 2.0s" in latest.timing.text()
+    assert "Polishing: 1.0s" in latest.timing.text()
+    latest.set_transcript("Next result.", "Inserted.")
+    assert not latest.timing.text()
+    latest.set_timing(1, 0, 1)
     latest.clear()
     assert not latest.text.toPlainText() and not latest.raw.toPlainText()
+    assert not latest.timing.text()
     latest.close()
 
 
