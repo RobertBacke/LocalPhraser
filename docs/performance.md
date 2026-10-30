@@ -108,3 +108,38 @@ The Phase 3 unsigned portable ZIP measured **121.1 MiB**, excluding ASR/LLM setu
 This is a compressed artifact size, distinct from the earlier folder size and process RSS.
 The ZIP retains shared libraries and bundled dependency notices; compression is not a
 runtime resource optimization. Broader idle/peak/end-to-end profiling remains open.
+
+
+## Repeated owned Qt sessions — 2026-10-30
+
+The session checker can now write a metadata-only resource report:
+
+```powershell
+python scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/session-profile --case complete --cycles 30 --capture-rate 48000 --report .cache/session-profile/resources.json --idle-seconds 60
+```
+
+One Windows 11 build 26200 run used a 12-logical-CPU AMD Family 25 Model 117 processor,
+16,383,791,104 bytes RAM, CPU INT8 base.en revision
+`3d3d5dee26484f91867d81cb899cfcf72b96be6c`, four inference threads, and local Qwen2.5-1.5B Q4
+polishing. Thirty identical generated-speech sessions completed, followed by 60 seconds idle
+with both models loaded, then clean shutdown. No microphone or target insertion was used.
+
+| Observation | Result |
+| --- | --- |
+| First recognition | 1.213 s |
+| Warm recognition median (29 passes) | 0.801 s |
+| First polishing | 4.402 s |
+| Warm polishing median (29 passes) | 0.988 s |
+| First / last completed-session process-tree RSS | 2051.0 / 2109.8 MiB |
+| Completed-session RSS range | 2051.0–2128.7 MiB |
+| Sampled peak process-tree RSS | 2217.7 MiB |
+| Loaded idle CPU | 0.937% of one logical CPU, about 0.078% of total 12-CPU capacity |
+| Largest observed poll interval | 0.296 s, including the deliberate 0.250 s idle interval |
+
+RSS includes the polishing child and can double-count shared pages. Sampling runs from Qt
+at 100 ms during work and 250 ms while idle, so it adds overhead, can miss native peaks,
+and is not an OS peak-memory measurement. Fixture generation is excluded from heartbeat
+observation. ASR/refinement timings exclude actual microphone startup and text insertion;
+other local tests were running for part of this trial. These are observations on one
+machine, not guarantees for human speech, 8 GB devices or leak-free sustained use. The
+base.en-only memory target cannot be judged from a process tree also retaining the 1.5B LLM.

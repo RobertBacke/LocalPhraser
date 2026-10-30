@@ -62,7 +62,9 @@
    window headers and the click-through capsule now have owned-window visual/native checks.
    Capture now cancels if callbacks stop for three seconds, including drivers still reporting
    active. Quiet frames stay healthy. Simulated stall/recovery and a ten-cycle real-model
-   Qt session check passed; actual device-unplug and longer consumer sessions remain.
+   Qt session check passed; a later 30-cycle real-model run and 60-second loaded-idle
+   resource observation also passed, with metadata-only profiling now repeatable. Actual
+   device-unplug and longer consumer sessions remain.
 5. Release: license/source inventory, locked dependencies, installable signed/unsigned artifact
    policy, clean-machine checks, release notes, contribution templates and benchmark evidence.
    **Phase 4 foundation implemented:** checked portable ZIP plus SHA-256, first-run guide,

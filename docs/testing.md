@@ -735,3 +735,20 @@ capsule, with rounded translucent surfaces, fine highlights and readable inset c
 
 The surfaces do not add an animation timer. Native composition acceptance alone does not
 prove the same visual effect on every Windows policy, driver or machine.
+
+
+## 2026-10-30: repeated sessions and shutdown/resource observations
+
+The owned Qt checker completed **30 consecutive base.en/Qwen1.5B synthetic sessions** at
+48 kHz, then 60 seconds loaded idle and a clean exit. The new metadata-only report records
+stage times, sampled parent/child RSS, CPU and timer observations; see performance.md for
+measurements and limits. Earlier profiling accidentally included fixture generation in the
+first timer interval and used unnecessarily frequent idle polling. The report now excludes
+pre-event-loop fixture generation and reduces idle sampling to 250 ms. No microphone data
+was saved or transcribed; the synthetic fixture and measurements stayed outside version control.
+
+Separate owned Qt shutdown checks passed during model loading and active polishing. An
+owned external Qt editor also passed real small.en recognition, preview, Qwen1.5B polishing
+and exact paced insertion, followed by cleared audio and clean exit. This does not establish
+a root cause for the older intermittent native process shutdown failure or certify all
+editors, devices and long daily sessions.

@@ -97,3 +97,11 @@ produce recognized speech and a preserving polishing result; only generated audi
 The same Desktop/models remain alive across cycles; latest text is replaced, then cleared
 on shutdown. The GUI watchdog allows 45 seconds per requested cycle overall; native calls
 still require an external process timeout when diagnosing hangs.
+
+
+For developer resource observations during repeated complete sessions, add
+`--report <local-json-path> --idle-seconds 60` to the owned shutdown checker. It records
+model revision, hardware metadata, per-cycle stage timings, sampled process-tree RSS,
+Qt poll intervals and loaded idle CPU. It saves no transcript text or microphone audio.
+Reports require `--case complete`; sampling overhead and synthetic-session limits are
+explained in [performance observations](performance.md).
