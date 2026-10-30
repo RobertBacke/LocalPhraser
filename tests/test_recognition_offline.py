@@ -52,6 +52,16 @@ def test_hints_reach_engine_without_replacing_recognized_words(vocabulary, expec
     assert kwargs["without_timestamps"] is True
 
 
+@pytest.mark.parametrize("seconds, timestamps_disabled", [(30, True), (31, False), (90, False)])
+def test_long_recordings_retain_timestamp_guided_window_advancement(seconds, timestamps_disabled):
+    recognizer = WhisperRecognizer(Path("unused-local-model"))
+    engine = Mock()
+    engine.transcribe.return_value = (iter([SimpleNamespace(text=" Complete message. ")]), None)
+    recognizer._model = engine
+    assert recognizer.transcribe(np.zeros(seconds * 16000, dtype=np.float32)) == "Complete message."
+    assert engine.transcribe.call_args.kwargs["without_timestamps"] is timestamps_disabled
+
+
 def test_prepare_loads_local_model_once_without_inference(monkeypatch, tmp_path):
     verify = Mock()
     factory = Mock()

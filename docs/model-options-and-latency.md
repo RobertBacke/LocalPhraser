@@ -20,9 +20,15 @@ Models download only through explicit selection/download; the default model is u
 
 ## Decoding change
 
-The app consumes words, not timestamps. Final recognition and live drafts now request
+Final recognition for clips up to 30 seconds and live drafts now request
 `without_timestamps=True`, retaining greedy decoding, VAD, English, vocabulary hints and
 the existing local-only CPU/int8 runtime. This avoids generating unused timestamp tokens.
+Longer recordings retain timestamp-guided window advancement: a repeated synthetic-speech
+fixture reproduced unwanted repetition when timestamps were disabled across a long clip.
+The optimization is therefore bounded to the model's single-window duration.
+The corrected path and the previous decoder both retained all eight repetitions in a
+31.47-second generated fixture, with identical output length. Boundary tests cover 30,
+31 and 90 seconds.
 Final target insertion remains one complete checked dispatch after optional polishing.
 
 On this development machine, a fixed 14.32-second Windows SAPI fixture with three alternating
@@ -45,7 +51,7 @@ users can compare models on their own speech without an automatic quality-changi
 
 All three added models passed the existing synthetic-speech check with Python socket
 connections denied, both cold and warm. Catalog/hash regression tests, keyboard popup
-selection and the full 334-test suite passed. These checks do not measure recognition
+selection and catalog tests passed. These checks do not measure recognition
 accuracy on real accents, noise or microphones.
 
 ## Readable glass

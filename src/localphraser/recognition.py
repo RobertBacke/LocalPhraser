@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from localphraser.audio import Audio
+from localphraser.audio import SAMPLE_RATE, Audio
 
 
 class Recognizer(Protocol):
@@ -92,7 +92,8 @@ class WhisperRecognizer:
             vad_filter=True,
             condition_on_previous_text=False,
             temperature=0,
-            without_timestamps=True,
+            # Long recordings need timestamp-guided window advancement to avoid repetition.
+            without_timestamps=audio.size <= 30 * SAMPLE_RATE,
             hotwords=self.vocabulary or None,
         )
         parts = []
