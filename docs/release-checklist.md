@@ -41,7 +41,8 @@ installs under the current user's Programs directory, and adds a Start menu shor
 Desktop shortcut and immediate launch are optional; launch upon startup remains off.
 Quit the tray application before upgrades/removal. The uninstaller removes installed files
 and startup entries whose LocalPhraser-prefixed value points exactly to its executable.
-It preserves configuration, downloaded models, and entries for other installations.
+It preserves configuration, downloaded models, transcript history, and entries for other
+installations.
 The saved startup preference remains in preserved settings; re-enable it after reinstalling.
 
 The preview workflow compiles using the runner's Inno Setup and runs

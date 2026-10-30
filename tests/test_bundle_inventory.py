@@ -68,7 +68,18 @@ def test_native_attribution_requires_matching_record_hash_not_filename(bundle):
 
 
 @pytest.mark.parametrize(
-    "filename", ["private.wav", "model.bin", "secret.gguf", "config.json", ".env"]
+    "filename",
+    [
+        "private.wav",
+        "model.bin",
+        "secret.gguf",
+        "config.json",
+        ".env",
+        "history.sqlite3",
+        "history.sqlite3-journal",
+        "History.SQLITE3",
+        "profile.json.history.sqlite3",
+    ],
 )
 def test_inventory_refuses_local_data_before_hashing(bundle, filename):
     (bundle / filename).write_bytes(b"must not inventory")

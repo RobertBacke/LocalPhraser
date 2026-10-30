@@ -9,6 +9,8 @@ import uuid
 import winreg
 from pathlib import Path
 
+from localphraser.history import History
+
 
 def run(command: list[str]) -> None:
     subprocess.run(command, check=True, timeout=180)
@@ -31,6 +33,13 @@ def check(installer: Path) -> None:
     data.mkdir(exist_ok=True)
     sentinel = data / ("installer-test-" + uuid.uuid4().hex)
     sentinel.write_text("preserve settings and models", encoding="utf-8")
+    history_path = data / "history.sqlite3"
+    if history_path.exists():
+        raise RuntimeError("Owned runner history location is not empty; refusing to overwrite it.")
+    history = History(history_path)
+    history.add("owned history fixture", "Owned history fixture.", "Inserted.", 2)
+    history.close()
+    history_digest = hashlib.sha256(history_path.read_bytes()).hexdigest()
     options = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", f"/DIR={app}"]
     run([str(installer.resolve()), *options])
     assert executable.is_file(), "Installed executable missing"
@@ -57,6 +66,7 @@ def check(installer: Path) -> None:
         assert not shortcut.exists(), "Uninstaller left the Start menu shortcut"
         assert sentinel.read_text(encoding="utf-8") == "preserve settings and models"
         assert config.is_file(), "Uninstaller removed external configuration"
+        assert hashlib.sha256(history_path.read_bytes()).hexdigest() == history_digest
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key) as key:
             try:
                 winreg.QueryValueEx(key, owned)
@@ -74,6 +84,7 @@ def check(installer: Path) -> None:
                 except FileNotFoundError:
                     pass
         sentinel.unlink(missing_ok=True)
+        history_path.unlink(missing_ok=True)
     print("Installer: install, launch, reinstall, uninstall, data/other-entry preservation passed")
 
 

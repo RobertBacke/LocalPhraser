@@ -47,6 +47,14 @@ def data_dir() -> Path:
     return Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share")) / "LocalPhraser"
 
 
+def profile_file(config_path: Path, filename: str) -> Path:
+    config_path = config_path.resolve()
+    name = (
+        filename if config_path.name.lower() == "config.json" else f"{config_path.name}.{filename}"
+    )
+    return config_path.with_name(name)
+
+
 @dataclass(frozen=True)
 class Config:
     hotkey: str = "CapsLock"
@@ -65,6 +73,7 @@ class Config:
     start_at_login: bool = False
     live_preview: bool = False
     theme: str = "system"
+    keep_history: bool = True
 
     def validate(self) -> "Config":
         if not isinstance(self.hotkey, str):
@@ -88,6 +97,8 @@ class Config:
             raise ValueError("Live preview must be true or false.")
         if self.theme not in ("system", "light", "dark"):
             raise ValueError("Choose System, Light or Dark appearance.")
+        if type(self.keep_history) is not bool:
+            raise ValueError("Keep transcript history must be true or false.")
         if not isinstance(self.vocabulary, str) or len(self.vocabulary) > 300:
             raise ValueError("Vocabulary hints must be text of at most 300 characters.")
         if any(ord(char) < 32 or ord(char) == 127 for char in self.vocabulary):

@@ -41,9 +41,11 @@ To reuse those settings, launch the EXE with that same absolute `--config` path,
 existing model directory in Settings and Save. Rebuilt EXEs share the normal default profile;
 models do not need downloading for every build. No project-folder scan or silent migration occurs.
 
-The tray provides start/stop recording, cancellation, latest transcript, settings, and Quit.
-Opening the EXE manually shows Settings so launch is visible. Closing Settings leaves the
-tray utility running. `--background` starts quietly; new launch-upon-startup registrations
+Opening the EXE shows a taskbar desktop workspace with Home, Settings and Latest transcript.
+Home shows locally saved transcriptions and speaking statistics. Minimize keeps the taskbar
+button; Close keeps dictation in the background. Open the EXE again or use the tray to
+restore the same window. Quit LocalPhraser exits the app. Save keeps Settings open, while
+appearance changes apply and save immediately. `--background` starts quietly; new launch-upon-startup registrations
 include it. Older startup registrations can be refreshed by toggling startup off, Save,
 then on and Save again.
 Latest transcript shows recognition, polishing, and total time after releasing the shortcut.
@@ -52,22 +54,23 @@ stage times. Timings are held in memory and cleared with the transcript.
 The last sanitized recording/transcription/insertion error also stays in Latest transcript
 through later successful dictations, until Clear or exit.
 While transcribing, the non-focusing indicator previews completed recognized phrases.
-Final text is delivered in checked 32-character batches for longer single-line ASCII text,
-with a short pause and a bounded wait for the expected caret between batches. Unicode,
-multiline text and providers that fail navigation preflight retain a single checked delivery.
-Changing field, window, caret or modifiers stops delivery; check for partial text before
-copying from Latest transcript. The default preview shows completed phrases after recording
+Final text is delivered in one checked dispatch after recognition and optional polishing.
+This avoids artificial typing pauses between accessibility-provider checks. Focus, field,
+selection, caret and modifiers are verified before dispatch; partial delivery is never
+retried. Check Latest transcript before manually copying after an insertion warning.
+The default preview shows completed phrases after recording
 ends. **Live speech preview (experimental)** can be enabled in Settings and saved. The speech model prepares at launch, after its download, and after saving settings.
 Wait for **Ready** before dictating; recent words can then appear on the first recording,
 roughly every two seconds when processing keeps up, under a simple **Listening** heading.
 Drafts may change and stay out of the target app; stopping still transcribes the complete
 recording, polishes it if enabled, and inserts the final text. Preview uses extra CPU and
 can add after-release waiting. It is off by default. Preparation uses discarded local silence, without microphone capture.
-Single-click the tray icon to open or restore Settings; right-click it for the menu.
+Single-click the tray icon to open or restore Home; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
 and automatic insertion. Appearance can follow the system or use Light or Dark; saving only
-appearance preserves the loaded speech model. Settings, Latest transcript and the dictation
+appearance preserves the loaded speech model. Appearance applies immediately and auto-saves;
+other settings use Save. Settings, Latest transcript and the dictation
 capsule use a [glass appearance](docs/design.md), with a readable fallback when native
 backdrop effects are unavailable. Raw mode is the default. Optional Polished mode adds local
 punctuation, capitalization, and hesitation removal. **Start LocalPhraser upon startup** is opt-in:
@@ -117,11 +120,17 @@ one visible model setup download; later launches do not retry automatically.
 .venv\Scripts\python.exe -m localphraser
 ```
 
-No telemetry, saved audio, transcript history, cloud inference, or background update checks.
+No telemetry, saved audio, cloud inference, or background update checks.
+Transcript history is saved locally by default in `history.sqlite3` beside `config.json` (custom profile filenames receive separate history files).
+Home offers individual deletion and Clear history. Turn off **Keep transcript history on
+this device** and Save to stop saving new entries; existing history remains until deleted.
+The database is plain local text, without application-level encryption. Speaking pace uses
+recognized original words divided by recorded minutes, including pauses.
 Download actions now have **Cancel download**, with cleanup of only that installation's
 temporary files. Wait for cleanup before saving, closing Settings or retrying. Installed
 models remain available. See [troubleshooting](docs/troubleshooting.md) for recovery.
-Only the latest transcript is retained in RAM for recovery; clear it from the tray dialog.
+Latest transcript also provides an in-memory recovery copy. Home lists the latest 200 saved
+entries; statistics cover all saved entries. History starts with dictations made in this version.
 Settings → Vocabulary hints accepts a short comma-separated list of names or technical
 terms (up to 300 characters), for example `Codex, PySide, NumPy`. These optional hints
 guide the local recognizer; they do not force a spelling or replace recognized words.
@@ -153,7 +162,8 @@ Save when installation finishes. The development Polished executable includes th
 runtime; models are separate explicit downloads. No local HTTP server or cloud API is used.
 
 Polishing runs in a reusable child process, prepared in the background once a Polished
-recording starts so model loading can overlap speaking and transcription. No transcript
+recording stops so loading does not compete with microphone capture. Polishing preparation
+can overlap final recognition. No transcript
 is sent until recognition finishes. Raw mode does not start this process.
 The configurable limit is 15 seconds by
 default, including the cold model load; timeout, missing runtime/model, truncated output,

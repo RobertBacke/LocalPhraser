@@ -80,3 +80,20 @@
    clean consumer-machine and sustained-session acceptance still block release readiness.
 6. macOS/Linux adapters after the Windows workflow proves dependable. No remote publication
    or stable release without explicit authorization and acceptance evidence.
+
+
+## Current desktop iteration — 2026-10-30
+
+The user requested a taskbar application, immediate appearance changes and persistent local
+history. The workspace now provides Home/Settings navigation, recent history with copy,
+delete/clear controls, saved word/dictation counts and recorded-duration speaking pace.
+Appearance auto-saves immediately and Save keeps Settings visible. A current-user named
+pipe restores the existing window on a second launch. The tray remains a backup and Close
+keeps background dictation active. History can be disabled without silently deleting old
+entries; SQLite and journal files are excluded from packaging and source publication.
+
+Following a further report of pauses during paced insertion, the desktop path now uses one
+complete checked dispatch. An owned reactive Chrome editor passed exact 2,736-character
+insertion in one dispatch with prefix preservation and selected-text refusal. Live preview
+remains in the floating widget. The capsule now uses one translucent Qt surface without a
+native DWM frame; the desktop workspace uses softer ice-blue layered glass styling.

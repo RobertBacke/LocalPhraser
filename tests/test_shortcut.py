@@ -257,3 +257,18 @@ def test_settings_appearance_selection_and_native_scheme(app, monkeypatch, theme
         }[theme]
     )
     settings.close()
+
+
+def test_theme_previews_immediately_and_save_keeps_settings_visible(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    preview = Mock()
+    monkeypatch.setattr("localphraser.ui.set_appearance", preview)
+    applied = Mock()
+    settings = Settings(Config(), applied)
+    settings.show()
+    settings.theme.setCurrentIndex(settings.theme.findData("dark"))
+    preview.assert_called_once_with("dark")
+    settings.save()
+    assert applied.call_args.args[0].theme == "dark"
+    assert settings.isVisible()
+    settings.close()

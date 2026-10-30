@@ -116,6 +116,7 @@ def test_unrelated_settings_save_with_startup_off_does_not_access_registry(tmp_p
     desktop = object.__new__(Desktop)
     desktop.closing = False
     desktop.allow_live_warmup = True
+    desktop.window = Mock()
     desktop.config = Config()
     desktop.config_path = tmp_path / "config.json"
     desktop.pipeline = Mock(state=State.IDLE)

@@ -61,6 +61,8 @@ def checked_files(folder: Path) -> list[Path]:
                 path.suffix.lower() in (".wav", ".mp3", ".gguf", ".safetensors", ".env")
                 or path.name.lower() == "model.bin"
                 or path.name.lower().startswith(".env")
+                or path.name.lower().startswith("history.sqlite3")
+                or ".history.sqlite3" in path.name.lower()
                 or path.relative_to(folder).as_posix().lower() == "config.json"
             ):
                 raise ValueError("Build contains model weights, audio, or local settings.")

@@ -12,6 +12,7 @@ from localphraser.config import (
     REFINEMENT_MODELS,
     data_dir,
     load_config,
+    profile_file,
     save_config,
 )
 
@@ -169,8 +170,9 @@ def main() -> int:
     if sys.platform != "win32":
         parser.error("Desktop integration currently supports Windows 10/11 only.")
     from PySide6.QtCore import QLockFile, QTimer
-    from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
+    from localphraser.instance import activate_existing, listen
     from localphraser.ui import Desktop, app_icon
 
     app = QApplication(sys.argv[:1])
@@ -179,15 +181,16 @@ def main() -> int:
     app.setWindowIcon(app_icon())
     directory = args.config.parent
     directory.mkdir(parents=True, exist_ok=True)
-    lock = QLockFile(str(directory / "localphraser.lock"))
+    lock = QLockFile(str(profile_file(args.config, "localphraser.lock")))
     lock.setStaleLockTime(0)
     if not lock.tryLock(0):
+        if args.background:
+            return 0
+        if activate_existing(args.config):
+            return 0
         QMessageBox.information(
             None, "LocalPhraser", "LocalPhraser is already running for this configuration."
         )
-        return 1
-    if not QSystemTrayIcon.isSystemTrayAvailable() and not args.smoke_test:
-        QMessageBox.warning(None, "LocalPhraser", "A Windows system tray is required.")
         return 1
     first_launch = not args.config.exists() and not args.smoke_test
     try:
@@ -208,10 +211,19 @@ def main() -> int:
         first_launch=first_launch,
         show_on_launch=not args.background and not args.smoke_test,
         warm_on_launch=not args.smoke_test,
+        persist_history=not args.smoke_test,
     )
+    activation_server = None
+    if not args.smoke_test:
+        try:
+            activation_server = listen(args.config, desktop.show_home)
+        except OSError:
+            pass  # Tray/taskbar activation remains available if the local channel is unavailable.
     if args.smoke_test:
         QTimer.singleShot(1500, app.quit)
     code = app.exec()
+    if activation_server is not None:
+        activation_server.close()
     # Keep desktop and lock alive until the Qt event loop has shut down.
     del desktop
     lock.unlock()

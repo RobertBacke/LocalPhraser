@@ -87,6 +87,7 @@ class Dictation:
         self.preview_after = 0.0
         self.preview_disabled = False
         self.released_at: float | None = None
+        self.audio_seconds = 0.0
         self.state = State.IDLE
         self.target: Any = None
         self.target_future: Future[Any] | None = None
@@ -295,6 +296,7 @@ class Dictation:
         try:
             audio = self.recorder.stop()
             sample_rate = getattr(self.recorder, "sample_rate", SAMPLE_RATE)
+            self.audio_seconds = audio.size / sample_rate
             if audio.size < sample_rate // 5 or np.max(np.abs(audio), initial=0) < 0.001:
                 audio.fill(0)
                 self._clear_target()

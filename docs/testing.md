@@ -776,3 +776,50 @@ signing and the previously observed intermittent native shutdown issue remain re
 
 The final local suite passed **308 tests**, including the real offline model check. Ruff
 check/format passed; the production source had already passed mypy and frozen validation.
+
+
+## 2026-10-30: taskbar workspace, persistent history and complete delivery
+
+The user requested a regular desktop workspace, immediate themes, locally persistent history,
+useful statistics, smoother final delivery and a cleaner glass capsule. The new Home page
+shows recent original/result text, individual deletion, confirmed Clear history, word and
+session counts, and speaking pace based on recorded sample duration. Settings is embedded;
+appearance updates/auto-saves immediately without applying other unsaved controls. Save
+keeps the page visible. History can be disabled; old records are retained until explicitly
+deleted. Standard history/journal files are ignored and rejected by packaging/inventory.
+
+- **328 tests passed**, including real offline small.en inference and an owned local pipe
+  activation check. The full suite ran outside the filesystem sandbox because named-pipe
+  creation is denied inside it. A direct probe confirmed the sandbox restriction and the
+  owned outside-sandbox channel succeeded. Ruff check/format and mypy passed for 22 modules.
+- Regression cases for immediate theme preview and complete async text dispatch were observed
+  failing before the change and passing afterward. History corruption preserves the existing
+  file; persistence, exact original/result text, pace calculation, deletion/clear and session
+  storage checks passed. UI tests cover independent theme saves and hidden-window updates.
+- `native_workspace_check.py` passed on an owned profile: normal unowned/non-tool taskbar
+  styles, live Light/Dark changes, settings staying open, saved history reopening, exact
+  150-wpm fixture calculation, controls within a 740×480 window, and a second real source
+  launch restoring the minimized existing workspace. No microphone or keyboard input was used.
+- Owned Home/Settings screenshots were visually inspected in both themes. The capsule now
+  has a single rounded alpha-painted surface with no DWM rectangle or outline. No-focus,
+  click-through and transparent-corner checks passed.
+- An owned reactive Chrome editor received all **2,736 characters in one checked dispatch**,
+  preserved its existing prefix, and refused selected text afterward. The desktop no longer
+  uses artificial paced batches; preview remains in the floating widget. Rendering still
+  depends on the target application and partial input is never retried.
+- Real small.en/Qwen1.5B first-recording live preview passed again at 48 kHz with startup
+  preparation, four draft updates, final recognition/polishing and a clean exit.
+
+The persistent-history choice was explicitly confirmed by the user. History is plain local
+SQLite without application-level encryption; no audio is saved. Design skill selection,
+review scope, star counts and pinned revisions are documented in design-skill-review.md.
+Actual Windows taskbar pinning, display-specific glass appearance and daily microphone use
+remain user acceptance checks. No stable/public binary release is implied.
+
+
+Final workspace regressions also cover Cancel discarding unsaved settings while retaining
+an immediately saved theme, history preference changes preserving the loaded pipeline,
+and separate histories/locks for custom configuration files in one directory. Custom-profile
+history filenames and journals are also refused by packaging. The final suite passed
+**328 tests** with real offline inference. An owned external Qt editor passed real small.en
+recognition, preview, Qwen1.5B polishing and exact complete final insertion with a clean exit.

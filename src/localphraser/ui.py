@@ -1,5 +1,6 @@
 """Small Qt tray application; all model work stays off the GUI thread."""
 
+import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -33,8 +34,17 @@ from PySide6.QtWidgets import (
 from localphraser import startup
 from localphraser.appearance import GlassDialog, GlassLabel
 from localphraser.audio import Recorder, microphones
-from localphraser.config import DEFAULT_PROMPT, MODELS, REFINEMENT_MODELS, Config, save_config
+from localphraser.config import (
+    DEFAULT_PROMPT,
+    MODELS,
+    REFINEMENT_MODELS,
+    Config,
+    profile_file,
+    save_config,
+)
 from localphraser.downloads import ModelDownload
+from localphraser.history import History
+from localphraser.home import AppWindow
 from localphraser.hotkey import Hotkey
 from localphraser.models import FILES
 from localphraser.pipeline import Dictation, State
@@ -193,6 +203,9 @@ class Latest(GlassDialog):
 
 
 class Settings(GlassDialog):
+    theme_changed = Signal(str)
+    dismissed = Signal()
+
     def __init__(
         self,
         config: Config,
@@ -202,12 +215,15 @@ class Settings(GlassDialog):
     ):
         super().__init__()
         self.apply_config = apply
+        self.embedded = False
         self.setWindowTitle("LocalPhraser · Settings")
         self.setMinimumWidth(540)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(24, 18, 24, 24)
         outer.setSpacing(16)
-        outer.addLayout(self.header("LocalPhraser settings"))
+        self.header_widget = QWidget()
+        self.header_widget.setLayout(self.header("LocalPhraser settings"))
+        outer.addWidget(self.header_widget)
         scroll = QScrollArea()
         self.scroll_area = scroll
         scroll.setWidgetResizable(True)
@@ -235,7 +251,16 @@ class Settings(GlassDialog):
         for label, value in (("System", "system"), ("Light", "light"), ("Dark", "dark")):
             self.theme.addItem(label, value)
         self.theme.setCurrentIndex(self.theme.findData(config.theme))
+        self.theme.setToolTip("Updates and saves immediately. Other changes use Save.")
+        self.theme.currentIndexChanged.connect(self.preview_theme)
         form.addRow("Appearance", self.theme)
+        self.keep_history = QCheckBox("Keep transcript history on this device")
+        self.keep_history.setChecked(config.keep_history)
+        self.keep_history.setToolTip(
+            "Stores text locally between launches without encryption. Audio is never saved. "
+            "Turn off to stop saving new entries; use Clear history to delete existing text."
+        )
+        form.addRow(self.keep_history)
         self.hotkey = ShortcutRecorder(config.hotkey, begin_capture, end_capture)
         form.addRow("Global shortcut", self.hotkey)
         shortcut_hint = QLabel(HINT)
@@ -422,6 +447,7 @@ class Settings(GlassDialog):
             start_at_login=self.start_at_login.isChecked(),
             live_preview=self.live_preview.isChecked(),
             theme=self.theme.currentData(),
+            keep_history=self.keep_history.isChecked(),
         ).validate()
 
     def save(self) -> None:
@@ -436,7 +462,21 @@ class Settings(GlassDialog):
         except Exception as exc:
             QMessageBox.warning(self, "Settings could not be saved", str(exc))
             return
-        self.accept()
+        self.progress.setText("Settings saved.")
+
+    def preview_theme(self) -> None:
+        theme = self.theme.currentData()
+        set_appearance(theme)
+        self.theme_changed.emit(theme)
+
+    def embed(self, parent: QWidget) -> None:
+        self.embedded = True
+        self.setParent(parent)
+        self.setWindowFlags(Qt.WindowType.Widget)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setMinimumWidth(0)
+        self.setSizeGripEnabled(False)
+        self.header_widget.hide()
 
     def download(self, refiner: bool = False) -> None:
         if self.downloader.busy:
@@ -477,7 +517,10 @@ class Settings(GlassDialog):
                 "Cancel the download or wait for installation/cleanup before closing settings."
             )
             return
-        super().reject()
+        if self.embedded:
+            self.dismissed.emit()
+        else:
+            super().reject()
 
     def accept(self) -> None:
         if self.downloader.busy:
@@ -498,6 +541,7 @@ class Desktop:
         first_launch: bool = False,
         show_on_launch: bool = False,
         warm_on_launch: bool = True,
+        persist_history: bool = True,
     ):
         self.closing = False
         self.allow_live_warmup = warm_on_launch
@@ -513,9 +557,18 @@ class Desktop:
         self.latest = Latest()
         self.indicator = Indicator()
         self.settings: Settings | None = None
+        self.history_error = ""
+        try:
+            self.history = History(
+                profile_file(config_path, "history.sqlite3") if persist_history else None
+            )
+        except (sqlite3.DatabaseError, OSError):
+            self.history = History(None)
+            self.history_error = "Saved history could not be opened. This session stays in memory."
         self.tray = QSystemTrayIcon(app_icon(), app)
         self.tray.setToolTip("LocalPhraser")
         menu = QMenu()
+        menu.addAction("Open LocalPhraser", self.show_home)
         self.status = menu.addAction(f"Ready · {config.mode.title()} mode")
         self.status.setEnabled(False)
         menu.addSeparator()
@@ -542,15 +595,28 @@ class Desktop:
         self.watchdog = QTimer()
         self.watchdog.setInterval(100)
         self.watchdog.timeout.connect(self.check_audio)
+        self.window = AppWindow(
+            self.history,
+            self.show_settings,
+            self.toggle,
+            app.quit,
+            config.hotkey,
+            latest=self.show_latest,
+        )
+        self.window.setWindowIcon(app_icon())
         self.tray.show()
         app.aboutToQuit.connect(self.shutdown)
         self.state_changed(State.IDLE, "")
         if first_launch and not self.speech_model_present():
             QTimer.singleShot(0, self.start_first_launch_setup)
-        elif show_on_launch or self.hotkey_error or not self.speech_model_present():
+        elif self.hotkey_error or not self.speech_model_present():
             QTimer.singleShot(0, self.show_settings)
+        elif show_on_launch:
+            QTimer.singleShot(0, self.show_home)
         if self.hotkey_error:
             QTimer.singleShot(100, lambda: self.notify(self.hotkey_error))
+        if self.history_error:
+            QTimer.singleShot(100, lambda: self.notify(self.history_error))
         QTimer.singleShot(0, self.prepare_live_preview)
 
     def prepare_live_preview(self) -> bool:
@@ -624,7 +690,7 @@ class Desktop:
             self.insertion,
             self.bridge.queued.emit,
             self.state_changed,
-            self.latest.set_transcript,
+            self.complete_transcript,
             auto_insert=config.auto_insert,
             refiner=(
                 LocalRefiner(
@@ -649,6 +715,21 @@ class Desktop:
             "LocalPhraser", message, QSystemTrayIcon.MessageIcon.Information, 5000
         )
 
+    def complete_transcript(self, text: str, notice: str) -> None:
+        if self.closing:
+            return
+        self.latest.set_transcript(text, notice)
+        if self.config.keep_history:
+            try:
+                self.history.add(
+                    self.latest.raw.toPlainText(), text, notice, self.pipeline.audio_seconds
+                )
+                self.window.refresh_history()
+            except (sqlite3.DatabaseError, OSError, ValueError):
+                self.notify(
+                    "History could not be saved. Your text is available in Latest transcript."
+                )
+
     def state_changed(self, state: State, message: str) -> None:
         if state == State.ERROR and message:
             self.latest.record_error(message)
@@ -658,6 +739,13 @@ class Desktop:
             else state.value
         )
         self.status.setText(f"{label} · {self.config.mode.title()} mode")
+        self.window.state_label.setText(label)
+        self.window.record_button.setText(
+            "Stop recording"
+            if state == State.RECORDING
+            else ("Record to history" if self.config.keep_history else "Record (manual copy)")
+        )
+        self.window.record_button.setEnabled(state in (State.IDLE, State.RECORDING))
         self.tray.setToolTip(f"LocalPhraser · {label}")
         self.tray.setIcon(app_icon(state == State.RECORDING))
         self.indicator.display(state)
@@ -710,7 +798,13 @@ class Desktop:
             QSystemTrayIcon.ActivationReason.Trigger,
             QSystemTrayIcon.ActivationReason.DoubleClick,
         ):
-            self.show_settings()
+            self.show_home()
+
+    def show_home(self) -> None:
+        self.window.show_home()
+        self.window.showNormal()
+        self.window.raise_()
+        self.window.activateWindow()
 
     def show_latest(self) -> None:
         self.latest.show()
@@ -718,22 +812,36 @@ class Desktop:
         self.latest.activateWindow()
 
     def show_settings(self) -> None:
-        if self.pipeline.state != State.IDLE:
-            self.notify("Finish or cancel dictation before changing settings.")
+        if self.settings is None:
+            self.settings = Settings(
+                self.config, self.apply, self.begin_shortcut_capture, self.end_shortcut_capture
+            )
+            self.settings.downloader.finished.connect(self.model_download_finished)
+            self.settings.theme_changed.connect(self.save_appearance)
+            self.settings.dismissed.connect(self.discard_settings)
+            self.settings.embed(self.window.pages)
+        self.window.show_settings(self.settings)
+        self.window.showNormal()
+        self.window.raise_()
+        self.window.activateWindow()
+
+    def discard_settings(self) -> None:
+        if self.settings is not None:
+            previous = self.settings
+            self.settings = None
+            self.window.pages.removeWidget(previous)
+            previous.downloader.shutdown()
+            previous.deleteLater()
+        self.show_home()
+
+    def save_appearance(self, theme: str) -> None:
+        config = replace(self.config, theme=theme)
+        try:
+            save_config(config, self.config_path)
+        except OSError:
+            self.notify("Appearance changed for this session, but could not be saved.")
             return
-        if self.settings and self.settings.isVisible():
-            if self.settings.isMinimized():
-                self.settings.showNormal()
-            self.settings.raise_()
-            self.settings.activateWindow()
-            return
-        self.settings = Settings(
-            self.config, self.apply, self.begin_shortcut_capture, self.end_shortcut_capture
-        )
-        self.settings.downloader.finished.connect(self.model_download_finished)
-        self.settings.show()
-        self.settings.raise_()
-        self.settings.activateWindow()
+        self.config = config
 
     def begin_shortcut_capture(self, captured_caps: Callable[[], None]) -> None:
         if self.pipeline.state != State.IDLE:
@@ -793,10 +901,22 @@ class Desktop:
             if changed_hotkey:
                 self.hotkey.register(self.config.hotkey)
             raise
-        appearance_only = replace(config, theme=self.config.theme) == self.config
+        appearance_only = (
+            replace(config, theme=self.config.theme, keep_history=self.config.keep_history)
+            == self.config
+        )
         if config.theme != self.config.theme:
             set_appearance(config.theme)
         self.config = config
+        self.window.hint.setText(f"Hold {config.hotkey}, speak naturally, then release.")
+        self.window.record_button.setText(
+            "Record to history" if config.keep_history else "Record (manual copy)"
+        )
+        self.window.storage_note.setText(
+            "History stays on this device. Showing the latest 200 entries."
+            if config.keep_history
+            else "New transcripts are not saved. Existing history is kept until deleted."
+        )
         if appearance_only:
             return
         self.pipeline.shutdown()
@@ -813,6 +933,12 @@ class Desktop:
         self.pipeline.shutdown()
         self.insertion.close()
         self.audio_preparer.shutdown(wait=False, cancel_futures=True)
+        self.window.hide()
+        self.window.entries.clear()
+        self.window.result_text.clear()
+        self.window.raw.clear()
+        self.window.entry_info.clear()
+        self.history.close()
         self.latest.clear()
         self.indicator.display(State.IDLE)
         self.tray.hide()

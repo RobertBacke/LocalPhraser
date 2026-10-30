@@ -16,8 +16,8 @@ RAM snapshot. Warm local ASR produces a revisable draft only in the indicator; s
 are cleared after processing and stale UI updates are discarded. No preview capture runs while idle. With live preview enabled, startup, model download
 and settings save prepare the local speech model using generated silence. That silence
 and any decode output are discarded; no microphone audio is used for preparation. The full recording remains the input for final dictation.
-No dictated content is logged. Exceptions shown to users are sanitized. No analytics,
-accounts, telemetry, history database, updater, or cloud inference client.
+No dictated content is logged. Exceptions shown to users are sanitized. No external analytics,
+accounts, telemetry, updater, or cloud inference client.
 
 Optional vocabulary hints are text explicitly entered by the user and saved in local
 `config.json`. They are passed only to the local speech recognizer. They are never collected
@@ -26,7 +26,19 @@ from the current configuration; user-made backups may retain older settings.
 
 Latest transcript is a single in-memory recovery result, replaced by the next successful
 dictation, with Raw and Result versions in Polished mode. Both are explicitly clearable and
-cleared on exit. They are not written to settings or disk.
+cleared on exit. Separately, user-requested transcript history is enabled by default and saves
+original/result text, delivery notice, timestamp, recognized word count and recorded duration
+in `history.sqlite3` beside the default configuration; custom configuration filenames have
+separate history files in that directory. It contains no microphone audio. This
+is ordinary local SQLite storage without application-level encryption; anyone with access
+to the profile files can read it. Home displays recent entries and aggregate speaking pace.
+Delete entry or Clear history removes saved entries. Turning off Keep transcript history
+stops new saves without silently deleting older entries. Statistics use recognized original
+words and recorded duration including pauses, rather than measuring voice activity alone.
+Clear/delete are logical deletion, not a guarantee against OS backups, paging or forensic
+recovery. A damaged database is preserved; the app reports a temporary in-memory fallback.
+Smoke tests suppress persistent history. Build inventory and ZIP checks reject the history
+database and its journal files; repository ignores cover the standard history filenames.
 Clipboard is untouched by automatic insertion. Explicit Copy transfers data to the Windows
 clipboard; OS clipboard history or sync may retain that copy outside LocalPhraser.
 
@@ -80,3 +92,8 @@ Verify by installing a model, checking hashes, disconnecting networking, and rep
 dictation in supported applications. Tests also deny Python socket creation during model
 verification and offline inference tests. Native-library networking is not exhaustively
 audited; use Windows firewall/packet capture for stronger independent verification.
+
+
+A per-profile, current-user local named pipe lets a second launch restore the existing
+workspace. It exposes no TCP port and accepts no arbitrary commands, file paths or dictated
+content. Closing the window keeps background dictation available; Quit ends the process.

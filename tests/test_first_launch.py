@@ -19,7 +19,12 @@ def launch(app, monkeypatch, tmp_path):
     monkeypatch.setattr(QtWidgets, "QApplication", lambda args: app)
     monkeypatch.setattr(QtWidgets.QSystemTrayIcon, "isSystemTrayAvailable", lambda: True)
     monkeypatch.setattr(app, "exec", lambda: 0)
-    monkeypatch.setattr(ui, "Desktop", lambda *args, **kwargs: observed.append((args, kwargs)))
+
+    def fake_desktop(*args, **kwargs):
+        observed.append((args, kwargs))
+        return Mock()
+
+    monkeypatch.setattr(ui, "Desktop", fake_desktop)
     path = tmp_path / "config.json"
 
     def run(*options):
@@ -110,6 +115,7 @@ def desktop(app, monkeypatch, tmp_path, request):
         controller.settings.deleteLater()
     controller.latest.deleteLater()
     controller.indicator.deleteLater()
+    controller.window.deleteLater()
 
 
 def publish_fixture_model(desktop):
@@ -235,3 +241,48 @@ def test_appearance_save_preserves_warm_pipeline_and_latest_transcript(desktop, 
     assert desktop.latest.text.toPlainText() == "Keep this result."
     assert load_config(desktop.config_path).theme == "dark"
     appearance.assert_called_once_with("dark")
+
+
+def test_workspace_theme_autosaves_without_applying_other_unsaved_fields(desktop, app):
+    desktop.show_settings()
+    desktop.settings.duration.setValue(200)
+    desktop.settings.theme.setCurrentIndex(desktop.settings.theme.findData("dark"))
+    app.processEvents()
+    assert desktop.config.theme == "dark"
+    saved = load_config(desktop.config_path)
+    assert saved.theme == "dark" and saved.max_seconds == 120
+    desktop.pipeline.shutdown.assert_not_called()
+    desktop.settings.save()
+    assert desktop.window.isVisible() and desktop.settings.isVisible()
+    assert desktop.config.max_seconds == 200
+
+
+def test_completed_dictation_is_saved_without_raising_the_home_window(desktop):
+    desktop.window.hide()
+    desktop.pipeline.audio_seconds = 2.0
+    desktop.latest.raw.setPlainText("hello world")
+    desktop.complete_transcript("Hello, world.", "Inserted.")
+    assert desktop.history.stats() == (1, 2, 60)
+    assert not desktop.window.isVisible()
+    desktop.config = replace(desktop.config, keep_history=False)
+    desktop.complete_transcript("A private next result.", "Inserted.")
+    assert desktop.history.stats()[0] == 1
+    assert desktop.latest.text.toPlainText() == "A private next result."
+
+
+def test_cancel_discards_unsaved_fields_but_keeps_immediate_appearance(desktop):
+    desktop.show_settings()
+    desktop.settings.duration.setValue(180)
+    desktop.settings.theme.setCurrentIndex(desktop.settings.theme.findData("dark"))
+    desktop.settings.reject()
+    assert desktop.settings is None
+    desktop.show_settings()
+    assert desktop.settings.duration.value() == 120
+    assert desktop.settings.theme.currentData() == "dark"
+
+
+def test_history_preference_change_preserves_loaded_pipeline(desktop):
+    desktop.apply(replace(desktop.config, keep_history=False))
+    desktop.pipeline.shutdown.assert_not_called()
+    assert not load_config(desktop.config_path).keep_history
+    assert "manual copy" in desktop.window.record_button.text()

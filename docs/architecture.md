@@ -40,15 +40,11 @@ Microphone callback only copies into bounded memory; a UI watchdog handles durat
 disconnection. Audio starts before accessibility calls, which execute on a dedicated MTA
 worker. The UI retains only opaque target tokens; COM ranges never cross threads. Target
 verification times out to manual recovery after two seconds, and late targets are discarded.
-The final insertion stage runs asynchronously on the target worker. Longer single-line
-ASCII text uses 32-character batches with a 20 ms minimum interval and up to 300 ms caret
-settling per batch. Field, focus, selection, modifiers and permission are checked again.
-For supported UIA editors, a bounded navigation preflight measures the initial caret offset
-without reading text; subsequent expected ranges come from the current document start.
-Saved ranges may move when providers update their document, so they are not reused for
-subsequent batches. Unsupported navigation, prefixes over 32,000 units, Unicode and
-newlines retain one checked dispatch before any input. A length-based overall deadline
-is capped at 30 seconds; timeout revokes permission and preserves full text for recovery.
+The final insertion stage runs asynchronously on the target worker and uses one checked
+SendInput dispatch of the completed text. Field, focus, selection, modifiers and permission
+are checked before dispatch. A length-based deadline is capped at 30 seconds; timeout
+revokes late delivery and preserves text for recovery. There is no automatic retry after
+partial delivery. The older paced helper remains available for developer comparisons.
 The legacy synchronous developer port keeps its two-second wait. An isolated process for forcibly terminating
 a hung native provider remains release hardening; threads cannot interrupt such calls.
 
@@ -73,8 +69,8 @@ reproduced an INVALID_HANDLE crash and is explicitly avoided. Shutdown suppresse
 inference results. Frozen entry points call multiprocessing.freeze_support.
 
 Audio is cleared before refinement begins. Raw and result text for the latest dictation are
-held in RAM for comparison. There are no transcript files, disk prompt caches, HTTP servers,
-or cloud clients. Input is capped at 3,000 characters, context at 4,096 tokens, output at
+held in RAM for comparison, and optionally persisted by the UI history store after completion.
+There are no disk prompt caches, HTTP servers or cloud clients. Input is capped at 3,000 characters, context at 4,096 tokens, output at
 1,024 tokens, and the default process response wait at 15 seconds. Oversize/context failures
 and non-preserving edits fall back to raw. Cancellation/termination adds small OS overhead.
 Custom instructions cannot bypass lexical preservation, which still cannot certify meaning.
@@ -107,3 +103,29 @@ pause draft processing for that recording while leaving final transcription avai
 Final ASR still reads the complete recording and polishing runs only on that final result.
 Settings changes create a cold recognizer and request preparation again when enabled.
 Smoke launches suppress preparation even with live preview enabled. Drafts are neither stable per-token hypotheses nor inserted target text.
+
+
+## Desktop workspace and local history
+
+`home.py` owns a normal unowned Qt Window with a taskbar button, Home/Settings navigation,
+minimize/maximize/close controls and manual-copy recording. Settings is embedded in the
+workspace; Save remains visible. Appearance previews immediately and auto-saves only that
+preference, preserving other unsaved controls and the warm pipeline. History preference
+changes also preserve the pipeline. Closing hides the workspace while Quit performs shutdown.
+
+`history.py` uses standard-library SQLite on the UI thread with parameterized writes,
+transactions and schema-version checks. The file is per configuration, outside the EXE
+folder. Home fetches at most 200 entry summaries and loads full text only when selected.
+Statistics aggregate saved words/duration; recording duration comes from captured sample
+count/rate, excluding processing and insertion. Unknown-duration entries are excluded from
+pace calculations. Disabled history prevents new persistence; deletion and clearing are
+explicit controls. Corrupt history is preserved with a sanitized in-memory fallback.
+
+`instance.py` uses a current-user local named pipe, named by the normalized configuration
+path hash, to restore the existing window after a second launch. It does not carry text,
+commands or paths. The existing profile lock still prevents a second recorder. Quiet
+background launches stay quiet when an instance is already running.
+
+The floating capsule uses a single Qt-painted translucent shape without a DWM frame or
+outline, avoiding the competing rectangular/rounded borders reported by the user. Larger
+windows retain an optional Windows backdrop and a softer layered surface.

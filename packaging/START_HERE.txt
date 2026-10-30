@@ -11,14 +11,19 @@ This is a development preview, not a stable release. Keep the entire folder toge
    Already have models? Cancel, select their directory in Settings, then Save.
 4. Place the cursor in a text field, hold CapsLock, speak, then release it.
    Save is needed only if you changed settings; the default model works as soon as installed.
-5. Open Settings or Latest transcript from the system tray icon. Quit there to exit.
+5. Home and Settings are in the taskbar workspace. Theme changes apply immediately;
+   Save applies other settings and keeps the page open. Minimize keeps the taskbar button;
+   Close leaves background dictation available. Reopen the EXE to restore it. Use Quit to exit.
 
 Raw mode is the default. Experimental Polished mode needs its own model download and
 uses more memory and processing time. Try Raw first, then compare both modes.
 Polished keeps the original in Latest transcript's Raw transcription tab.
 
-After model installation, dictation operates locally without internet. Audio and transcript
-history are not saved. Latest transcript stays in memory. Explicit Copy changes the clipboard.
+After model installation, dictation operates locally without internet. Audio is never saved.
+Transcript history is saved locally by default, without application-level encryption. Home
+provides delete/clear controls; Settings can stop saving new entries. Latest transcript also
+stays in memory. Explicit Copy changes the clipboard. Settings, models and history are
+preserved when the app is uninstalled.
 Check important text before sending it. Unverified fields, changed focus, and selected text
 use manual-copy recovery to avoid inserting or overwriting in the wrong place.
 

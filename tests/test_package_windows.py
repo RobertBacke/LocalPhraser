@@ -36,7 +36,19 @@ def test_portable_archive_preserves_runtime_and_checksums(build, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "filename", ["model.bin", "private.wav", "model.gguf", ".env", ".ENV.local", "config.json"]
+    "filename",
+    [
+        "model.bin",
+        "private.wav",
+        "model.gguf",
+        ".env",
+        ".ENV.local",
+        "config.json",
+        "history.sqlite3",
+        "history.sqlite3-journal",
+        "History.SQLITE3",
+        "profile.json.history.sqlite3",
+    ],
 )
 def test_weights_audio_and_local_settings_are_refused(build, tmp_path, filename):
     (build / filename).write_bytes(b"must not ship")

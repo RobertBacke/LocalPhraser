@@ -44,6 +44,8 @@ def package(folder: Path, output: Path) -> Path:
                 path.suffix.lower() in (".wav", ".mp3", ".gguf", ".safetensors", ".env")
                 or name.lower() == "model.bin"
                 or name.lower().startswith(".env")
+                or name.lower().startswith("history.sqlite3")
+                or ".history.sqlite3" in name.lower()
                 or path == folder / "config.json"
             ):
                 raise ValueError("Build contains model weights, audio, or local settings.")

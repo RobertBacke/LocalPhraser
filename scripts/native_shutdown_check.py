@@ -74,7 +74,7 @@ def check(
             side_effect=AssertionError("Shutdown check attempted microphone capture"),
         ),
     ):
-        desktop = Desktop(app, config, temporary / "unused-config.json")
+        desktop = Desktop(app, config, temporary / "unused-config.json", persist_history=False)
         desktop.tray.hide()
         pipeline = desktop.pipeline
         backend = pipeline.refiner

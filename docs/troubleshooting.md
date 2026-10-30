@@ -2,10 +2,12 @@
 
 ## Launch or first dictation is confusing
 
-Manual EXE launches now show Settings. Closing it keeps the app in the system tray;
---background is intended for quiet startup. A second launch of the same configuration
-reports the running instance. Older startup entries need startup toggled off/on with Save
-to add the new background flag; normal launch does not silently rewrite registry entries.
+Manual EXE launches show the taskbar workspace. Settings is a page inside the app; Save
+keeps it open, and appearance changes apply immediately. Minimize retains the taskbar
+button. Close leaves dictation in the background; opening the EXE again restores the
+existing window. The tray remains a backup. Use Quit LocalPhraser to fully exit.
+`--background` is intended for quiet startup. Older startup entries can be refreshed by
+toggling startup off/on with Save; normal launch does not rewrite registry entries.
 
 A cold driver start no longer consumes the callback-stall grace period before capture is
 ready. This fixes a reproduced timeout path, not every possible first-recording failure.
@@ -19,11 +21,9 @@ before capture; wait for Ready before speaking. Overflow and disconnected-device
 
 Recognized phrases appear in the non-focusing preview after release as the engine produces
 them; the model does not emit live per-token microphone captions. Final insertion runs on
-the target worker rather than blocking Qt. Longer single-line ASCII output uses
-32-character batches, checking the expected caret and original field before each batch.
-Supported UI Automation editors rebuild the expected position from a fresh document range,
-so saved range anchors moving during edits do not double-advance the expected caret.
-Unsupported navigation or a prefix over 32,000 character units uses one checked dispatch.
+the target worker rather than blocking Qt. Completed text now uses one checked dispatch,
+which avoids the pauses reported with artificially paced typing. Application rendering can
+still vary; recognition and optional polishing must complete before final delivery.
 Final typing starts after recognition and optional polishing finish. To see recent words
 while speaking, enable Live speech preview (experimental) in Settings and Save. The model prepares at launch, after download and after settings save. Wait for Ready;
 drafts can then appear during the first recording. Pressing the shortcut during
@@ -31,11 +31,18 @@ preparation shows a notice and does not begin recording. They update roughly eve
 up, may revise wording, and do not alter the target app. A draft failure pauses preview for
 that recording. This optional work can delay the final result; switch it off if capture or
 latency gets worse on your device.
-The target gets up to 300 ms to process the previous batch; the GUI wait is capped at
-30 seconds and timeout revokes further delivery. Native provider calls cannot be forcibly
-interrupted. Unicode and newlines also use a single dispatch. App rendering varies. A moved target or expired deadline
-stops further delivery; partial text may remain, so inspect before copying and never retry
-automatically. No clipboard contents are changed.
+The GUI wait is capped at 30 seconds and timeout revokes further delivery. Native provider
+calls cannot be forcibly interrupted. Partial text may remain after input failures, so
+inspect before copying; the app never retries automatically or changes the clipboard.
+
+## History and speaking pace
+
+Home shows saved original/result text, copy/delete controls and aggregate statistics. History
+is stored locally beside config.json. Disable Keep transcript history to stop new saves;
+use Clear history to remove old entries. Existing saved files remain when the app is removed.
+Speaking pace is recognized original words divided by recorded minutes, including pauses.
+It is an estimate affected by recognition errors, not a voice-activity or typing-speed score.
+History starts with this feature; the app cannot recover older transcripts that were never saved.
 
 ## Nothing is inserted
 

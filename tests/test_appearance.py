@@ -50,8 +50,10 @@ def test_dialog_and_indicator_render_with_or_without_native_backdrop(
     indicator.live_preview("Words stay readable on the glass surface.")
     app.processEvents()
     for widget in (dialog, indicator):
-        assert widget.native_glass is not native_failure
         assert not widget.grab().isNull()
+    assert dialog.native_glass is not native_failure
+    assert not indicator.native_glass
+    assert indicator.grab().toImage().pixelColor(0, 0).alpha() == 0
     assert indicator.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
     assert indicator.windowFlags() & Qt.WindowType.WindowTransparentForInput
     close = dialog.findChild(QToolButton)

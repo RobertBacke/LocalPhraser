@@ -67,7 +67,11 @@ def check(root: Path, temporary: Path, capture_rate: int, warm_on_launch: bool =
             patch("localphraser.ui.Recorder", lambda *args, **kwargs: Capture()),
         ):
             desktop = Desktop(
-                app, config, temporary / "unused-config.json", warm_on_launch=warm_on_launch
+                app,
+                config,
+                temporary / "unused-config.json",
+                warm_on_launch=warm_on_launch,
+                persist_history=False,
             )
             desktop.tray.hide()
             desktop.notify = lambda message: None
