@@ -20,7 +20,8 @@ dictation providers, which may contain sensitive text. Match actual verification
 CI runs on Windows Python 3.12; CI mocks do not certify cross-application behavior.
 
 `--smoke-test --config <absolute-test-path>` starts Qt, tray, UIA and hotkey registration
-for 1.5 seconds without recording or typing. Use a disposable config directory.
+for 1.5 seconds without recording, typing, downloading or speech-model preparation.
+Use a disposable config directory.
 
 Build `packaging/localphraser.spec` with PyInstaller on Windows. Keep the folder intact.
 The development executable is unsigned and may trigger Windows SmartScreen. Public releases

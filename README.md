@@ -57,12 +57,12 @@ with a short pause and a bounded wait for the expected caret between batches. Un
 multiline text and providers that fail navigation preflight retain a single checked delivery.
 Changing field, window, caret or modifiers stops delivery; check for partial text before
 copying from Latest transcript. The default preview shows completed phrases after recording
-ends. **Live speech preview (experimental)** can be enabled in Settings and saved. After
-the first successful dictation each launch/settings save, it shows recent draft words in
-the floating indicator while you speak, roughly every two seconds when processing keeps up.
+ends. **Live speech preview (experimental)** can be enabled in Settings and saved. The speech model prepares at launch, after its download, and after saving settings.
+Wait for **Ready** before dictating; recent words can then appear on the first recording,
+roughly every two seconds when processing keeps up, under a simple **Listening** heading.
 Drafts may change and stay out of the target app; stopping still transcribes the complete
 recording, polishes it if enabled, and inserts the final text. Preview uses extra CPU and
-can add after-release waiting. It is off by default; no models load while idle.
+can add after-release waiting. It is off by default. Preparation uses discarded local silence, without microphone capture.
 Single-click the tray icon to open or restore Settings; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
@@ -94,10 +94,12 @@ Choose `tiny.en`, `base.en` (default), or `small.en`. They are the MIT-licensed 
 CTranslate2 conversions of OpenAI Whisper English models. `base.en` is an initial
 quality/resource compromise, **not a measured winner**. Inference uses CPU INT8, one worker,
 four threads by default, greedy decoding, and bundled Silero voice activity detection.
-The speech model begins loading on the background inference worker after recording stops,
-so cold model imports cannot starve microphone callbacks. It remains warm until settings
-change or the app exits. The first transcription includes cold loading time; native inference itself
-still takes time. No models load at idle startup.
+With live preview disabled, the speech model loads on the background inference worker
+after recording stops. With live preview enabled, it prepares before recording becomes
+available, including a discarded silence decode to initialize VAD and the speech decoder.
+This keeps cold imports out of microphone capture. It remains warm until settings change
+or the app exits. Native inference still takes time; preparation failures fall back to
+loading after recording.
 
 Models/configuration default to `%LOCALAPPDATA%\LocalPhraser`; custom `--config` paths
 are supported. Model installation resolves and records an immutable repository commit,

@@ -30,6 +30,8 @@ def test_real_model_load_and_vad_with_network_denied(monkeypatch):
     )
     assert recognizer.transcribe(np.zeros(16000, dtype=np.float32)) == ""
     assert recognizer._model is not None
+    recognizer.warm_preview()
+    assert recognizer.preview_ready
 
 
 @pytest.mark.parametrize(
@@ -136,3 +138,40 @@ def test_empty_vad_result_does_not_enable_first_live_speech_decode():
     recognizer._model.transcribe.reset_mock()
     assert recognizer.preview(audio) == ""
     recognizer._model.transcribe.assert_not_called()
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_startup_warmup_initializes_vad_and_decoder_without_retaining_output(fails):
+    recognizer = WhisperRecognizer(Path("unused"))
+    engine = Mock()
+    recognizer._model = engine
+    seen = []
+    consumed = []
+
+    def decode(audio, **kwargs):
+        assert not np.count_nonzero(audio)
+        seen.append((audio, kwargs))
+
+        def segments():
+            if len(seen) == 2 and fails:
+                raise RuntimeError("decoder failed")
+            consumed.append(kwargs["vad_filter"])
+            yield SimpleNamespace(text="discard this silence hallucination")
+
+        return segments(), None
+
+    engine.transcribe.side_effect = decode
+    if fails:
+        with pytest.raises(RuntimeError):
+            recognizer.warm_preview()
+        assert not recognizer.preview_ready
+    else:
+        assert recognizer.warm_preview() is None
+        assert recognizer.preview_ready
+        recognizer.warm_preview()
+        assert consumed == [True, False]
+    assert len(seen) == 2
+    assert seen[0][1]["vad_filter"] is True
+    assert seen[1][1]["vad_filter"] is False
+    assert seen[1][1]["max_new_tokens"] == 1
+    assert all(not np.count_nonzero(audio) for audio, _ in seen)

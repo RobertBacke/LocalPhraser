@@ -102,7 +102,7 @@ class Indicator(QLabel):
 
     def live_preview(self, text: str) -> None:
         if text:
-            self._show_text(f"●  Listening · recent speech draft (may change)\n{text[-200:]}")
+            self._show_text(f"●  Listening\n{text[-200:]}")
         else:
             self.display(State.RECORDING)
 
@@ -291,7 +291,8 @@ class Settings(QDialog):
         self.live_preview.setChecked(config.live_preview)
         self.live_preview.setToolTip(
             "Shows recent words in the floating indicator while recording. "
-            "Available after the first completed dictation each launch/settings save. "
+            "Prepares the speech model at startup, after download and after saving settings. "
+            "Wait for Ready before speaking. "
             "Draft words may change. Uses extra CPU; final text is polished after stopping."
         )
         form.addRow(self.live_preview)
@@ -473,8 +474,10 @@ class Desktop:
         *,
         first_launch: bool = False,
         show_on_launch: bool = False,
+        warm_on_launch: bool = True,
     ):
         self.closing = False
+        self.allow_live_warmup = warm_on_launch
         self.first_launch_setup_started = False
         self.app = app
         self.config = config
@@ -524,6 +527,17 @@ class Desktop:
             QTimer.singleShot(0, self.show_settings)
         if self.hotkey_error:
             QTimer.singleShot(100, lambda: self.notify(self.hotkey_error))
+        QTimer.singleShot(0, self.prepare_live_preview)
+
+    def prepare_live_preview(self) -> bool:
+        if (
+            self.closing
+            or not self.allow_live_warmup
+            or not self.config.live_preview
+            or not self.speech_model_present()
+        ):
+            return False
+        return self.pipeline.warm_live_preview()
 
     def speech_model_present(self) -> bool:
         # Readiness here is a quick local presence check. Recognition still verifies
@@ -553,10 +567,17 @@ class Desktop:
             return
         self.state_changed(self.pipeline.state, "")
         if success and self.speech_model_present():
-            self.notify("Speech model ready. Hold your shortcut to dictate.")
+            self.prepare_live_preview()
+            if self.pipeline.state == State.WARMING:
+                self.notify("Speech model installed. Preparing live preview.")
+            else:
+                self.notify("Speech model ready. Hold your shortcut to dictate.")
 
     def press(self) -> None:
         if self.closing:
+            return
+        if self.pipeline.state == State.WARMING:
+            self.notify("Preparing speech model. Wait for Ready before speaking.")
             return
         if not self.speech_model_present():
             self.show_settings()
@@ -752,6 +773,7 @@ class Desktop:
         self.config = config
         self.pipeline = self.make_pipeline(config)
         self.state_changed(State.IDLE, "")
+        self.prepare_live_preview()
 
     def shutdown(self) -> None:
         self.closing = True

@@ -27,10 +27,13 @@
    prefilled Qt checks passed. The user subsequently confirmed gradual delivery worked in
    their test and felt quicker than all-at-once insertion; broader editor coverage remains.
    Experimental opt-in live speech preview now shows recent revisable words while speaking
-   after the first successful dictation warms ASR. It reuses one bounded six-second snapshot
+   after local ASR preparation. Startup, download and settings save now prepare ASR using
+   discarded silence before capture, making first-recording drafts available once Ready.
+   The user confirmed live words on a later recording and requested the simpler Listening
+   heading, now implemented. It reuses one bounded six-second snapshot
    and the existing worker; final polishing/insertion still happen after stop. Real-device
-   callback-load trials and synthetic 16/48 kHz Qt flow checks passed; live-voice acceptance
-   and broader-device latency/resource profiling remain.
+   callback-load trials and synthetic 16/48 kHz Qt flow checks passed; first-recording
+   live-voice acceptance and broader-device latency/resource profiling remain.
    Cold speech-model loading now waits until
    capture stops after a real-device test reproduced callback overflow during loading.
    The user now reports quick, accurate live dictation with their own microphone. This is

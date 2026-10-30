@@ -16,6 +16,7 @@ from localphraser.refinement import RefinementRejected, Refiner, preserve_words
 
 class State(StrEnum):
     IDLE = "Ready"
+    WARMING = "Preparing speech model"
     RECORDING = "Listening"
     TRANSCRIBING = "Transcribing"
     POLISHING = "Polishing"
@@ -82,6 +83,7 @@ class Dictation:
         self.live_preview = live_preview
         self.live_result = live_result
         self.preview_pending: Future[str] | None = None
+        self.warm_pending: Future[Any] | None = None
         self.preview_after = 0.0
         self.preview_disabled = False
         self.released_at: float | None = None
@@ -112,6 +114,37 @@ class Dictation:
         if future.cancelled():
             audio.fill(0)
         self._post(callback)
+
+    def warm_live_preview(self) -> bool:
+        warm = getattr(self.recognizer, "warm_preview", None)
+        if (
+            self.closed
+            or not self.live_preview
+            or self.state != State.IDLE
+            or self.warm_pending is not None
+            or getattr(self.recognizer, "preview_ready", False) is True
+            or not callable(warm)
+        ):
+            return False
+        self._state(State.WARMING)
+        future = self.executor.submit(warm)
+        self.warm_pending = future
+        future.add_done_callback(lambda f: self._post(lambda: self._warm_finished(f)))
+        return True
+
+    def _warm_finished(self, future: Future[Any]) -> None:
+        if self.closed:
+            return
+        self.warm_pending = None
+        try:
+            future.result()
+        except Exception:
+            self._state(
+                State.IDLE,
+                "Live preview could not be prepared. Dictation will try after recording.",
+            )
+            return
+        self._state(State.IDLE)
 
     def press(self) -> None:
         if self.closed or self.state != State.IDLE:

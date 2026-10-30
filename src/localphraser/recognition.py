@@ -5,6 +5,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
+import numpy as np
+
 from localphraser.audio import Audio
 
 
@@ -25,7 +27,7 @@ class WhisperRecognizer:
         self.preview_ready = False
 
     def prepare(self) -> None:
-        """Load verified local weights on the inference worker after capture stops."""
+        """Load verified local weights while microphone capture is stopped."""
         # Also protects against optional tokenizer fallbacks contacting the model hub.
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -52,6 +54,29 @@ class WhisperRecognizer:
         text = self._decode(audio, partial)
         self.preview_ready = self.preview_ready or bool(text)
         return text
+
+    def warm_preview(self) -> None:
+        """Initialize VAD and the speech decoder using discarded local silence."""
+        if self.preview_ready:
+            return
+        self.prepare()
+        audio = np.zeros(16000, dtype=np.float32)
+        try:
+            self._decode(audio)  # Initialize the VAD path, even without detected speech.
+            segments, _ = self._model.transcribe(
+                audio,
+                language="en",
+                beam_size=1,
+                vad_filter=False,
+                condition_on_previous_text=False,
+                temperature=0,
+                max_new_tokens=1,
+            )
+            for _ in segments:
+                pass  # Silence can produce words; none are displayed or retained.
+            self.preview_ready = True
+        finally:
+            audio.fill(0)
 
     def preview(self, audio: Audio) -> str:
         # Cold imports/VAD initialization previously starved microphone callbacks.

@@ -227,7 +227,7 @@ def test_live_preview_setting_and_non_focusing_draft_indicator(app, monkeypatch)
     settings.close()
     indicator = Indicator()
     indicator.live_preview("<b>" + "x" * 1000)
-    assert "may change" in indicator.text() and len(indicator.text()) < 280
+    assert indicator.text() == "●  Listening\n" + "x" * 200
     assert indicator.textFormat() == Qt.TextFormat.PlainText
     assert indicator.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
     indicator.live_preview("")

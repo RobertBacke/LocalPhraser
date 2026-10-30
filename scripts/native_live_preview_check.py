@@ -17,7 +17,7 @@ from localphraser.refinement import preserve_words
 from localphraser.ui import Desktop
 
 
-def check(root: Path, temporary: Path, capture_rate: int) -> None:
+def check(root: Path, temporary: Path, capture_rate: int, warm_on_launch: bool = False) -> None:
     temporary.mkdir(parents=True, exist_ok=True)
     reference = synthetic_audio(temporary, capture_rate)
     snapshots = []
@@ -66,7 +66,9 @@ def check(root: Path, temporary: Path, capture_rate: int) -> None:
             patch.object(Hotkey, "register"),
             patch("localphraser.ui.Recorder", lambda *args, **kwargs: Capture()),
         ):
-            desktop = Desktop(app, config, temporary / "unused-config.json")
+            desktop = Desktop(
+                app, config, temporary / "unused-config.json", warm_on_launch=warm_on_launch
+            )
             desktop.tray.hide()
             desktop.notify = lambda message: None
             pipeline = desktop.pipeline
@@ -76,7 +78,7 @@ def check(root: Path, temporary: Path, capture_rate: int) -> None:
                     assert pipeline.state == State.RECORDING
                     drafts.append(time.monotonic() - started)
                     desktop.indicator.live_preview(text)
-                    assert "may change" in desktop.indicator.text()
+                    assert desktop.indicator.text().startswith("●  Listening\n")
                     desktop.indicator.grab().save(str(temporary / "owned-live-indicator.png"))
 
             pipeline.live_result = draft
@@ -95,7 +97,7 @@ def check(root: Path, temporary: Path, capture_rate: int) -> None:
                         assert preserve_words(raw, desktop.latest.text.toPlainText())
                         assert pipeline.recognizer.preview_ready
                         assert not desktop.indicator.text()
-                        if completed == 0:
+                        if completed == 0 and not warm_on_launch:
                             assert not drafts and not snapshots, (
                                 "Cold capture ran preview inference."
                             )
@@ -118,7 +120,16 @@ def check(root: Path, temporary: Path, capture_rate: int) -> None:
             timer.setInterval(50)
             timer.timeout.connect(poll)
             timer.start()
-            QTimer.singleShot(0, lambda: begin(100))
+
+            def first_recording() -> None:
+                if pipeline.state == State.WARMING:
+                    QTimer.singleShot(50, first_recording)
+                    return
+                if warm_on_launch:
+                    assert pipeline.recognizer.preview_ready
+                begin(7000 if warm_on_launch else 100)
+
+            QTimer.singleShot(0, first_recording)
             code = app.exec()
             timer.stop()
             pipeline.executor.shutdown(wait=True)
@@ -128,7 +139,7 @@ def check(root: Path, temporary: Path, capture_rate: int) -> None:
             assert not desktop.latest.text.toPlainText() and not desktop.latest.raw.toPlainText()
             assert all(not a.any() for a in snapshots)
             print(
-                f"Owned Qt live preview passed: cold capture skipped drafts; "
+                f"Owned Qt live preview passed: startup warm-up={warm_on_launch}; "
                 f"{len(drafts)} warm drafts; final recognition/polishing; "
                 f"{capture_rate} Hz; clean exit."
             )
@@ -143,5 +154,6 @@ if __name__ == "__main__":
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--temp-dir", type=Path, required=True)
     parser.add_argument("--capture-rate", type=int, choices=(16000, 48000), default=16000)
+    parser.add_argument("--warm-on-launch", action="store_true")
     args = parser.parse_args()
-    check(args.root.resolve(), args.temp_dir.resolve(), args.capture_rate)
+    check(args.root.resolve(), args.temp_dir.resolve(), args.capture_rate, args.warm_on_launch)

@@ -33,10 +33,12 @@ def test_new_profile_saved_before_setup_and_existing_profile_never_auto_retries(
     run, path, observed = launch
     assert run() == 0
     assert path.is_file() and observed[-1][1]["first_launch"]
+    assert observed[-1][1]["warm_on_launch"]
     config = replace(load_config(path), model="small.en", vocabulary="fixture")
     save_config(config, path)
     assert run() == 0
     assert not observed[-1][1]["first_launch"]
+    assert observed[-1][1]["warm_on_launch"]
     assert load_config(path) == config
 
 
@@ -45,6 +47,7 @@ def test_smoke_launch_never_downloads_or_marks_profile_initialized(launch):
     assert run("--smoke-test") == 0
     assert not path.exists()
     assert not observed[-1][1]["first_launch"]
+    assert not observed[-1][1]["warm_on_launch"]
 
 
 def test_profile_save_failure_prevents_auto_download(launch, monkeypatch):
@@ -180,3 +183,41 @@ def test_real_polishing_timeout_still_notifies(desktop):
     desktop.notify.reset_mock()
     desktop.state_changed(State.IDLE, "Polishing timed out; using raw transcription. Inserted.")
     desktop.notify.assert_called_once()
+
+
+@pytest.mark.parametrize("blocked", ["disabled", "missing", "smoke", "closing", "none"])
+def test_preview_preparation_requires_opt_in_installed_model_and_normal_launch(desktop, blocked):
+    if blocked != "missing":
+        publish_fixture_model(desktop)
+    desktop.config = replace(desktop.config, live_preview=blocked != "disabled")
+    desktop.allow_live_warmup = blocked != "smoke"
+    desktop.closing = blocked == "closing"
+    desktop.prepare_live_preview()
+    assert desktop.pipeline.warm_live_preview.call_count == (blocked == "none")
+
+
+def test_download_warms_preview_and_shortcut_does_not_capture_until_ready(desktop):
+    desktop.config = replace(desktop.config, live_preview=True)
+    publish_fixture_model(desktop)
+
+    def warming():
+        desktop.pipeline.state = State.WARMING
+        return True
+
+    desktop.pipeline.warm_live_preview.side_effect = warming
+    desktop.model_download_finished(True, False)
+    assert "Preparing live preview" in desktop.notify.call_args.args[0]
+    desktop.press()
+    desktop.pipeline.press.assert_not_called()
+    assert "Wait for Ready" in desktop.notify.call_args.args[0]
+    desktop.pipeline.state = State.IDLE
+    desktop.press()
+    desktop.pipeline.press.assert_called_once()
+
+
+def test_saving_settings_prepares_new_live_recognizer(desktop):
+    publish_fixture_model(desktop)
+    desktop.pipeline.warm_live_preview.reset_mock()
+    desktop.apply(replace(desktop.config, live_preview=True))
+    desktop.pipeline.shutdown.assert_called_once()
+    desktop.pipeline.warm_live_preview.assert_called_once()

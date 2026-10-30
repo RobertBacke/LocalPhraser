@@ -94,6 +94,54 @@ def finish(callbacks):
     callbacks.get(timeout=5)()
 
 
+@pytest.mark.parametrize("outcome", ["ready", "failure", "shutdown"])
+def test_live_warmup_blocks_capture_and_recovers_without_polishing(setup, outcome):
+    pipeline, recorder, recognizer, insertion, callbacks, changes, results = setup
+    recognizer.preview_ready = False
+    entered, release = threading.Event(), threading.Event()
+
+    def warm():
+        entered.set()
+        assert release.wait(5)
+        if outcome == "failure":
+            raise RuntimeError("sensitive details")
+        recognizer.preview_ready = True
+
+    recognizer.warm_preview = Mock(side_effect=warm)
+    pipeline.refiner = Mock()
+    assert not pipeline.warm_live_preview()  # Opt-in only.
+    pipeline.live_preview = True
+    assert pipeline.warm_live_preview()
+    assert entered.wait(5)
+    assert pipeline.state == State.WARMING
+    assert not pipeline.warm_live_preview()
+    pipeline.press()
+    pipeline.release()
+    assert recorder.started == 0
+    insertion.capture = Mock()
+    if outcome == "shutdown":
+        pipeline.shutdown()
+    release.set()
+    pipeline.executor.shutdown(wait=True)
+    if outcome == "shutdown":
+        assert callbacks.empty()
+    else:
+        finish(callbacks)
+        assert pipeline.state == State.IDLE
+        assert pipeline.warm_pending is None
+        assert "sensitive" not in str(changes)
+        if outcome == "ready":
+            assert not pipeline.warm_live_preview()
+        else:
+            assert "could not be prepared" in changes[-1][1]
+        pipeline.press()
+        assert recorder.started == 1
+        pipeline.cancel()
+    assert not results
+    pipeline.refiner.prepare.assert_not_called()
+    pipeline.refiner.refine.assert_not_called()
+
+
 def test_end_to_end_with_injected_ports(setup):
     pipeline, recorder, _, insertion, callbacks, changes, results = setup
     pipeline.press()

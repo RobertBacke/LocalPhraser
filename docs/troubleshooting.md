@@ -11,8 +11,9 @@ A cold driver start no longer consumes the callback-stall grace period before ca
 ready. This fixes a reproduced timeout path, not every possible first-recording failure.
 Latest transcript retains the last sanitized error through later successes until Clear/exit.
 A real-device cold-start test also reproduced an input overflow while speech-model loading
-overlapped capture. Loading now waits until recording stops; first transcription therefore
-includes cold loading time. Overflow and disconnected-device checks remain enabled.
+overlapped capture. With live preview disabled, loading waits until recording stops; first transcription
+therefore includes cold loading time. With live preview enabled, preparation happens
+before capture; wait for Ready before speaking. Overflow and disconnected-device checks remain enabled.
 
 ## Output appears unevenly
 
@@ -24,9 +25,9 @@ Supported UI Automation editors rebuild the expected position from a fresh docum
 so saved range anchors moving during edits do not double-advance the expected caret.
 Unsupported navigation or a prefix over 32,000 character units uses one checked dispatch.
 Final typing starts after recognition and optional polishing finish. To see recent words
-while speaking, enable Live speech preview (experimental) in Settings and Save. The first
-successful dictation warms the model; drafts start on following recordings until settings
-change or the app exits. They update roughly every two seconds when CPU processing keeps
+while speaking, enable Live speech preview (experimental) in Settings and Save. The model prepares at launch, after download and after settings save. Wait for Ready;
+drafts can then appear during the first recording. Pressing the shortcut during
+preparation shows a notice and does not begin recording. They update roughly every two seconds when CPU processing keeps
 up, may revise wording, and do not alter the target app. A draft failure pauses preview for
 that recording. This optional work can delay the final result; switch it off if capture or
 latency gets worse on your device.

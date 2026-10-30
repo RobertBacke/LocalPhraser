@@ -207,6 +207,7 @@ def main() -> int:
         args.config,
         first_launch=first_launch,
         show_on_launch=not args.background and not args.smoke_test,
+        warm_on_launch=not args.smoke_test,
     )
     if args.smoke_test:
         QTimer.singleShot(1500, app.quit)

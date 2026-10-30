@@ -13,8 +13,9 @@ ASR receives arrays, not file paths; CPU inference and Silero VAD run locally. T
 sets HF_HUB_OFFLINE and uses a verified local model directory with local_files_only=True.
 Optional live preview copies up to six seconds of the active recording into a short-lived
 RAM snapshot. Warm local ASR produces a revisable draft only in the indicator; snapshots
-are cleared after processing and stale UI updates are discarded. No preview capture or
-model warm-up runs while idle. The full recording remains the input for final dictation.
+are cleared after processing and stale UI updates are discarded. No preview capture runs while idle. With live preview enabled, startup, model download
+and settings save prepare the local speech model using generated silence. That silence
+and any decode output are discarded; no microphone audio is used for preparation. The full recording remains the input for final dictation.
 No dictated content is logged. Exceptions shown to users are sanitized. No analytics,
 accounts, telemetry, history database, updater, or cloud inference client.
 
@@ -49,7 +50,7 @@ application command and absolute config path, not transcripts. It does not enabl
 at sign-in; Keep microphone ready still opens only an inactive stream until recording starts.
 
 Optional polishing passes text over a private multiprocessing pipe to a local CPU worker.
-Its model starts loading in the background after the first Polished recording begins,
+Its model starts loading in the background after the first Polished recording stops,
 without receiving audio or transcript text. Text is sent only after recognition finishes.
 Preparation may continue after a cancelled recording, keeping the model ready for later use;
 switching to Raw or quitting releases it.

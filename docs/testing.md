@@ -675,3 +675,37 @@ Python strings, native allocations or OS paging/crash dumps.
 
 After the queued-audio cleanup fix, the full suite passed **280 tests** with the real offline
 ASR test enabled. Ruff, formatting, mypy and the source wheel/archive build also passed.
+
+
+## 2026-10-30: first-recording live preview and simpler indicator
+
+The user confirmed live words on their second recording and requested a clean Listening
+heading. The indicator now omits the draft/parenthetical labels. Opt-in live preview prepares
+ASR at launch, after speech-model download and after settings save. The Preparing speech
+model state blocks capture; completion returns Ready. Generated silence initializes VAD
+and a one-token non-VAD decoder call, with all output discarded. Polishing remains deferred
+until the user stops recording. Smoke launch suppresses preparation.
+
+- **292 tests passed**, including the real local small.en check with network connections
+  denied; the expanded offline recognition group also passed after adding explicit warm-up.
+- Five new warm-up regression cases failed against the previous source and passed with
+  the change. Tests cover capture gating, deduplication, failure recovery, shutdown,
+  discarded decoder output, opt-in/model availability, download completion, settings save
+  and smoke suppression. An older isolated Desktop fixture needed its normal lifecycle
+  fields initialized after preparation was added to Save.
+- Owned Qt startup checks with real small.en and Qwen1.5B passed at **16 and 48 kHz**.
+  Both produced live drafts during the first recording after startup preparation, completed
+  final recognition/polishing and exited cleanly. The owned indicator screenshot was
+  visually inspected for the simple Listening heading.
+- A metadata-only real microphone stress check warmed using generated silence, then ran
+  synthetic reference decoding during three captures. All remained healthy with no callback
+  flags; nine synthetic previews took **1.966–2.285 seconds**. Personal microphone samples
+  were neither saved nor transcribed and captured buffers were cleared. This is one device
+  under local test load, not a general latency guarantee.
+- Ruff check/format and mypy passed. Source wheel/sdist and staged Windows folder build
+  completed. The rebuilt EXE passed real local small.en/Qwen1.5B runtime validation with
+  48 kHz conversion and an owned-profile GUI smoke launch. Its inventory covered 32
+  distributions; public binary release review remains open.
+
+First-recording live voice acceptance on the user's app remains a follow-up. Preparation
+adds startup work and cannot guarantee instantaneous readiness; the user must wait for Ready.

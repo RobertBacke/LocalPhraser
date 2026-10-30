@@ -86,20 +86,24 @@ Do not represent this as universal compatibility or a formal security boundary.
 
 ## Experimental live speech preview
 
-`live_preview` defaults to false. A successful nonempty final ASR pass marks the recognizer
-ready for warm preview; model preparation or an empty VAD result does not. This avoids the
-cold import/model initialization that previously caused first-recording audio overflow.
+`live_preview` defaults to false. When enabled, launch, successful speech-model download
+and settings save request asynchronous preparation on the serial ASR executor. The
+Preparing speech model state blocks recording until completion. One second of generated
+silence initializes VAD and a separate one-token decode with VAD disabled initializes the
+speech decoder; any output is discarded. No microphone audio or polishing is used.
+A failure returns Ready with a sanitized notice and leaves deferred loading available.
+A successful nonempty final ASR pass also enables preview. Cold imports never run during
+capture, avoiding the reproduced first-recording overflow.
 A 100 ms UI watchdog may request a draft every two seconds while recording. The recorder
 copies at most six seconds of published frames; idle/failed streams return no audio.
 One pending preview at a time uses the existing serial ASR executor. Conversion and warm
 ASR happen there; snapshots and converted buffers are cleared in finally blocks. A shared
 completion path also clears audio when shutdown cancels a queued task before it can run.
 
-Draft output only reaches the non-focusing indicator, labeled as recent speech that may
-change. Session generation and recording-state checks reject late drafts after release,
+Draft output only reaches the non-focusing indicator below a plain Listening heading. Session generation and recording-state checks reject late drafts after release,
 cancel, a subsequent recording or shutdown. Queued previews skip decoding after release;
 a native preview already running may finish before final transcription can start. Failures
 pause draft processing for that recording while leaving final transcription available.
 Final ASR still reads the complete recording and polishing runs only on that final result.
-Settings changes create a cold recognizer, so another successful dictation is needed before
-live drafts resume. Drafts are neither stable per-token hypotheses nor inserted target text.
+Settings changes create a cold recognizer and request preparation again when enabled.
+Smoke launches suppress preparation even with live preview enabled. Drafts are neither stable per-token hypotheses nor inserted target text.
