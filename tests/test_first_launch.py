@@ -221,3 +221,17 @@ def test_saving_settings_prepares_new_live_recognizer(desktop):
     desktop.apply(replace(desktop.config, live_preview=True))
     desktop.pipeline.shutdown.assert_called_once()
     desktop.pipeline.warm_live_preview.assert_called_once()
+
+
+def test_appearance_save_preserves_warm_pipeline_and_latest_transcript(desktop, monkeypatch):
+    appearance = Mock()
+    monkeypatch.setattr(ui, "set_appearance", appearance)
+    pipeline = desktop.pipeline
+    desktop.latest.set_transcript("Keep this result.", "Manual copy.")
+    desktop.apply(replace(desktop.config, theme="dark"))
+    assert desktop.pipeline is pipeline
+    pipeline.shutdown.assert_not_called()
+    pipeline.warm_live_preview.assert_not_called()
+    assert desktop.latest.text.toPlainText() == "Keep this result."
+    assert load_config(desktop.config_path).theme == "dark"
+    appearance.assert_called_once_with("dark")

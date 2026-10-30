@@ -33,7 +33,8 @@
    heading, now implemented. It reuses one bounded six-second snapshot
    and the existing worker; final polishing/insertion still happen after stop. Real-device
    callback-load trials and synthetic 16/48 kHz Qt flow checks passed; first-recording
-   live-voice acceptance and broader-device latency/resource profiling remain.
+   live-voice acceptance is now confirmed by the user on the first recording;
+   broader-device latency/resource profiling remains.
    Cold speech-model loading now waits until
    capture stops after a real-device test reproduced callback overflow during loading.
    The user now reports quick, accurate live dictation with their own microphone. This is
@@ -55,7 +56,8 @@
    cancellable model downloads with owned-job cleanup and per-model locks, exact microphone
    name/API selection, scrollable Settings, and Raw/Result comparison. Disposable registry
    and actual installer cancellation checks passed. Actual sign-in launch, wider device/driver,
-   accessibility and multi-monitor acceptance remain; optional dark/light styling is deferred.
+   accessibility and multi-monitor acceptance remain. System/Light/Dark appearance selection
+   is implemented; appearance-only saves preserve the warm pipeline and latest transcript.
    Capture now cancels if callbacks stop for three seconds, including drivers still reporting
    active. Quiet frames stay healthy. Simulated stall/recovery and a ten-cycle real-model
    Qt session check passed; actual device-unplug and longer consumer sessions remain.

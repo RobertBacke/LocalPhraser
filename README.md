@@ -66,7 +66,8 @@ can add after-release waiting. It is off by default. Preparation uses discarded 
 Single-click the tray icon to open or restore Settings; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
-and automatic insertion. Raw mode is the default. Optional Polished mode adds local
+and automatic insertion. Appearance can follow the system or use Light or Dark; saving only
+appearance preserves the loaded speech model. Raw mode is the default. Optional Polished mode adds local
 punctuation, capitalization, and hesitation removal. **Start LocalPhraser upon startup** is opt-in:
 enable it in Settings and Save after choosing a permanent application location.
 Microphones use exact device names and audio APIs; ambiguous duplicates are refused.

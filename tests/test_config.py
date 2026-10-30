@@ -47,6 +47,8 @@ def test_roundtrip(tmp_path):
         {"keep_microphone_ready": "yes"},
         {"start_at_login": "yes"},
         {"live_preview": "yes"},
+        {"theme": "neon"},
+        {"theme": None},
         {"vocabulary": None},
         {"vocabulary": ["Codex"]},
         {"vocabulary": "x" * 301},
@@ -84,3 +86,10 @@ def test_older_settings_preserve_model_and_default_to_no_hints(tmp_path):
     assert config.live_preview is False
     assert config.model == "small.en"
     assert config.hotkey == "F9"
+
+
+@pytest.mark.parametrize("theme", ["system", "light", "dark"])
+def test_appearance_roundtrip(theme, tmp_path):
+    path = tmp_path / "config.json"
+    save_config(Config(theme=theme), path)
+    assert load_config(path).theme == theme

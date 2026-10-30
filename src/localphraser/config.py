@@ -64,6 +64,7 @@ class Config:
     refinement_timeout: int = 15
     start_at_login: bool = False
     live_preview: bool = False
+    theme: str = "system"
 
     def validate(self) -> "Config":
         if not isinstance(self.hotkey, str):
@@ -85,6 +86,8 @@ class Config:
             raise ValueError("Launch upon startup must be true or false.")
         if type(self.live_preview) is not bool:
             raise ValueError("Live preview must be true or false.")
+        if self.theme not in ("system", "light", "dark"):
+            raise ValueError("Choose System, Light or Dark appearance.")
         if not isinstance(self.vocabulary, str) or len(self.vocabulary) > 300:
             raise ValueError("Vocabulary hints must be text of at most 300 characters.")
         if any(ord(char) < 32 or ord(char) == 127 for char in self.vocabulary):

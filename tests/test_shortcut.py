@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QDialogButtonBox, QScrollArea
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QScrollArea
 
 from localphraser.config import Config
 from localphraser.pipeline import State
@@ -236,3 +236,24 @@ def test_live_preview_setting_and_non_focusing_draft_indicator(app, monkeypatch)
     assert not indicator.text()
     indicator.close()
     indicator.deleteLater()
+
+
+@pytest.mark.parametrize("theme", ["system", "light", "dark"])
+def test_settings_appearance_selection_and_native_scheme(app, monkeypatch, theme):
+    from localphraser.ui import set_appearance
+
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    settings = Settings(Config(theme=theme), Mock())
+    assert settings.theme.currentData() == theme
+    assert settings.values().theme == theme
+    hints = Mock()
+    monkeypatch.setattr(QApplication, "styleHints", lambda: hints)
+    set_appearance(theme)
+    hints.setColorScheme.assert_called_once_with(
+        {
+            "system": Qt.ColorScheme.Unknown,
+            "light": Qt.ColorScheme.Light,
+            "dark": Qt.ColorScheme.Dark,
+        }[theme]
+    )
+    settings.close()

@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
@@ -41,6 +42,16 @@ from localphraser.recognition import WhisperRecognizer
 from localphraser.refinement import LocalRefiner
 from localphraser.shortcut import HINT, ShortcutRecorder
 from localphraser.target_worker import TargetWorker
+
+
+def set_appearance(theme: str) -> None:
+    QApplication.styleHints().setColorScheme(
+        {
+            "system": Qt.ColorScheme.Unknown,
+            "light": Qt.ColorScheme.Light,
+            "dark": Qt.ColorScheme.Dark,
+        }[theme]
+    )
 
 
 def app_icon(recording: bool = False) -> QIcon:
@@ -215,6 +226,11 @@ class Settings(QDialog):
         layout.addWidget(self.setup_notice)
         form = QFormLayout()
         form.setVerticalSpacing(14)
+        self.theme = QComboBox()
+        for label, value in (("System", "system"), ("Light", "light"), ("Dark", "dark")):
+            self.theme.addItem(label, value)
+        self.theme.setCurrentIndex(self.theme.findData(config.theme))
+        form.addRow("Appearance", self.theme)
         self.hotkey = ShortcutRecorder(config.hotkey, begin_capture, end_capture)
         form.addRow("Global shortcut", self.hotkey)
         shortcut_hint = QLabel(HINT)
@@ -399,6 +415,7 @@ class Settings(QDialog):
             refinement_timeout=self.refinement_timeout.value(),
             start_at_login=self.start_at_login.isChecked(),
             live_preview=self.live_preview.isChecked(),
+            theme=self.theme.currentData(),
         ).validate()
 
     def save(self) -> None:
@@ -481,6 +498,7 @@ class Desktop:
         self.first_launch_setup_started = False
         self.app = app
         self.config = config
+        set_appearance(config.theme)
         self.config_path = config_path
         self.bridge = Bridge()
         self.audio_preparer = ThreadPoolExecutor(
@@ -769,8 +787,13 @@ class Desktop:
             if changed_hotkey:
                 self.hotkey.register(self.config.hotkey)
             raise
-        self.pipeline.shutdown()
+        appearance_only = replace(config, theme=self.config.theme) == self.config
+        if config.theme != self.config.theme:
+            set_appearance(config.theme)
         self.config = config
+        if appearance_only:
+            return
+        self.pipeline.shutdown()
         self.pipeline = self.make_pipeline(config)
         self.state_changed(State.IDLE, "")
         self.prepare_live_preview()
