@@ -7,11 +7,10 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QColor, QCursor, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QComboBox,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
@@ -32,10 +31,12 @@ from PySide6.QtWidgets import (
 )
 
 from localphraser import startup
-from localphraser.appearance import GlassDialog, GlassLabel
+from localphraser.appearance import GlassComboBox, GlassDialog, GlassLabel
 from localphraser.audio import Recorder, microphones
+from localphraser.branding import app_icon
 from localphraser.config import (
     DEFAULT_PROMPT,
+    MODEL_HINTS,
     MODELS,
     REFINEMENT_MODELS,
     Config,
@@ -46,7 +47,7 @@ from localphraser.downloads import ModelDownload
 from localphraser.history import History
 from localphraser.home import AppWindow
 from localphraser.hotkey import Hotkey
-from localphraser.models import FILES
+from localphraser.models import model_files
 from localphraser.pipeline import Dictation, State
 from localphraser.recognition import WhisperRecognizer
 from localphraser.refinement import LocalRefiner
@@ -62,22 +63,6 @@ def set_appearance(theme: str) -> None:
             "dark": Qt.ColorScheme.Dark,
         }[theme]
     )
-
-
-def app_icon(recording: bool = False) -> QIcon:
-    pixmap = QPixmap(64, 64)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor("#f06464" if recording else "#428c78"))
-    painter.drawRoundedRect(4, 4, 56, 56, 16, 16)
-    painter.setBrush(QColor("#ffffff"))
-    painter.drawRoundedRect(25, 14, 14, 27, 7, 7)
-    painter.drawRect(30, 38, 4, 11)
-    painter.drawRoundedRect(22, 47, 20, 4, 2, 2)
-    painter.end()
-    return QIcon(pixmap)
 
 
 class Bridge(QObject):
@@ -247,7 +232,7 @@ class Settings(GlassDialog):
         layout.addWidget(self.setup_notice)
         form = QFormLayout()
         form.setVerticalSpacing(14)
-        self.theme = QComboBox()
+        self.theme = GlassComboBox()
         for label, value in (("System", "system"), ("Light", "light"), ("Dark", "dark")):
             self.theme.addItem(label, value)
         self.theme.setCurrentIndex(self.theme.findData(config.theme))
@@ -267,7 +252,7 @@ class Settings(GlassDialog):
         shortcut_hint.setWordWrap(True)
         self.hotkey.message.connect(shortcut_hint.setText)
         form.addRow(shortcut_hint)
-        self.device = QComboBox()
+        self.device = GlassComboBox()
         self.device.addItem("System default", None)
         choices = []
         try:
@@ -292,10 +277,16 @@ class Settings(GlassDialog):
             "use System default for those devices."
         )
         form.addRow("Microphone", self.device)
-        self.model = QComboBox()
+        self.model = GlassComboBox()
         self.model.addItems(MODELS)
         self.model.setCurrentText(config.model)
         form.addRow("English speech model", self.model)
+        model_hint = QLabel(MODEL_HINTS[config.model])
+        model_hint.setWordWrap(True)
+        self.model.currentTextChanged.connect(lambda name: model_hint.setText(MODEL_HINTS[name]))
+        for index, name in enumerate(MODELS):
+            self.model.setItemData(index, MODEL_HINTS[name], Qt.ItemDataRole.ToolTipRole)
+        form.addRow(model_hint)
         self.vocabulary = QLineEdit(config.vocabulary)
         self.vocabulary.setMaxLength(300)
         self.vocabulary.setPlaceholderText("Optional names or terms, separated by commas")
@@ -349,15 +340,21 @@ class Settings(GlassDialog):
             "Keep this application folder in place after enabling."
         )
         form.addRow(self.start_at_login)
-        self.mode = QComboBox()
+        self.mode = GlassComboBox()
         self.mode.addItem("Raw", "raw")
         self.mode.addItem("Polished (experimental, local)", "polished")
         self.mode.setCurrentIndex(self.mode.findData(config.mode))
         form.addRow("Mode", self.mode)
+        mode_hint = QLabel(
+            "Raw delivers recognized text fastest. Polished adds a local editing step after "
+            "recognition; larger polishing models can take longer."
+        )
+        mode_hint.setWordWrap(True)
+        form.addRow(mode_hint)
         layout.addLayout(form)
         self.polishing = QGroupBox("Local polishing")
         polishing_form = QFormLayout(self.polishing)
-        self.refinement_model = QComboBox()
+        self.refinement_model = GlassComboBox()
         self.refinement_model.addItems(REFINEMENT_MODELS)
         self.refinement_model.setCurrentText(config.refinement_model)
         polishing_form.addRow("Q4 CPU model", self.refinement_model)
@@ -633,7 +630,10 @@ class Desktop:
         # Readiness here is a quick local presence check. Recognition still verifies
         # all hashes before loading; the installer verifies hashes before publishing.
         folder = Path(self.config.model_root) / self.config.model
-        return all((folder / name).is_file() for name in (*FILES, "localphraser-manifest.json"))
+        return all(
+            (folder / name).is_file()
+            for name in (*model_files(self.config.model), "localphraser-manifest.json")
+        )
 
     def start_first_launch_setup(self) -> None:
         if self.closing or self.first_launch_setup_started or self.speech_model_present():

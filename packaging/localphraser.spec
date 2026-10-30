@@ -48,5 +48,6 @@ a = Analysis([str(project / "packaging" / "entry.py")], pathex=[str(project / "s
              excludes=["tkinter", "pytest", "mypy", "ruff"])
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="LocalPhraser",
-          debug=False, strip=False, upx=False, console=False)
+          debug=False, strip=False, upx=False, console=False,
+          icon=str(project / "packaging" / "localphraser.ico"))
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="LocalPhraser")

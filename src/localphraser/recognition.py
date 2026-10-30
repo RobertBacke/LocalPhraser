@@ -92,6 +92,7 @@ class WhisperRecognizer:
             vad_filter=True,
             condition_on_previous_text=False,
             temperature=0,
+            without_timestamps=True,
             hotwords=self.vocabulary or None,
         )
         parts = []

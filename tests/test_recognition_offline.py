@@ -49,6 +49,7 @@ def test_hints_reach_engine_without_replacing_recognized_words(vocabulary, expec
     assert args[0] is audio
     assert kwargs["hotwords"] == expected
     assert kwargs["vad_filter"] is True
+    assert kwargs["without_timestamps"] is True
 
 
 def test_prepare_loads_local_model_once_without_inference(monkeypatch, tmp_path):

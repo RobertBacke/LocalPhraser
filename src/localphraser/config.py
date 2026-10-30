@@ -5,7 +5,15 @@ import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-MODELS = ("tiny.en", "base.en", "small.en")
+MODELS = ("tiny.en", "base.en", "small.en", "distil-small.en", "distil-medium.en", "medium.en")
+MODEL_HINTS = {
+    "tiny.en": "Smallest download (~75 MB). Prioritizes speed; less reliable on difficult speech.",
+    "base.en": "Compact (~145 MB). A fast starting point for everyday English dictation.",
+    "small.en": "Balanced (~485 MB). More demanding than Base, with stronger recognition.",
+    "distil-small.en": "Distilled English (~335 MB). Fewer decoder layers; try for lower latency.",
+    "distil-medium.en": "Distilled English (~790 MB). Larger encoder; speed depends on your CPU.",
+    "medium.en": "Largest option (~1.53 GB). More CPU and memory; expect longer processing.",
+}
 REFINEMENT_MODELS = ("qwen2.5-0.5b", "qwen2.5-1.5b")
 DEFAULT_REFINEMENT_MODEL = "qwen2.5-1.5b"
 DEFAULT_PROMPT = (

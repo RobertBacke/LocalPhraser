@@ -14,13 +14,17 @@ from localphraser.config import MODELS, REFINEMENT_MODELS
 FILES = ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt")
 
 
+def model_files(name: str) -> tuple[str, ...]:
+    return (*FILES[:-1], "vocabulary.json") if name.startswith("distil-") else FILES
+
+
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def verify_model(path: Path) -> None:
-    verify_artifacts(path, FILES)
+    verify_artifacts(path, model_files(path.name))
 
 
 def verify_artifacts(path: Path, files: tuple[str, ...]) -> None:
@@ -43,7 +47,12 @@ def install_model(name: str, root: Path, *, job_id: str | None = None) -> Path:
     """
     if name not in MODELS:
         raise ValueError("Unsupported model.")
-    return install_artifacts(name, root, f"Systran/faster-whisper-{name}", FILES, job_id=job_id)
+    repo = (
+        f"Systran/faster-distil-whisper-{name.removeprefix('distil-')}"
+        if name.startswith("distil-")
+        else f"Systran/faster-whisper-{name}"
+    )
+    return install_artifacts(name, root, repo, model_files(name), job_id=job_id)
 
 
 def staging_path(name: str, root: Path, job_id: str) -> Path:

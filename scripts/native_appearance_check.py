@@ -10,6 +10,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QToolButton
 
 from localphraser.appearance import dark_surface
+from localphraser.branding import logo_pixmap
 from localphraser.config import Config
 from localphraser.ui import Indicator, Latest, Settings, set_appearance
 
@@ -53,7 +54,24 @@ def check(output: Path) -> None:
                 buttons = settings.findChild(QDialogButtonBox)
                 assert buttons.isVisible() and buttons.geometry().bottom() <= settings.height()
                 settings.resize(620, 820)
+                latest.hide()
                 indicator.hide()
+                settings.raise_()
+                settings.activateWindow()
+                settings.scroll_area.ensureWidgetVisible(settings.model)
+                QTest.qWait(150)
+                settings.model.setFocus()
+                settings.model.setCurrentText("small.en")
+                settings.model.showPopup()
+                QTest.qWait(500)  # Wait for the native combo roll-open animation.
+                popup = settings.model.view().window()
+                assert popup.isVisible()
+                assert popup.grab().save(str(output / f"{theme}-model-popup.png"))
+                QTest.keyClick(settings.model.view(), Qt.Key.Key_Down)
+                QTest.keyClick(settings.model.view(), Qt.Key.Key_Return)
+                assert settings.model.currentText() == "distil-small.en"
+                indicator.hide()
+            assert logo_pixmap(256).save(str(output / "speech-prism.png"))
             close = latest.findChild(QToolButton)
             assert close.accessibleName() == "Close window"
             close.click()
@@ -64,7 +82,8 @@ def check(output: Path) -> None:
             app.processEvents()
         assert not errors
         print(
-            "Owned glass UI passed: theme changes, focus safety, compact layout and close control."
+            "Owned glass UI passed: theme changes, opaque model menus, keyboard selection, "
+            "focus safety, compact layout and close control."
         )
     finally:
         sys.excepthook = previous_hook

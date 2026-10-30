@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from localphraser.appearance import DragHandle, GlassDialog
+from localphraser.branding import logo_pixmap
 from localphraser.history import History
 
 
@@ -61,9 +62,16 @@ class AppWindow(GlassDialog):
         sidebar.setFixedWidth(178)
         nav = QVBoxLayout(sidebar)
         nav.setSpacing(12)
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(8)
+        logo = QLabel()
+        logo.setPixmap(logo_pixmap(28))
+        logo.setAccessibleName("LocalPhraser speech prism")
+        brand_row.addWidget(logo)
         brand = DragHandle("LocalPhraser")
         brand.setObjectName("brand")
-        nav.addWidget(brand)
+        brand_row.addWidget(brand, 1)
+        nav.addLayout(brand_row)
         nav.addSpacing(28)
         self.home_button = QPushButton("Home")
         self.home_button.setCheckable(True)

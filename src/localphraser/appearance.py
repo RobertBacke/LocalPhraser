@@ -6,7 +6,16 @@ from typing import Any
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPalette, QPen, QRadialGradient
-from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QToolButton, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QListView,
+    QToolButton,
+    QWidget,
+)
 
 
 def high_contrast() -> bool:
@@ -50,7 +59,9 @@ def enable_backdrop(widget: QWidget) -> bool:
         return False
 
 
-def paint_surface(widget: QWidget, translucent: bool, radius: float, rim: bool = True) -> None:
+def paint_surface(
+    widget: QWidget, translucent: bool, radius: float, rim: bool = True, opacity: int = 216
+) -> None:
     painter = QPainter(widget)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     area = QRectF(widget.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
@@ -58,7 +69,7 @@ def paint_surface(widget: QWidget, translucent: bool, radius: float, rim: bool =
         painter.fillRect(widget.rect(), widget.palette().window())
         return
     dark = dark_surface()
-    alpha = 216 if translucent else 255
+    alpha = opacity if translucent else 255
     gradient = QLinearGradient(area.topLeft(), area.bottomRight())
     gradient.setColorAt(0, QColor(35, 47, 66, alpha) if dark else QColor(251, 254, 255, alpha))
     gradient.setColorAt(1, QColor(19, 29, 45, alpha) if dark else QColor(226, 239, 249, alpha))
@@ -86,6 +97,31 @@ class DragHandle(QLabel):
             event.accept()
         else:
             super().mousePressEvent(event)
+
+
+class GlassComboBox(QComboBox):
+    """A standard keyboard-accessible list with comfortable, opaque popup rows."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        view = QListView()
+        view.setSpacing(2)
+        view.setUniformItemSizes(True)
+        view.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.setView(view)
+        self.setMaxVisibleItems(8)
+        self.setMinimumHeight(38)
+
+    def paintEvent(self, event: Any) -> None:
+        super().paintEvent(event)
+        if high_contrast():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(self.palette().color(QPalette.ColorRole.Text), 1.6))
+        x, y = self.width() - 18, self.height() / 2
+        painter.drawLine(QPointF(x - 4, y - 2), QPointF(x, y + 2))
+        painter.drawLine(QPointF(x, y + 2), QPointF(x + 4, y - 2))
 
 
 class GlassDialog(QDialog):
@@ -126,11 +162,12 @@ class GlassDialog(QDialog):
             text, muted = ("#edf8f7", "#adbed4") if dark else ("#163c42", "#4b637e")
             field = "rgba(13, 25, 43, 120)" if dark else "rgba(255, 255, 255, 155)"
             border = "rgba(195, 220, 255, 32)" if dark else "rgba(71, 102, 145, 40)"
+            menu = "#1b2a40" if dark else "#f5faff"
             self.setStyleSheet(
                 f"QDialog#glassDialog {{ color: {text}; }}"
                 f"QLabel, QCheckBox, QGroupBox {{ color: {text}; background: transparent; }}"
                 "QLabel#windowTitle { font-size: 13px; font-weight: 600; padding: 2px; }"
-                "QLabel#brand { font-size: 20px; font-weight: 600; padding: 10px 0; }"
+                "QLabel#brand { font-size: 17px; font-weight: 600; padding: 10px 0; }"
                 "QLabel#pageTitle { font-size: 28px; font-weight: 600; }"
                 "QLabel#metricNumber { font-size: 28px; font-weight: 600; }"
                 f"QFrame#metric, QFrame#sidebar {{ background: {field}; border-radius: 18px; }}"
@@ -142,6 +179,15 @@ class GlassDialog(QDialog):
                 f"QLineEdit, QTextEdit, QComboBox, QSpinBox {{ color: {text};"
                 f" background: {field}; border: 1px solid {border}; border-radius: 9px;"
                 " padding: 7px; selection-background-color: #287e79; }"
+                "QComboBox { padding-right: 32px; }"
+                "QComboBox::drop-down { width: 28px; border: none; }"
+                "QComboBox::down-arrow { image: none; }"
+                f"QComboBox QAbstractItemView {{ color: {text}; background: {menu};"
+                f" border: 1px solid {border}; border-radius: 10px; padding: 6px;"
+                " outline: 0; selection-background-color: #315aa3; selection-color: white; }"
+                "QComboBox QAbstractItemView::item { min-height: 30px; padding: 4px 10px;"
+                " border-radius: 6px; }"
+                "QComboBox QAbstractItemView::item:selected { background: #315aa3; color: white; }"
                 f"QPushButton, QToolButton {{ color: {text}; background: {field};"
                 f" border: 1px solid {border}; border-radius: 10px; padding: 8px 12px; }}"
                 "QPushButton:hover, QToolButton:hover { border-color: #45958e; }"
@@ -213,5 +259,5 @@ class GlassLabel(QLabel):
         self.native_glass = False  # Keep native rectangular frames out of the capsule.
 
     def paintEvent(self, event: Any) -> None:
-        paint_surface(self, True, min(24, self.height() / 2), rim=False)
+        paint_surface(self, True, min(24, self.height() / 2), rim=False, opacity=250)
         super().paintEvent(event)

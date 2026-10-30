@@ -54,6 +54,8 @@ def test_dialog_and_indicator_render_with_or_without_native_backdrop(
     assert dialog.native_glass is not native_failure
     assert not indicator.native_glass
     assert indicator.grab().toImage().pixelColor(0, 0).alpha() == 0
+    image = indicator.grab().toImage()
+    assert image.pixelColor(10, image.height() // 2).alpha() >= 248
     assert indicator.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
     assert indicator.windowFlags() & Qt.WindowType.WindowTransparentForInput
     close = dialog.findChild(QToolButton)
