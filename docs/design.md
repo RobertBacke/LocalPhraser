@@ -18,7 +18,9 @@ simpler, with no outline or competing native frame. Motion is unnecessary: the d
 
 The taskbar workspace has a left navigation rail, saved-word/dictation/pace summaries,
 and a history list beside an original/result detail pane. Settings retains a left-aligned
-scrolling form and a fixed Save/Cancel row. Save stays on the page; theme selection applies
+scrolling form and a fixed Save/Cancel row. Successful Save returns to Home; a missing selected
+speech model downloads before saving, with progress/cancellation and no configuration switch
+on failure. Edits made during a download require a fresh Save. Theme selection applies
 and saves immediately without applying other edited fields. The draggable
 header and accessible Close button replace the native caption. A size grip supports resizing;
 the existing Escape and keyboard navigation behavior remains. Latest transcript keeps Result

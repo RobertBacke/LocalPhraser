@@ -59,6 +59,7 @@ accuracy on real accents, noise or microphones.
 Settings popups use solid theme-specific backgrounds, spaced selectable rows, keyboard
 navigation and a visible chevron. The dictation capsule keeps its transparent rounded corners
 but uses a 250/255 surface alpha, so underlying text no longer competes with the preview.
-The speech-prism mark is painted from one shared vector drawing for runtime icons and
-the checked-in multi-size Windows ICO. Regenerate it with `python scripts/build_icon.py`.
+The shared [generated transcription mark](../src/localphraser/assets/README.md) supplies
+runtime icons and the checked-in multi-size Windows ICO. Regenerate the ICO with
+`python scripts/build_icon.py`.
 Native menu-opening checks wait for Windows' combo animation before capturing the popup.

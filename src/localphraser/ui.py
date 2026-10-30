@@ -47,7 +47,7 @@ from localphraser.downloads import ModelDownload
 from localphraser.history import History
 from localphraser.home import AppWindow
 from localphraser.hotkey import Hotkey
-from localphraser.models import model_files
+from localphraser.models import model_present
 from localphraser.pipeline import Dictation, State
 from localphraser.recognition import WhisperRecognizer
 from localphraser.refinement import LocalRefiner
@@ -190,6 +190,7 @@ class Latest(GlassDialog):
 class Settings(GlassDialog):
     theme_changed = Signal(str)
     dismissed = Signal()
+    saved = Signal()
 
     def __init__(
         self,
@@ -200,6 +201,7 @@ class Settings(GlassDialog):
     ):
         super().__init__()
         self.apply_config = apply
+        self.pending_save: Config | None = None
         self.embedded = False
         self.setWindowTitle("LocalPhraser · Settings")
         self.setMinimumWidth(540)
@@ -287,6 +289,12 @@ class Settings(GlassDialog):
         for index, name in enumerate(MODELS):
             self.model.setItemData(index, MODEL_HINTS[name], Qt.ItemDataRole.ToolTipRole)
         form.addRow(model_hint)
+        install_hint = QLabel(
+            "Save downloads the selected speech model if needed, then returns Home. "
+            "A new download requires internet and can be cancelled."
+        )
+        install_hint.setWordWrap(True)
+        form.addRow(install_hint)
         self.vocabulary = QLineEdit(config.vocabulary)
         self.vocabulary.setMaxLength(300)
         self.vocabulary.setPlaceholderText("Optional names or terms, separated by commas")
@@ -455,11 +463,26 @@ class Settings(GlassDialog):
             )
             return
         try:
-            self.apply_config(self.values())
+            config = self.values()
+            if not model_present(config.model, Path(config.model_root)):
+                self.pending_save = config
+                self.setup_notice.setText(
+                    f"Downloading {config.model} before saving. Your current model stays active "
+                    "until installation succeeds. Internet is required; you can cancel below."
+                )
+                self.setup_notice.show()
+                self.download()
+                return
+            self.finish_save(config)
         except Exception as exc:
+            self.pending_save = None
             QMessageBox.warning(self, "Settings could not be saved", str(exc))
             return
+
+    def finish_save(self, config: Config) -> None:
+        self.apply_config(config)
         self.progress.setText("Settings saved.")
+        self.saved.emit()
 
     def preview_theme(self) -> None:
         theme = self.theme.currentData()
@@ -497,6 +520,27 @@ class Settings(GlassDialog):
         self.install.setEnabled(True)
         self.install_refinement.setEnabled(True)
         self.cancel_download.setEnabled(False)
+        pending, self.pending_save = self.pending_save, None
+        if pending is not None:
+            if success and model_present(pending.model, Path(pending.model_root)):
+                try:
+                    if self.values() != pending:
+                        self.setup_notice.setText(
+                            "Model downloaded. You changed settings during installation; "
+                            "press Save to apply your current choices."
+                        )
+                        return
+                    self.finish_save(pending)
+                except Exception as exc:
+                    QMessageBox.warning(self, "Settings could not be saved", str(exc))
+            else:
+                self.setup_notice.setText(
+                    "Download cancelled. Settings were not saved."
+                    if cancelled
+                    else "Model installation failed. Settings were not saved. "
+                    "Check your connection and model directory, then press Save to retry."
+                )
+            return
         if self.automatic_setup:
             self.automatic_setup = False
             self.setup_notice.setText(
@@ -629,11 +673,7 @@ class Desktop:
     def speech_model_present(self) -> bool:
         # Readiness here is a quick local presence check. Recognition still verifies
         # all hashes before loading; the installer verifies hashes before publishing.
-        folder = Path(self.config.model_root) / self.config.model
-        return all(
-            (folder / name).is_file()
-            for name in (*model_files(self.config.model), "localphraser-manifest.json")
-        )
+        return model_present(self.config.model, Path(self.config.model_root))
 
     def start_first_launch_setup(self) -> None:
         if self.closing or self.first_launch_setup_started or self.speech_model_present():
@@ -819,6 +859,7 @@ class Desktop:
             self.settings.downloader.finished.connect(self.model_download_finished)
             self.settings.theme_changed.connect(self.save_appearance)
             self.settings.dismissed.connect(self.discard_settings)
+            self.settings.saved.connect(self.discard_settings)
             self.settings.embed(self.window.pages)
         self.window.show_settings(self.settings)
         self.window.showNormal()

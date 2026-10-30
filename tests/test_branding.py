@@ -10,7 +10,7 @@ def test_mark_has_transparent_corners_and_native_sizes(app):
     for size in (16, 32, 256):
         image = logo_pixmap(size).toImage()
         assert image.pixelColor(0, 0).alpha() == 0
-        assert image.pixelColor(size // 2, size // 2).alpha() == 255
+        assert image.pixelColor(size // 2, size // 2).alpha() >= 245
     assert logo_pixmap(64).toImage() != logo_pixmap(64, True).toImage()
 
 

@@ -1,4 +1,4 @@
-"""Regenerate the multi-resolution Windows icon from the application's vector drawing."""
+"""Regenerate the multi-resolution Windows icon from the shared application logo."""
 
 import struct
 from pathlib import Path

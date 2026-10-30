@@ -1,5 +1,6 @@
 import sys
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -125,6 +126,65 @@ def publish_fixture_model(desktop):
         (folder / name).write_bytes(b"presence fixture; not inference")
 
 
+@pytest.mark.parametrize("model", ["distil-small.en", "distil-medium.en", "medium.en"])
+def test_save_downloads_missing_selection_before_switching_and_returns_home(desktop, model):
+    from localphraser.models import model_files
+
+    desktop.show_settings()
+    settings = desktop.settings
+    settings.model.setCurrentText(model)
+    settings.save()
+    settings.downloader.start.assert_called_once_with(
+        model, Path(desktop.config.model_root), refiner=False
+    )
+    assert desktop.config.model == "base.en"
+    assert settings.isVisible() and "Downloading" in settings.setup_notice.text()
+    folder = Path(desktop.config.model_root) / model
+    folder.mkdir(parents=True)
+    for filename in (*model_files(model), "localphraser-manifest.json"):
+        (folder / filename).touch()
+    settings.download_finished(True, False)
+    assert desktop.config.model == model
+    assert load_config(desktop.config_path).model == model
+    assert desktop.settings is None
+    assert desktop.window.pages.currentWidget() is desktop.window.home
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_unsuccessful_model_install_does_not_switch_or_save_settings(desktop, cancelled):
+    desktop.show_settings()
+    settings = desktop.settings
+    settings.model.setCurrentText("distil-small.en")
+    settings.duration.setValue(200)
+    settings.save()
+    settings.download_finished(False, cancelled)
+    assert desktop.config.model == "base.en" and desktop.config.max_seconds == 120
+    assert desktop.settings is settings and settings.isVisible()
+    assert "not saved" in settings.setup_notice.text()
+    assert settings.pending_save is None
+
+
+def test_edits_during_download_are_preserved_for_explicit_save(desktop):
+    from localphraser.models import model_files
+
+    desktop.show_settings()
+    settings = desktop.settings
+    settings.model.setCurrentText("distil-small.en")
+    settings.save()
+    settings.duration.setValue(200)
+    folder = Path(desktop.config.model_root) / "distil-small.en"
+    folder.mkdir(parents=True)
+    for filename in (*model_files("distil-small.en"), "localphraser-manifest.json"):
+        (folder / filename).touch()
+    settings.download_finished(True, False)
+    assert desktop.config.model == "base.en" and desktop.config.max_seconds == 120
+    assert desktop.settings is settings and settings.duration.value() == 200
+    assert "press Save" in settings.setup_notice.text()
+    settings.save()
+    assert desktop.config.model == "distil-small.en" and desktop.config.max_seconds == 200
+    assert desktop.settings is None
+
+
 @pytest.mark.parametrize("desktop", [True], indirect=True)
 def test_visible_manual_desktop_shows_settings(desktop):
     assert desktop.settings is not None and desktop.settings.isVisible()
@@ -244,6 +304,7 @@ def test_appearance_save_preserves_warm_pipeline_and_latest_transcript(desktop, 
 
 
 def test_workspace_theme_autosaves_without_applying_other_unsaved_fields(desktop, app):
+    publish_fixture_model(desktop)
     desktop.show_settings()
     desktop.settings.duration.setValue(200)
     desktop.settings.theme.setCurrentIndex(desktop.settings.theme.findData("dark"))
@@ -253,7 +314,8 @@ def test_workspace_theme_autosaves_without_applying_other_unsaved_fields(desktop
     assert saved.theme == "dark" and saved.max_seconds == 120
     desktop.pipeline.shutdown.assert_not_called()
     desktop.settings.save()
-    assert desktop.window.isVisible() and desktop.settings.isVisible()
+    assert desktop.window.isVisible() and desktop.settings is None
+    assert desktop.window.pages.currentWidget() is desktop.window.home
     assert desktop.config.max_seconds == 200
 
 

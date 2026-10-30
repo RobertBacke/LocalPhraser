@@ -11,6 +11,13 @@ from localphraser.shortcut import ShortcutRecorder, shortcut_from_key
 from localphraser.ui import Desktop, Latest, Settings
 
 
+@pytest.fixture(autouse=True)
+def installed_speech_fixture(monkeypatch):
+    # These control tests exercise Save independently of model installation.
+    monkeypatch.setattr("localphraser.ui.model_present", lambda *args: True)
+    monkeypatch.setattr("localphraser.ui.ModelDownload.start", Mock())
+
+
 @pytest.fixture
 def chooser(app):
     begin, end = Mock(), Mock()
@@ -259,16 +266,18 @@ def test_settings_appearance_selection_and_native_scheme(app, monkeypatch, theme
     settings.close()
 
 
-def test_theme_previews_immediately_and_save_keeps_settings_visible(app, monkeypatch):
+def test_theme_previews_immediately_and_save_emits_completion(app, monkeypatch):
     monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
     preview = Mock()
     monkeypatch.setattr("localphraser.ui.set_appearance", preview)
     applied = Mock()
     settings = Settings(Config(), applied)
+    completed = Mock()
+    settings.saved.connect(completed)
     settings.show()
     settings.theme.setCurrentIndex(settings.theme.findData("dark"))
     preview.assert_called_once_with("dark")
     settings.save()
     assert applied.call_args.args[0].theme == "dark"
-    assert settings.isVisible()
+    completed.assert_called_once_with()
     settings.close()

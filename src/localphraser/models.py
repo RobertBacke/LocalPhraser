@@ -18,6 +18,12 @@ def model_files(name: str) -> tuple[str, ...]:
     return (*FILES[:-1], "vocabulary.json") if name.startswith("distil-") else FILES
 
 
+def model_present(name: str, root: Path) -> bool:
+    return all(
+        (root / name / f).is_file() for f in (*model_files(name), "localphraser-manifest.json")
+    )
+
+
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()

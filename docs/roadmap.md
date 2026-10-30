@@ -87,7 +87,8 @@
 The user requested a taskbar application, immediate appearance changes and persistent local
 history. The workspace now provides Home/Settings navigation, recent history with copy,
 delete/clear controls, saved word/dictation counts and recorded-duration speaking pace.
-Appearance auto-saves immediately and Save keeps Settings visible. A current-user named
+Appearance auto-saves immediately. Successful Save returns Home; missing speech models
+download before the selected configuration is activated. A current-user named
 pipe restores the existing window on a second launch. The tray remains a backup and Close
 keeps background dictation active. History can be disabled without silently deleting old
 entries; SQLite and journal files are excluded from packaging and source publication.

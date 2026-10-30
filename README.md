@@ -44,8 +44,10 @@ models do not need downloading for every build. No project-folder scan or silent
 Opening the EXE shows a taskbar desktop workspace with Home, Settings and Latest transcript.
 Home shows locally saved transcriptions and speaking statistics. Minimize keeps the taskbar
 button; Close keeps dictation in the background. Open the EXE again or use the tray to
-restore the same window. Quit LocalPhraser exits the app. Save keeps Settings open, while
-appearance changes apply and save immediately. `--background` starts quietly; new launch-upon-startup registrations
+restore the same window. Quit LocalPhraser exits the app. Save returns to Home after applying
+settings. If the selected speech model is missing, Save downloads it first with visible
+progress and cancellation; the active configuration changes only after installation succeeds.
+Appearance changes apply and save immediately. `--background` starts quietly; new launch-upon-startup registrations
 include it. Older startup registrations can be refreshed by toggling startup off, Save,
 then on and Save again.
 Latest transcript shows recognition, polishing, and total time after releasing the shortcut.

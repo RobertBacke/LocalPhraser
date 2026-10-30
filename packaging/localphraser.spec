@@ -43,6 +43,7 @@ datas += collect_notices(metadata_directories)
 datas += [(str(project / "packaging" / "licenses"), "third_party/supplemental")]
 datas += [(str(Path(sys.base_prefix) / "LICENSE.txt"), "third_party/python")]
 datas += [(str(project / "LICENSE"), "."), (str(project / "THIRD_PARTY_NOTICES.md"), ".")]
+datas += [(str(project / "src" / "localphraser" / "assets"), "localphraser/assets")]
 a = Analysis([str(project / "packaging" / "entry.py")], pathex=[str(project / "src")], binaries=binaries,
              datas=datas, hiddenimports=hiddenimports,
              excludes=["tkinter", "pytest", "mypy", "ruff"])

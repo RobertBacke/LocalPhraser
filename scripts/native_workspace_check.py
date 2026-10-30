@@ -73,8 +73,12 @@ def check(output: Path, models: Path) -> None:
                 desktop.window.grab().save(str(folder / f"{theme}-home.png"))
                 desktop.window.show_settings(settings)
             settings.save()
-            assert settings.isVisible() and desktop.window.isVisible()
+            assert desktop.settings is None and desktop.window.isVisible()
+            assert desktop.window.pages.currentWidget() is desktop.window.home
             assert load_config(config_path).max_seconds == 180
+            desktop.show_settings()
+            settings = desktop.settings
+            assert settings is not None
             desktop.window.resize(740, 480)
             QTest.qWait(50)
             from PySide6.QtCore import QPoint
