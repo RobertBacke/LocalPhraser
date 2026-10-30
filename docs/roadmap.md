@@ -58,6 +58,8 @@
    and actual installer cancellation checks passed. Actual sign-in launch, wider device/driver,
    accessibility and multi-monitor acceptance remain. System/Light/Dark appearance selection
    is implemented; appearance-only saves preserve the warm pipeline and latest transcript.
+   Glass surfaces, an optional native Windows 11 backdrop, high-contrast fallback, draggable
+   window headers and the click-through capsule now have owned-window visual/native checks.
    Capture now cancels if callbacks stop for three seconds, including drivers still reporting
    active. Quiet frames stay healthy. Simulated stall/recovery and a ten-cycle real-model
    Qt session check passed; actual device-unplug and longer consumer sessions remain.

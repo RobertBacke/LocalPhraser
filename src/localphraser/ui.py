@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
@@ -32,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from localphraser import startup
+from localphraser.appearance import GlassDialog, GlassLabel
 from localphraser.audio import Recorder, microphones
 from localphraser.config import DEFAULT_PROMPT, MODELS, REFINEMENT_MODELS, Config, save_config
 from localphraser.downloads import ModelDownload
@@ -82,7 +82,7 @@ class Bridge(QObject):
         callback()
 
 
-class Indicator(QLabel):
+class Indicator(GlassLabel):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowFlags(
@@ -95,11 +95,8 @@ class Indicator(QLabel):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setTextFormat(Qt.TextFormat.PlainText)
         self.setWordWrap(True)
+        self.setMinimumWidth(320)
         self.setMaximumWidth(560)
-        self.setStyleSheet(
-            "background: #20332e; color: white; padding: 12px 22px;"
-            "border-radius: 12px; font-size: 14px;"
-        )
 
     def display(self, state: State) -> None:
         if state == State.IDLE:
@@ -127,12 +124,15 @@ class Indicator(QLabel):
         self.show()
 
 
-class Latest(QDialog):
+class Latest(GlassDialog):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Latest transcript · LocalPhraser")
         self.resize(560, 320)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 18, 24, 24)
+        layout.setSpacing(14)
+        layout.addLayout(self.header("Latest transcript"))
         self.notice = QLabel("No transcript yet. Only the latest result is held in memory.")
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
@@ -192,7 +192,7 @@ class Latest(QDialog):
         )
 
 
-class Settings(QDialog):
+class Settings(GlassDialog):
     def __init__(
         self,
         config: Config,
@@ -205,16 +205,21 @@ class Settings(QDialog):
         self.setWindowTitle("LocalPhraser · Settings")
         self.setMinimumWidth(540)
         outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 18, 24, 24)
+        outer.setSpacing(16)
+        outer.addLayout(self.header("LocalPhraser settings"))
         scroll = QScrollArea()
         self.scroll_area = scroll
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.viewport().setAutoFillBackground(False)
         body = QWidget()
+        body.setObjectName("glassBody")
         scroll.setWidget(body)
         outer.addWidget(scroll)
         layout = QVBoxLayout(body)
         title = QLabel("LocalPhraser")
-        title.setStyleSheet("font-size: 24px; font-weight: 600; margin-bottom: 8px;")
+        title.setStyleSheet("font-size: 28px; font-weight: 600; margin-bottom: 6px;")
         layout.addWidget(title)
         description = QLabel("Hold your shortcut. Speak naturally. Release to transcribe locally.")
         description.setWordWrap(True)
@@ -383,6 +388,7 @@ class Settings(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
+        buttons.button(QDialogButtonBox.StandardButton.Save).setProperty("primary", True)
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)

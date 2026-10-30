@@ -709,3 +709,29 @@ until the user stops recording. Smoke launch suppresses preparation.
 
 First-recording live voice acceptance on the user's app remains a follow-up. Preparation
 adds startup work and cannot guarantee instantaneous readiness; the user must wait for Ready.
+
+
+## 2026-10-30: desktop appearance and glass surfaces
+
+The user confirmed live words appeared on the first dictation after launch. System/Light/Dark
+preferences are now saved locally; changing only appearance retains the warm pipeline and
+latest result. The glass design covers Settings, Latest transcript and the click-through
+capsule, with rounded translucent surfaces, fine highlights and readable inset controls.
+
+- **307 tests passed** with the installed real small.en model. Ruff check/format and mypy
+  passed for 19 source modules. Theme roundtrip/pipeline-preservation cases were verified
+  failing before implementation and passing afterward.
+- Owned native Windows 11 26200 checks rendered Light and Dark surfaces and accepted DWM
+  backdrop requests for all three windows. Their screenshots were visually inspected.
+  `native_appearance_check.py` checks theme changes in the same windows, compact Save/Cancel
+  visibility, the accessible Close button and the capsule leaving focus unchanged.
+- Testing caught a stylesheet palette recursion and a retained-widget-palette problem before
+  packaging. Explicit deduplication and application-palette observation fix these paths;
+  regression checks cover theme changes on already-open dialogs and indicators.
+- High contrast and unavailable native effects have injected fallback coverage. Actual
+  Windows high-contrast/transparency settings and mixed-DPI monitors remain manual checks.
+- The real small.en/Qwen1.5B owned Qt live-preview flow passed at 48 kHz with startup
+  preparation, first-recording drafts, final recognition/polishing and a clean exit.
+
+The surfaces do not add an animation timer. Native composition acceptance alone does not
+prove the same visual effect on every Windows policy, driver or machine.

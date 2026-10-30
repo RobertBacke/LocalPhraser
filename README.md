@@ -67,7 +67,9 @@ Single-click the tray icon to open or restore Settings; right-click it for the m
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
 Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
 and automatic insertion. Appearance can follow the system or use Light or Dark; saving only
-appearance preserves the loaded speech model. Raw mode is the default. Optional Polished mode adds local
+appearance preserves the loaded speech model. Settings, Latest transcript and the dictation
+capsule use a [glass appearance](docs/design.md), with a readable fallback when native
+backdrop effects are unavailable. Raw mode is the default. Optional Polished mode adds local
 punctuation, capitalization, and hesitation removal. **Start LocalPhraser upon startup** is opt-in:
 enable it in Settings and Save after choosing a permanent application location.
 Microphones use exact device names and audio APIs; ambiguous duplicates are refused.
