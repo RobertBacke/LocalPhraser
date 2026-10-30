@@ -6,7 +6,8 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QToolButton
 
 from localphraser import appearance
-from localphraser.ui import Indicator
+from localphraser.config import Config
+from localphraser.ui import Indicator, Settings
 
 
 def test_palette_notifications_do_not_reapply_stylesheet_recursively(app, capsys):
@@ -94,3 +95,18 @@ def test_existing_windows_follow_application_palette_changes(app, capsys):
         indicator.close()
         dialog.deleteLater()
         indicator.deleteLater()
+
+
+def test_glass_close_button_preserves_active_download_guard(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    settings = Settings(Config(), Mock())
+    settings.show()
+    settings.downloader.phase = "download"
+    close = settings.findChild(QToolButton)
+    close.click()
+    assert settings.isVisible()
+    assert "Cancel the download" in settings.progress.text()
+    settings.downloader.phase = "idle"
+    close.click()
+    assert not settings.isVisible()
+    settings.deleteLater()

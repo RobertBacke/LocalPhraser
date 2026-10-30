@@ -752,3 +752,27 @@ owned external Qt editor also passed real small.en recognition, preview, Qwen1.5
 and exact paced insertion, followed by cleared audio and clean exit. This does not establish
 a root cause for the older intermittent native process shutdown failure or certify all
 editors, devices and long daily sessions.
+
+
+## 2026-10-30: installed glass build and disposable installer verification
+
+The staged glass executable passed real small.en/Qwen1.5B runtime checks with 48 kHz
+conversion and an owned-profile GUI smoke launch. Bundle inventory covered 32 distributions;
+the local portable ZIP passed its checked packaging path. LocalPhraser was confirmed closed,
+then the existing dist/LocalPhraser folder was replaced and its inventory, runtime and GUI
+smoke checks passed again. Configuration and downloaded models were preserved.
+
+GitHub Windows checks passed for the appearance, glass and profiling milestones. The full
+Windows development preview workflow **41070445652** passed on source **f82a473**, including
+frozen build, inventory, missing-model diagnostic, GUI smoke, checked ZIP, installer
+compilation, and disposable install/reinstall/uninstall/data-preservation checks. Artifact
+upload was disabled and skipped. No public binary release or tag was created.
+
+A final regression check verifies the custom Close control cannot bypass an active download's
+close guard. Display-specific appearance, actual Windows high contrast/transparency policy,
+window dragging/resizing, multiple monitors, microphone unplug/reconnect, actual startup,
+and clean consumer-machine acceptance remain manual checks. Exact native-source review,
+signing and the previously observed intermittent native shutdown issue remain release work.
+
+The final local suite passed **308 tests**, including the real offline model check. Ruff
+check/format passed; the production source had already passed mypy and frozen validation.
