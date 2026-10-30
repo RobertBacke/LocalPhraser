@@ -1,6 +1,7 @@
 import sys
 import threading
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -122,3 +123,13 @@ def test_async_insertion_timeout_cancels_late_work(backend):
     native.insert_gate.set()
     barrier(worker)
     assert not native.delivered and worker.targets == {}
+
+
+def test_async_delivery_dispatches_complete_final_text_once(backend):
+    worker, native = backend
+    token = worker.capture(123).result(timeout=2)
+    native.insert_gradually = Mock(side_effect=AssertionError("Artificial typing is disabled"))
+    text = "A complete polished dictation. " * 100
+    worker.insert_async(token, text).result(timeout=2)
+    assert native.delivered == [text]
+    native.insert_gradually.assert_not_called()

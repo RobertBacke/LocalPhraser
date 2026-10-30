@@ -120,7 +120,7 @@ class TargetWorker:
 
         def work() -> None:
             target = self.targets.pop(token)
-            self.native.insert_gradually(
+            self.native.insert(
                 target,
                 text,
                 permitted=lambda: (

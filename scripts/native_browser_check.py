@@ -84,9 +84,7 @@ def main() -> None:
         worker.executor.submit(focused).result(timeout=5)
         token = worker.capture(worker.snapshot()).result(timeout=5)
         worker.insert_async(token, text).result(timeout=30)
-        assert len(delivered_batches) > 1 and sum(delivered_batches) == len(text), (
-            "Expected gradual delivery, not a single-dispatch fallback."
-        )
+        assert delivered_batches == [len(text)], "Expected one complete checked delivery."
 
         def verify() -> None:
             control = focused()
