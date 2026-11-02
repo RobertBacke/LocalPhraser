@@ -397,7 +397,9 @@ class Settings(GlassDialog):
         reset_prompt = QPushButton("Restore default instructions")
         reset_prompt.clicked.connect(lambda: self.refinement_prompt.setPlainText(DEFAULT_PROMPT))
         polishing_form.addRow(reset_prompt)
-        self.install_refinement = QPushButton("Download polishing model (internet required)")
+        self.install_refinement = QPushButton(
+            "Download or repair polishing model (internet required)"
+        )
         self.install_refinement.clicked.connect(lambda: self.download(True))
         polishing_form.addRow(self.install_refinement)
         polishing_hint = QLabel(
@@ -417,7 +419,11 @@ class Settings(GlassDialog):
         )
         privacy.setWordWrap(True)
         layout.addWidget(privacy)
-        self.install = QPushButton("Download speech model (internet required)")
+        self.install = QPushButton("Download or repair speech model (internet required)")
+        self.install.setToolTip(
+            "Checks installed files. Damaged models are replaced only after a new download "
+            "is verified; previous files are kept in a .damaged folder in the model directory."
+        )
         self.install.clicked.connect(self.download)
         layout.addWidget(self.install)
         self.progress = QLabel(
@@ -564,7 +570,7 @@ class Settings(GlassDialog):
                 "Speech model ready. Hold your shortcut to dictate; no Save step is needed "
                 "unless you changed settings."
                 if success
-                else "First-launch setup paused. Use Download speech model to retry when ready. "
+                else "First-launch setup paused. Use Download or repair speech model to retry. "
                 "Later launches will not retry automatically."
             )
 

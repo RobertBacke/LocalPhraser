@@ -142,3 +142,24 @@ applies. Device permission, unavailable-device, channel-count and other errors s
 normal troubleshooting; they are not treated as sample-rate failures. Devices with a
 reported default above 96 kHz remain unsupported by this fallback. Driver/hot-plug behavior
 still needs broader hardware testing.
+
+## Repairing installed models
+
+In Settings, choose the affected model and use **Download or repair speech model** or
+**Download or repair polishing model**. A valid installation is checked and left unchanged,
+without downloading again. A damaged installation stays in place while a complete replacement
+is downloaded and checked against its pinned repository revision and hashes.
+
+Only after verification does the installer move the damaged directory into a sibling named
+`.MODEL.JOB-ID.damaged` and publish the replacement. These backups retain all old files,
+including extra files, and are not automatically deleted. Repair therefore needs space for
+the existing files and the replacement. You may remove an old backup manually after confirming
+successful repair. Linked/junction model directories and files occupying the model directory
+are refused rather than moved.
+
+Download failure, cancellation before publication, or a bad replacement hash leaves the
+original directory in place. Ordinary publication errors restore it. A process/power failure
+between the final directory moves may leave the old files only in the `.damaged` backup;
+use Download or repair again to install a verified replacement. Files locked by another
+process can prevent replacement; close applications using that model and retry. Settings,
+other models and transcript history are outside the repair operation.

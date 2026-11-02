@@ -159,7 +159,7 @@ uv pip install --python .venv\Scripts\python.exe -r requirements-polish.lock
 ```
 
 Use `--root <your-model-directory>` for a custom model location. Alternatively choose
-**Settings → Mode → Polished**, select a model, and click **Download polishing model**.
+**Settings → Mode → Polished**, select a model, and click **Download or repair polishing model**.
 Save when installation finishes. The development Polished executable includes the CPU
 runtime; models are separate explicit downloads. No local HTTP server or cloud API is used.
 

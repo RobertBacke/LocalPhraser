@@ -880,3 +880,29 @@ additional icon/capture checks after the exact user-authorized logo color invers
 This is a reproduced Chromium cause matching the symptom, not proof of the exact cause in
 the user's Codex field. First-dictation acceptance in Codex remains a manual check. No personal
 field text, microphone capture or general desktop input was used for the reproduction.
+
+## 2026-11-02: model recovery and frosted desktop materials
+
+The model installer previously stopped when an existing directory failed integrity checks.
+A regression reproduced that failure before implementation. Download/repair now verifies an
+entire replacement before moving the damaged directory into a unique sibling backup and
+publishing the new model. Valid installations remain unchanged and need no network. Ordinary
+publication failures restore the old directory. Backups retain extra files and are not deleted;
+power/process termination between the final moves can leave them under the `.damaged` name.
+
+Eleven repair tests cover speech and polishing models, interrupted/failed downloads, bad LFS
+hashes, publication failure, backup collisions, linked destinations and non-directory paths.
+An actual Tiny English repair in an isolated cache downloaded and verified a replacement,
+preserved damaged weights and an extra test note, and passed cold/warm generated-speech checks
+with Python socket connections denied. User models and personal audio were not used.
+
+The full local suite passed **365 tests**, with Ruff check/format and mypy passing. Native
+workspace and appearance checks passed instant themes, compact controls, Home navigation,
+opaque menus, non-focusing preview and screen containment. The running window was inspected
+through native capture over an owned synthetic backdrop; Windows accepted desktop acrylic.
+Google Images glassmorphism references were compared visually against the previous opaque
+navy UI. The new design adds layered translucent panels, diffused cyan/violet/teal light,
+reflective rims, static low-amplitude grain, clean tabs and a transparent splitter gap.
+Embedded Settings shares the parent material. The dictation capsule retains its 250/255
+opacity and high-contrast mode retains opaque system colors. Other PCs and display policies
+can render the native backdrop differently.

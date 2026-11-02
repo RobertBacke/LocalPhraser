@@ -92,6 +92,7 @@ def install_artifacts(
 ) -> Path:
     """Internal catalog-only installer; callers supply fixed names and file lists."""
     job_id = uuid.uuid4().hex if job_id is None else job_id
+    root = root.resolve()
     staging_path(name, root, job_id)  # Validate before creating or acquiring anything.
     root.mkdir(parents=True, exist_ok=True)
     # Kernel-backed lock releases on forced termination; its empty file may remain.
@@ -108,10 +109,24 @@ def _install_artifacts(
 
     root.mkdir(parents=True, exist_ok=True)
     destination = root / name
+    if (
+        destination.is_symlink()
+        or destination.is_junction()
+        or destination.resolve().parent != root
+    ):
+        raise ValueError("Model directory must not be a linked or external path.")
+    if destination.exists() and not destination.is_dir():
+        raise ValueError("Model destination is not a directory.")
+    damaged = False
     if destination.exists():
-        verify_artifacts(destination, files)
-        print("Model already installed and verified. Remove its directory to reinstall.")
-        return destination
+        try:
+            verify_artifacts(destination, files)
+        except ValueError:
+            damaged = True
+            print("Model is damaged. Downloading a verified replacement before repair.", flush=True)
+        else:
+            print("Model already installed and verified.")
+            return destination
     info = HfApi().model_info(repo, files_metadata=True)
     revision = info.sha
     if not revision:
@@ -144,7 +159,26 @@ def _install_artifacts(
             encoding="utf-8",
         )
         verify_artifacts(stage, files)
-        stage.rename(destination)
+        if damaged and destination.exists():
+            if (
+                destination.is_symlink()
+                or destination.is_junction()
+                or not destination.is_dir()
+                or destination.resolve().parent != root
+            ):
+                raise ValueError("Model directory changed during installation.")
+            backup = root / f".{name}.{job_id}.damaged"
+            if backup.exists() or backup.is_symlink() or backup.is_junction():
+                raise ValueError("Repair backup already exists; no files were replaced.")
+            destination.rename(backup)
+            try:
+                stage.rename(destination)
+            except BaseException:
+                backup.rename(destination)
+                raise
+            print(f"Previous damaged files preserved in {backup.name}", flush=True)
+        else:
+            stage.rename(destination)
     finally:
         if stage.exists():
             cleanup_install(name, root, job_id)

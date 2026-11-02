@@ -1,11 +1,23 @@
 """Lightweight glass surfaces using Qt paint and optional Windows 11 composition."""
 
 import ctypes
+import random
 import sys
+from functools import lru_cache
 from typing import Any
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPalette, QPen, QRadialGradient
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QImage,
+    QLinearGradient,
+    QPainter,
+    QPalette,
+    QPen,
+    QRadialGradient,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -28,6 +40,17 @@ def high_contrast() -> bool:
 def dark_surface() -> bool:
     # Stylesheets can retain a widget's old palette when the application theme changes.
     return QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+
+@lru_cache(maxsize=1)
+def frost_texture() -> QImage:
+    texture = QImage(64, 64, QImage.Format.Format_ARGB32_Premultiplied)
+    rng = random.Random(17)
+    for y in range(64):
+        for x in range(64):
+            value = 255 if rng.getrandbits(1) else 0
+            texture.setPixelColor(x, y, QColor(value, value, value, rng.randrange(1, 4)))
+    return texture
 
 
 def enable_backdrop(widget: QWidget) -> bool:
@@ -71,20 +94,33 @@ def paint_surface(
     dark = dark_surface()
     alpha = opacity if translucent else 255
     gradient = QLinearGradient(area.topLeft(), area.bottomRight())
-    gradient.setColorAt(0, QColor(35, 47, 66, alpha) if dark else QColor(251, 254, 255, alpha))
-    gradient.setColorAt(1, QColor(19, 29, 45, alpha) if dark else QColor(226, 239, 249, alpha))
+    gradient.setColorAt(0, QColor(21, 27, 49, alpha) if dark else QColor(245, 249, 255, alpha))
+    gradient.setColorAt(1, QColor(36, 42, 65, alpha) if dark else QColor(225, 237, 249, alpha))
     painter.setBrush(gradient)
-    painter.setPen(QPen(QColor(255, 255, 255, 28 if dark else 95), 1) if rim else Qt.PenStyle.NoPen)
+    painter.setPen(
+        QPen(QColor(255, 255, 255, 70 if dark else 190), 1) if rim else Qt.PenStyle.NoPen
+    )
     painter.drawRoundedRect(area, radius, radius)
-    if rim and widget.width() > 600:
-        glow = QRadialGradient(QPointF(widget.width() * 0.8, 0), widget.width() * 0.7)
-        glow.setColorAt(0, QColor(103, 166, 236, 38 if dark else 28))
-        glow.setColorAt(1, QColor(103, 166, 236, 0))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(glow)
+    if rim:
+        # Diffused light behind the translucent panels also works without desktop acrylic.
+        for x, y, scale, rgb in (
+            (0.12, 0.08, 0.72, (74, 159, 231)),
+            (0.90, 0.18, 0.65, (153, 118, 222)),
+            (0.62, 1.05, 0.65, (58, 183, 199)),
+        ):
+            glow = QRadialGradient(
+                QPointF(widget.width() * x, widget.height() * y), widget.width() * scale
+            )
+            glow.setColorAt(0, QColor(*rgb, 95 if dark else 82))
+            glow.setColorAt(0.55, QColor(*rgb, 35 if dark else 24))
+            glow.setColorAt(1, QColor(*rgb, 0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(glow)
+            painter.drawRoundedRect(area, radius, radius)
+        painter.setBrush(QBrush(frost_texture()))
         painter.drawRoundedRect(area, radius, radius)
     if rim:
-        painter.setPen(QPen(QColor(255, 255, 255, 20 if dark else 80), 1))
+        painter.setPen(QPen(QColor(255, 255, 255, 95 if dark else 210), 1))
         painter.drawLine(QPointF(radius, 1.5), QPointF(widget.width() - radius, 1.5))
 
 
@@ -159,9 +195,18 @@ class GlassDialog(QDialog):
             self.setStyleSheet("")
         else:
             dark = mode[0]
-            text, muted = ("#edf8f7", "#adbed4") if dark else ("#163c42", "#4b637e")
-            field = "rgba(13, 25, 43, 120)" if dark else "rgba(255, 255, 255, 155)"
-            border = "rgba(195, 220, 255, 32)" if dark else "rgba(71, 102, 145, 40)"
+            text, muted = ("#edf8f7", "#c0cce1") if dark else ("#163c42", "#435974")
+            field = "rgba(16, 25, 48, 125)" if dark else "rgba(255, 255, 255, 155)"
+            border = "rgba(227, 239, 255, 50)" if dark else "rgba(255, 255, 255, 220)"
+            selected = "rgba(17,35,66,175)" if dark else "rgba(109,164,229,55)"
+            focus = "#9fd9ff" if dark else "#365f95"
+            glass = (
+                "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,255,255,35),"
+                "stop:0.45 rgba(228,238,255,16),stop:1 rgba(167,201,245,25))"
+                if dark
+                else "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,255,255,175),"
+                "stop:0.45 rgba(255,255,255,90),stop:1 rgba(238,245,255,135))"
+            )
             menu = "#1b2a40" if dark else "#f5faff"
             self.setStyleSheet(
                 f"QDialog#glassDialog {{ color: {text}; }}"
@@ -170,12 +215,15 @@ class GlassDialog(QDialog):
                 "QLabel#brand { font-size: 17px; font-weight: 600; padding: 10px 0; }"
                 "QLabel#pageTitle { font-size: 28px; font-weight: 600; }"
                 "QLabel#metricNumber { font-size: 28px; font-weight: 600; }"
-                f"QFrame#metric, QFrame#sidebar {{ background: {field}; border-radius: 18px; }}"
-                f"QListWidget {{ color: {text}; background: {field}; border: none;"
-                " border-radius: 12px; padding: 6px; }"
+                f"QFrame#metric, QFrame#sidebar, QWidget#transcriptPanel {{ background: {glass};"
+                f" border: 1px solid {border}; border-radius: 20px; }}"
+                f"QListWidget {{ color: {text}; background: {glass}; border: 1px solid {border};"
+                " border-radius: 20px; padding: 8px; }"
                 "QListWidget::item { padding: 12px 8px; border-radius: 8px; }"
-                "QListWidget::item:selected { background: #315aa3; color: white; }"
+                f"QListWidget::item:selected {{ background: {selected};"
+                f" color: {text}; border: 1px solid {border}; }}"
                 "QWidget#glassBody, QScrollArea { background: transparent; border: none; }"
+                "QSplitter::handle { background: transparent; }"
                 f"QLineEdit, QTextEdit, QComboBox, QSpinBox {{ color: {text};"
                 f" background: {field}; border: 1px solid {border}; border-radius: 9px;"
                 " padding: 7px; selection-background-color: #287e79; }"
@@ -190,19 +238,21 @@ class GlassDialog(QDialog):
                 "QComboBox QAbstractItemView::item:selected { background: #315aa3; color: white; }"
                 f"QPushButton, QToolButton {{ color: {text}; background: {field};"
                 f" border: 1px solid {border}; border-radius: 10px; padding: 8px 12px; }}"
-                "QPushButton:hover, QToolButton:hover { border-color: #45958e; }"
+                "QPushButton:hover, QToolButton:hover { border-color: #8cbddd; }"
                 "QPushButton:focus, QToolButton:focus, QLineEdit:focus, QTextEdit:focus,"
-                " QComboBox:focus, QSpinBox:focus { border: 1px solid #287e79; }"
+                f" QComboBox:focus, QSpinBox:focus {{ border: 2px solid {focus}; }}"
                 "QPushButton[primary=true], QPushButton:checked {"
-                " background: #315aa3; color: white;"
-                " border-color: #315aa3; font-weight: 600; }"
+                " background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+                " stop:0 rgba(52,92,150,245),stop:1 rgba(75,72,137,245)); color: white;"
+                " border-color: rgba(219,236,255,110); font-weight: 600; }"
                 f"QPushButton:disabled, QLabel:disabled {{ color: {muted}; }}"
                 f"QGroupBox {{ border: 1px solid {border}; border-radius: 14px;"
                 " margin-top: 12px; padding: 18px 12px 12px; }"
                 "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }"
                 f"QTabWidget::pane {{ border: 1px solid {border}; border-radius: 9px; }}"
-                f"QTabBar::tab {{ color: {text}; padding: 8px 14px; }}"
-                f"QTabBar::tab:selected {{ background: {field}; border-radius: 8px; }}"
+                f"QTabBar::tab {{ color: {text}; padding: 8px 14px; background: transparent;"
+                " border: 1px solid transparent; border-radius: 8px; margin-right: 4px; }"
+                f"QTabBar::tab:selected {{ background: {field}; border: 1px solid {border}; }}"
             )
         if self.isVisible():
             self.native_glass = enable_backdrop(self)
@@ -219,7 +269,8 @@ class GlassDialog(QDialog):
             self.refresh_surface()
 
     def paintEvent(self, event: Any) -> None:
-        paint_surface(self, self.native_glass, 22)
+        if self.isWindow():
+            paint_surface(self, self.native_glass, 22, opacity=160 if dark_surface() else 185)
 
 
 class GlassLabel(QLabel):

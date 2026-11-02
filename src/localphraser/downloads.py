@@ -107,7 +107,8 @@ class ModelDownload(QObject):
             else:
                 self._finish(
                     False,
-                    "Installation failed. Check connectivity, free space or other downloads.",
+                    "Installation failed. Check connectivity, free space, files in use "
+                    "or other downloads.",
                 )
 
     def _error(self, error: QProcess.ProcessError) -> None:

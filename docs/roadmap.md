@@ -114,3 +114,16 @@ Negative-coordinate, removed-monitor and small-area regression tests passed afte
 reproducing the failures. These are simulated screen geometries; physical multi-monitor,
 mixed-DPI and device/driver acceptance remain necessary. Release licensing/source review,
 signing and clean consumer-machine validation remain open.
+
+## Model-recovery and material refinement — 2026-11-02
+
+Explicit model download now repairs damaged speech/polishing installations through a fully
+verified staged replacement, preserving old files in a uniquely named backup. Failure and
+cancellation paths, linked-path refusal, publication rollback and real offline inference
+after repair were tested. This advances the corruption/recovery portion of Phase 4; it does
+not complete clean-machine or release licensing/signing acceptance.
+
+The desktop material was revised after the user compared it with glassmorphism references:
+visible frosted layers, ambient color behind panels and refined borders replace the mostly
+opaque navy treatment. Light/Dark, high-contrast fallback and the high-opacity dictation
+capsule remain separate material decisions. See design.md and testing.md for scope/evidence.
