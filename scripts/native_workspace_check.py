@@ -96,6 +96,24 @@ def check(output: Path, models: Path) -> None:
                 ).y()
                 <= desktop.window.height()
             )
+            desktop.history.connection.execute("PRAGMA query_only=ON")
+            desktop.window.delete_button.click()
+            QTest.qWait(50)
+            assert desktop.window.history_notice.isVisible()
+            assert desktop.window.result_text.toPlainText() == "Hello from the local workspace."
+            assert not desktop.window.delete_button.isEnabled()
+            assert desktop.window.copy_button.isEnabled()
+            assert (
+                desktop.window.copy_button.mapTo(
+                    desktop.window, QPoint(0, desktop.window.copy_button.height())
+                ).y()
+                <= desktop.window.height()
+            )
+            desktop.window.grab().save(str(folder / "history-readonly.png"))
+            desktop.history.connection.execute("PRAGMA query_only=OFF")
+            desktop.window.show_home()
+            assert desktop.window.history_notice.isHidden()
+            assert desktop.window.delete_button.isEnabled()
             server = listen(config_path, desktop.show_home)
             try:
                 desktop.window.showMinimized()
@@ -132,7 +150,7 @@ def check(output: Path, models: Path) -> None:
         assert not errors
         print(
             "Owned workspace passed: taskbar, instant theme, settings, "
-            "persistent history, WPM, compact layout and second-launch restore."
+            "persistent history, read-only recovery, WPM, compact layout and second-launch restore."
         )
     finally:
         sys.excepthook = previous_hook

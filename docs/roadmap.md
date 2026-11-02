@@ -127,3 +127,13 @@ The desktop material was revised after the user compared it with glassmorphism r
 visible frosted layers, ambient color behind panels and refined borders replace the mostly
 opaque navy treatment. Light/Dark, high-contrast fallback and the high-opacity dictation
 capsule remain separate material decisions. See design.md and testing.md for scope/evidence.
+
+## History failure recovery — 2026-11-02
+
+Phase 4 failure coverage now includes database-full simulation, actual SQLite write locks and
+read-only writes. Home guards history reads/deletes/clear operations, retains copyable display
+text after failure and disables destructive controls until a successful refresh. New-save
+failures leave Latest transcript available. A 200 ms SQLite busy timeout replaces its default
+five-second lock wait on the UI thread. Invalid saved timestamps have a display fallback.
+Settings now accurately explains enabled local history rather than claiming none is saved.
+These checks do not substitute for physical disk failure or clean-consumer-machine acceptance.

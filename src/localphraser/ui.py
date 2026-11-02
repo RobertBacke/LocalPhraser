@@ -413,9 +413,11 @@ class Settings(GlassDialog):
         self.update_mode()
         layout.addWidget(self.polishing)
         privacy = QLabel(
-            "No accounts, telemetry, audio files, or saved transcript history. "
-            "Only model installation uses the network. Latest transcript stays in memory "
-            "until cleared, replaced, or the app exits. Copy changes the clipboard explicitly."
+            "No accounts, telemetry or saved audio. When enabled, transcript history is saved "
+            "locally without encryption; turn it off above to stop new saves. Delete entries "
+            "or clear history from Home. Only model installation uses the network. "
+            "Latest transcript stays in memory until cleared, replaced, or the app exits. "
+            "Copy changes the clipboard explicitly."
         )
         privacy.setWordWrap(True)
         layout.addWidget(privacy)
@@ -790,6 +792,10 @@ class Desktop:
                 )
                 self.window.refresh_history()
             except (sqlite3.DatabaseError, OSError, ValueError):
+                self.window.history_failed(
+                    "This transcript could not be saved to history. "
+                    "Open Latest transcript to copy it."
+                )
                 self.notify(
                     "History could not be saved. Your text is available in Latest transcript."
                 )

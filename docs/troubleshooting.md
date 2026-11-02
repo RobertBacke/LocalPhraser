@@ -163,3 +163,15 @@ between the final directory moves may leave the old files only in the `.damaged`
 use Download or repair again to install a verified replacement. Files locked by another
 process can prevent replacement; close applications using that model and retry. Settings,
 other models and transcript history are outside the repair operation.
+## Saved-history errors
+
+If Home cannot read or change saved history, it shows a local error notice and keeps any
+already displayed text available to copy. Deletion controls pause until a successful refresh;
+click Home to retry after resolving free-space, file-permission or locking problems. No
+automatic database deletion or reset is attempted. Latest transcript retains the current
+result when saving a new entry fails. It remains in memory until replaced, cleared or exit,
+so copy any needed text before quitting.
+
+SQLite lock waits are limited to 200 ms to avoid its default five-second UI pause. This does
+not bound every operating-system disk operation. If Clear history fails during final database
+compaction, deletion may already have committed; click Home to check which entries remain.

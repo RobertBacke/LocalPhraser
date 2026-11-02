@@ -12,7 +12,8 @@ class History:
         self.path = path
         if path is not None:
             path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(str(path) if path else ":memory:")
+        # History runs on the UI thread; avoid SQLite's five-second default lock wait.
+        self.connection = sqlite3.connect(str(path) if path else ":memory:", timeout=0.2)
         self.connection.row_factory = sqlite3.Row
         try:
             version = self.connection.execute("PRAGMA user_version").fetchone()[0]

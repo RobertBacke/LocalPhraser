@@ -914,3 +914,29 @@ now cleans up and hides windows before ending the event loop; cleanup is idempot
 regression and the owned `scripts/native_quit_check.py` exercise visible Home, Settings and
 tray Quit without microphone access or inference. All three native cases passed. Title-bar
 Close continues to hide the app. The manual Windows preview workflow runs these cases too.
+
+## History and longer-session recovery — 2026-11-02
+
+The final suite passed **376 tests**, with Ruff check/format and mypy passing. Initial
+history regressions reproduced unhandled read/delete/clear failures before the UI guards
+were added. The tests now cover failed reads preserving displayed text, disabled destructive
+controls after an unreadable selection, actual SQLite read-only writes, database-full
+simulation using SQLite's page limit, saved timestamp fallback, and recovery after failure.
+A second SQLite connection holds a real write lock to check failed saves and subsequent
+recovery. Busy timeout is 200 ms; OS disk I/O is not generally time-bounded. No database is
+automatically reset. The native compact workspace check passed its read-only delete/retry
+case without Qt callback exceptions, with the text and Copy action available throughout.
+The stale Settings claim that no transcript history is saved was corrected.
+
+The owned real-model Qt check completed **100 consecutive sessions** using Base English,
+Qwen 1.5B, generated 48 kHz speech and a 60-second loaded-idle window. Its successful exit
+confirmed pipeline/polishing shutdown and clearing of the Latest transcript controls.
+Sampled peak process-tree RSS was approximately 2.23 GiB; the longest observed Qt timer gap
+was 0.266 seconds and sampled idle CPU was 4.06% of one core, including the observer.
+Other build/test processes ran concurrently, so these are stress observations rather than
+isolated latency/resource benchmarks. No microphone, keyboard insertion or personal text
+was used. This run does not establish the cause of the earlier intermittent native crash.
+
+```powershell
+python scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/reliability-session --case complete --cycles 100 --capture-rate 48000 --report .cache/reliability-session-100.json --idle-seconds 60
+```

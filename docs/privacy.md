@@ -37,6 +37,10 @@ stops new saves without silently deleting older entries. Statistics use recogniz
 words and recorded duration including pauses, rather than measuring voice activity alone.
 Clear/delete are logical deletion, not a guarantee against OS backups, paging or forensic
 recovery. A damaged database is preserved; the app reports a temporary in-memory fallback.
+Later read/write failures show fixed notices without database error strings or local paths.
+Previously displayed text remains copyable; a failed new history save leaves the latest
+result in memory. Home retries do not automatically reset or delete the database. Settings
+describes the enabled local storage and its lack of application-level encryption.
 Smoke tests suppress persistent history. Build inventory and ZIP checks reject the history
 database and its journal files; repository ignores cover the standard history filenames.
 Clipboard is untouched by automatic insertion. Explicit Copy transfers data to the Windows

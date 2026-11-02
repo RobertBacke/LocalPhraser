@@ -1,10 +1,11 @@
 """Taskbar desktop workspace and user-managed local transcript history."""
 
+import sqlite3
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -150,6 +151,11 @@ class AppWindow(GlassDialog):
         self.clear_button.clicked.connect(self.clear_history)
         recent.addWidget(self.clear_button)
         layout.addLayout(recent)
+        self.history_notice = QLabel()
+        self.history_notice.setTextFormat(Qt.TextFormat.PlainText)
+        self.history_notice.setWordWrap(True)
+        self.history_notice.hide()
+        layout.addWidget(self.history_notice)
         split = QSplitter()
         split.setHandleWidth(16)
         self.entries = QListWidget()
@@ -216,8 +222,17 @@ class AppWindow(GlassDialog):
         self.pages.setCurrentWidget(widget)
 
     def refresh_history(self) -> None:
+        try:
+            count, words, pace = self.history.stats()
+            entries = self.history.recent()
+            first = self.history.get(entries[0]["id"]) if entries else None
+        except (sqlite3.DatabaseError, OSError):
+            self.history_failed("History could not be read. Click Home to retry.")
+            return
+        self.history_notice.clear()
+        self.history_notice.hide()
+        blocker = QSignalBlocker(self.entries)
         self.entries.clear()
-        count, words, pace = self.history.stats()
         for label, value in zip(
             self.metric_labels,
             (str(words), str(count), f"{pace:.0f} wpm" if pace else "—"),
@@ -227,10 +242,15 @@ class AppWindow(GlassDialog):
         self.metric_labels[2].setToolTip(
             "Recognized original words divided by recorded minutes, including pauses."
         )
-        for entry in self.history.recent():
-            stamp = (
-                datetime.fromisoformat(entry["created"]).astimezone().strftime("%b %d · %I:%M %p")
-            )
+        for entry in entries:
+            try:
+                stamp = (
+                    datetime.fromisoformat(entry["created"])
+                    .astimezone()
+                    .strftime("%b %d · %I:%M %p")
+                )
+            except (ValueError, TypeError, OverflowError):
+                stamp = "Saved transcription"
             item = QListWidgetItem(
                 f"{stamp}   {entry['words']} words\n{entry['preview'].replace(chr(10), ' ')}"
             )
@@ -239,11 +259,18 @@ class AppWindow(GlassDialog):
         self.clear_button.setEnabled(bool(count))
         if count:
             self.entries.setCurrentRow(0)
-        else:
-            self.select_entry(None)
+        blocker.unblock()
+        self.display_entry(first)
 
     def select_entry(self, item: QListWidgetItem | None, previous: Any = None) -> None:
-        entry = self.history.get(item.data(Qt.ItemDataRole.UserRole)) if item else None
+        try:
+            entry = self.history.get(item.data(Qt.ItemDataRole.UserRole)) if item else None
+        except (sqlite3.DatabaseError, OSError):
+            self.history_failed("This entry could not be read. Click Home to retry.")
+            return
+        self.display_entry(entry)
+
+    def display_entry(self, entry: dict[str, Any] | None) -> None:
         self.copy_button.setEnabled(entry is not None)
         self.delete_button.setEnabled(entry is not None)
         self.result_text.setPlainText(entry["text"] if entry else "")
@@ -261,7 +288,13 @@ class AppWindow(GlassDialog):
     def delete_entry(self) -> None:
         item = self.entries.currentItem()
         if item:
-            self.history.delete(item.data(Qt.ItemDataRole.UserRole))
+            try:
+                self.history.delete(item.data(Qt.ItemDataRole.UserRole))
+            except (sqlite3.DatabaseError, OSError):
+                self.history_failed(
+                    "Entry could not be deleted. Click Home to check saved history."
+                )
+                return
             self.refresh_history()
 
     def clear_history(self) -> None:
@@ -271,8 +304,20 @@ class AppWindow(GlassDialog):
             )
             == QMessageBox.StandardButton.Yes
         ):
-            self.history.clear()
+            try:
+                self.history.clear()
+            except (sqlite3.DatabaseError, OSError):
+                self.history_failed(
+                    "History cleanup did not finish. Click Home to check saved entries."
+                )
+                return
             self.refresh_history()
+
+    def history_failed(self, message: str) -> None:
+        self.history_notice.setText(message)
+        self.history_notice.show()
+        self.delete_button.setEnabled(False)
+        self.clear_button.setEnabled(False)
 
     def closeEvent(self, event: Any) -> None:
         event.ignore()

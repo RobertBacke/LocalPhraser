@@ -349,6 +349,30 @@ def test_completed_dictation_is_saved_without_raising_the_home_window(desktop):
     assert desktop.latest.text.toPlainText() == "A private next result."
 
 
+@pytest.mark.parametrize("failure", ["readonly", "full"])
+def test_history_write_failure_preserves_latest_result_and_recovers(desktop, failure):
+    text = "Recover these words. " * 400
+    desktop.pipeline.audio_seconds = 2.0
+    desktop.latest.raw.setPlainText(text)
+    connection = desktop.history.connection
+    if failure == "readonly":
+        connection.execute("PRAGMA query_only=ON")
+    else:
+        pages = connection.execute("PRAGMA page_count").fetchone()[0]
+        connection.execute(f"PRAGMA max_page_count={pages}")
+    desktop.complete_transcript(text, "Inserted.")
+    assert desktop.latest.text.toPlainText() == text
+    assert desktop.history.stats()[0] == 0
+    assert not desktop.window.history_notice.isHidden()
+    assert "could not be saved" in desktop.window.history_notice.text()
+    desktop.notify.assert_called()
+    connection.execute("PRAGMA query_only=OFF")
+    connection.execute("PRAGMA max_page_count=1073741823")
+    desktop.complete_transcript(text, "Inserted.")
+    assert desktop.history.stats()[0] == 1
+    assert desktop.window.history_notice.isHidden()
+
+
 def test_cancel_discards_unsaved_fields_but_keeps_immediate_appearance(desktop):
     desktop.show_settings()
     desktop.settings.duration.setValue(180)
