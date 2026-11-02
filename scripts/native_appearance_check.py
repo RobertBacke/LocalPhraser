@@ -5,11 +5,12 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QToolButton
 
-from localphraser.appearance import dark_surface
+from localphraser.appearance import GlassComboBox, dark_surface
+from localphraser.audio import Microphone
 from localphraser.branding import logo_pixmap
 from localphraser.config import Config
 from localphraser.ui import Indicator, Latest, Settings, set_appearance
@@ -22,9 +23,16 @@ def check(output: Path) -> None:
     previous_hook = sys.excepthook
     sys.excepthook = lambda *args: errors.append("Qt callback failed")
     try:
-        with patch("localphraser.ui.microphones", return_value=[]):
+        with patch(
+            "localphraser.ui.microphones",
+            return_value=[
+                Microphone(f"Owned test microphone {i} with a long label", "Test API")
+                for i in range(25)
+            ],
+        ):
             settings = Settings(
-                Config(model_root=str(output.resolve() / "models")), lambda cfg: None
+                Config(model_root=str(output.resolve() / "models"), mode="polished"),
+                lambda cfg: None,
             )
             latest = Latest()
             latest.set_transcript("Your words stay on this device.", "Inserted.")
@@ -72,6 +80,26 @@ def check(output: Path) -> None:
                 QTest.keyClick(settings.model.view(), Qt.Key.Key_Down)
                 QTest.keyClick(settings.model.view(), Qt.Key.Key_Return)
                 assert settings.model.currentText() == "distil-small.en"
+                settings.resize(620, 480)
+                for combo in settings.findChildren(GlassComboBox):
+                    settings.scroll_area.ensureWidgetVisible(combo)
+                    QTest.qWait(50)
+                    QTest.mouseClick(combo, Qt.MouseButton.LeftButton)
+                    QTest.qWait(100)
+                    menu = combo.view().window()
+                    bounds = QRect(settings.mapToGlobal(QPoint()), settings.size())
+                    assert menu.isVisible() and bounds.contains(menu.geometry())
+                    assert combo.screen().availableGeometry().contains(menu.geometry())
+                    if combo is settings.device:
+                        QTest.keyClick(combo.view(), Qt.Key.Key_End)
+                        QTest.keyClick(combo.view(), Qt.Key.Key_Return)
+                        assert combo.currentIndex() == 25
+                    else:
+                        previous = combo.currentIndex()
+                        QTest.keyClick(combo.view(), Qt.Key.Key_Escape)
+                        assert combo.currentIndex() == previous
+                    assert not menu.isVisible()
+                settings.resize(620, 820)
                 indicator.hide()
             assert logo_pixmap(256).save(str(output / "speech-prism.png"))
             close = latest.findChild(QToolButton)

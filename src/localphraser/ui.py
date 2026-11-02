@@ -410,8 +410,8 @@ class Settings(GlassDialog):
         polishing_hint.setWordWrap(True)
         polishing_form.addRow(polishing_hint)
         self.mode.currentIndexChanged.connect(self.update_mode)
-        self.update_mode()
         layout.addWidget(self.polishing)
+        self.update_mode()
         privacy = QLabel(
             "No accounts, telemetry or saved audio. When enabled, transcript history is saved "
             "locally without encryption; turn it off above to stop new saves. Delete entries "

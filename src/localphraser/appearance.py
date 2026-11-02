@@ -6,7 +6,7 @@ import sys
 from functools import lru_cache
 from typing import Any
 
-from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -147,6 +147,36 @@ class GlassComboBox(QComboBox):
         self.setView(view)
         self.setMaxVisibleItems(8)
         self.setMinimumHeight(38)
+
+    def showPopup(self) -> None:
+        # Native roll-open animation uses the screen-sized geometry before we constrain it.
+        animated = QApplication.isEffectEnabled(Qt.UIEffect.UI_AnimateCombo)
+        QApplication.setEffectEnabled(Qt.UIEffect.UI_AnimateCombo, False)
+        try:
+            super().showPopup()
+        finally:
+            QApplication.setEffectEnabled(Qt.UIEffect.UI_AnimateCombo, animated)
+        popup = self.view().window()
+        if not popup.isVisible():
+            return
+        owner = self.window()
+        bounds = QRect(owner.mapToGlobal(QPoint()), owner.size()).adjusted(8, 8, -8, -8)
+        anchor = QRect(self.mapToGlobal(QPoint()), self.size())
+        screen = QApplication.screenAt(anchor.center()) or owner.screen()
+        bounds = bounds.intersected(screen.availableGeometry())
+        if bounds.isEmpty():
+            self.hidePopup()
+            return
+        below = max(0, bounds.bottom() - anchor.bottom() - 4)
+        above = max(0, anchor.top() - bounds.top() - 4)
+        open_below = popup.height() <= below or below >= above
+        height = min(popup.height(), max(1, below if open_below else above))
+        width = min(max(self.width(), popup.width()), bounds.width())
+        x = max(bounds.left(), min(anchor.left(), bounds.right() - width + 1))
+        y = anchor.bottom() + 5 if open_below else anchor.top() - height - 4
+        y = max(bounds.top(), min(y, bounds.bottom() - height + 1))
+        popup.setGeometry(x, y, width, height)
+        self.view().scrollTo(self.view().currentIndex())
 
     def paintEvent(self, event: Any) -> None:
         super().paintEvent(event)

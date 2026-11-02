@@ -86,3 +86,14 @@ and were not adopted. The existing Qt stack remains unchanged.
 Platform references: [Qt color schemes](https://doc.qt.io/qt-6/qstylehints.html#colorScheme-prop),
 [DWM backdrop types](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type),
 [DWM client frame](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmextendframeintoclientarea).
+
+## Settings interaction fixes
+
+The polishing group is parented into its layout before changing visibility. In Polished
+mode the previous ordering briefly showed a detached group window during construction.
+The standard Qt combo popup is retained, constrained to the owning window and intersecting
+screen work area, and placed above or below its control according to available space.
+Long lists scroll and long labels elide; Escape and keyboard selection retain Qt behavior.
+The native roll-open effect is suppressed only while opening that popup so its unconstrained
+geometry is not animated first. Compact native checks cover all Settings dropdowns and a
+25-device synthetic list. No new UI library or copied external code is introduced.
