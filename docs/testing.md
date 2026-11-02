@@ -896,7 +896,8 @@ An actual Tiny English repair in an isolated cache downloaded and verified a rep
 preserved damaged weights and an extra test note, and passed cold/warm generated-speech checks
 with Python socket connections denied. User models and personal audio were not used.
 
-The full local suite passed **365 tests**, with Ruff check/format and mypy passing. Native
+The final full local suite passed **366 tests**, including the explicit Quit regression below,
+with Ruff check/format and mypy passing. Native
 workspace and appearance checks passed instant themes, compact controls, Home navigation,
 opaque menus, non-focusing preview and screen containment. The running window was inspected
 through native capture over an owned synthetic backdrop; Windows accepted desktop acrylic.
@@ -906,3 +907,10 @@ reflective rims, static low-amplitude grain, clean tabs and a transparent splitt
 Embedded Settings shares the parent material. The dictation capsule retains its 250/255
 opacity and high-contrast mode retains opaque system colors. Other PCs and display policies
 can render the native backdrop differently.
+
+Native visual inspection also exposed a separate Quit problem: Qt's ordinary quit request
+could be vetoed by the visible window's close-to-background handler. Explicit Home/tray Quit
+now cleans up and hides windows before ending the event loop; cleanup is idempotent. A unit
+regression and the owned `scripts/native_quit_check.py` exercise visible Home, Settings and
+tray Quit without microphone access or inference. All three native cases passed. Title-bar
+Close continues to hide the app. The manual Windows preview workflow runs these cases too.

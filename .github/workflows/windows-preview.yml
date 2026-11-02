@@ -24,6 +24,13 @@ jobs:
       - run: python -m ruff check src tests scripts packaging
       - run: python -m ruff format --check src tests scripts packaging
       - run: python -m mypy src
+      - name: Verify explicit Quit with visible windows
+        shell: pwsh
+        run: |
+          foreach ($quitCase in @('home', 'settings', 'tray')) {
+            python scripts/native_quit_check.py --case $quitCase --temp-dir "$env:RUNNER_TEMP/localphraser-quit"
+            if ($LASTEXITCODE -ne 0) { throw "Quit failed: $quitCase" }
+          }
       - run: python -m PyInstaller --noconfirm packaging/localphraser.spec
       - name: Inventory bundled notices and native libraries offline
         run: python scripts/bundle_inventory.py --probe-ffmpeg

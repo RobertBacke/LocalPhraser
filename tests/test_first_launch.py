@@ -126,6 +126,23 @@ def publish_fixture_model(desktop):
         (folder / name).write_bytes(b"presence fixture; not inference")
 
 
+def test_explicit_quit_hides_workspace_and_cleans_up_once(desktop):
+    from PySide6.QtWidgets import QPushButton
+
+    desktop.show_home()
+    application = Mock()
+    desktop.app = application
+    button = next(
+        b for b in desktop.window.findChildren(QPushButton) if b.text() == "Quit LocalPhraser"
+    )
+    button.click()
+    assert desktop.closing and not desktop.window.isVisible()
+    application.quit.assert_called_once_with()
+    desktop.pipeline.shutdown.assert_called_once_with()
+    desktop.shutdown()
+    desktop.pipeline.shutdown.assert_called_once_with()
+
+
 @pytest.mark.parametrize("model", ["distil-small.en", "distil-medium.en", "medium.en"])
 def test_save_downloads_missing_selection_before_switching_and_returns_home(desktop, model):
     from localphraser.models import model_files

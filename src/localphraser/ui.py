@@ -608,6 +608,7 @@ class Desktop:
         persist_history: bool = True,
     ):
         self.closing = False
+        self._shutdown_started = False
         self.allow_live_warmup = warm_on_launch
         self.first_launch_setup_started = False
         self.app = app
@@ -643,7 +644,7 @@ class Desktop:
         menu.addAction("Latest transcript…", self.show_latest)
         menu.addAction("Settings…", self.show_settings)
         menu.addSeparator()
-        menu.addAction("Quit", app.quit)
+        menu.addAction("Quit", self.quit)
         self.menu = menu
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self.activated)
@@ -663,7 +664,7 @@ class Desktop:
             self.history,
             self.show_settings,
             self.toggle,
-            app.quit,
+            self.quit,
             config.hotkey,
             latest=self.show_latest,
         )
@@ -988,7 +989,14 @@ class Desktop:
         self.state_changed(State.IDLE, "")
         self.prepare_live_preview()
 
+    def quit(self) -> None:
+        self.shutdown()
+        self.app.quit()
+
     def shutdown(self) -> None:
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
         self.closing = True
         if self.settings:
             self.settings.hotkey.cancel_capture()
