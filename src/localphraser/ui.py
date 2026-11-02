@@ -2,7 +2,7 @@
 
 import sqlite3
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -31,6 +31,8 @@ from PySide6.QtWidgets import (
 )
 
 from localphraser import startup
+from localphraser.activation import ShortcutActivation
+from localphraser.analytics import application_name
 from localphraser.appearance import GlassComboBox, GlassDialog, GlassLabel
 from localphraser.audio import Recorder, microphones
 from localphraser.branding import app_icon
@@ -53,6 +55,7 @@ from localphraser.recognition import WhisperRecognizer
 from localphraser.refinement import LocalRefiner
 from localphraser.shortcut import HINT, ShortcutRecorder
 from localphraser.target_worker import TargetWorker
+from localphraser.vocabulary import VocabularyPage
 
 
 def set_appearance(theme: str) -> None:
@@ -241,7 +244,7 @@ class Settings(GlassDialog):
         title = QLabel("LocalPhraser")
         title.setStyleSheet("font-size: 28px; font-weight: 600; margin-bottom: 6px;")
         layout.addWidget(title)
-        description = QLabel("Hold your shortcut. Speak naturally. Release to transcribe locally.")
+        description = QLabel("Use your shortcut to dictate. Speech stays on this device.")
         description.setWordWrap(True)
         layout.addWidget(description)
         self.setup_notice = QLabel()
@@ -250,6 +253,7 @@ class Settings(GlassDialog):
         self.automatic_setup = False
         layout.addWidget(self.setup_notice)
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setVerticalSpacing(14)
         self.theme = GlassComboBox()
         for label, value in (("System", "system"), ("Light", "light"), ("Dark", "dark")):
@@ -271,6 +275,17 @@ class Settings(GlassDialog):
         shortcut_hint.setWordWrap(True)
         self.hotkey.message.connect(shortcut_hint.setText)
         form.addRow(shortcut_hint)
+        self.activation_mode = GlassComboBox()
+        self.activation_mode.addItem("Hold or double-tap — recommended", "both")
+        self.activation_mode.addItem("Hold to dictate", "hold")
+        self.activation_mode.addItem("Double-tap to start / stop", "double_tap")
+        self.activation_mode.setCurrentIndex(self.activation_mode.findData(config.activation_mode))
+        self.activation_mode.setToolTip(
+            "Use your shortcut for either gesture: hold at least 200 ms and release to finish, "
+            "or make two short taps within 350 ms to latch recording. Double-tap again to finish. "
+            "Hold-only and double-tap-only are available too."
+        )
+        form.addRow("Shortcut activation", self.activation_mode)
         self.device = GlassComboBox()
         self.device.addItem("System default", None)
         choices = []
@@ -306,20 +321,30 @@ class Settings(GlassDialog):
         for index, name in enumerate(MODELS):
             self.model.setItemData(index, MODEL_HINTS[name], Qt.ItemDataRole.ToolTipRole)
         form.addRow(model_hint)
+        self.recognition_quality = GlassComboBox()
+        for value, label in (
+            ("fast", "Fast — lowest processing cost"),
+            ("balanced", "Balanced — recommended"),
+            ("accurate", "Accurate — more processing"),
+        ):
+            self.recognition_quality.addItem(label, value)
+        self.recognition_quality.setCurrentIndex(
+            self.recognition_quality.findData(config.recognition_quality)
+        )
+        self.recognition_quality.setToolTip(
+            "Balanced and Accurate explore more decoding candidates after release. "
+            "Live preview stays fast. More search can help but does not guarantee correct words."
+        )
+        form.addRow("Recognition quality", self.recognition_quality)
         install_hint = QLabel(
             "Save downloads the selected speech model if needed, then returns Home. "
             "A new download requires internet and can be cancelled."
         )
         install_hint.setWordWrap(True)
         form.addRow(install_hint)
-        self.vocabulary = QLineEdit(config.vocabulary)
-        self.vocabulary.setMaxLength(300)
-        self.vocabulary.setPlaceholderText("Optional names or terms, separated by commas")
-        self.vocabulary.setAccessibleName("Vocabulary hints")
-        form.addRow("Vocabulary hints", self.vocabulary)
+        self.vocabulary_value = config.vocabulary
         vocabulary_hint = QLabel(
-            "Hints guide recognition; they do not guarantee spelling. Keep the list short. "
-            "Saved locally in settings. Clear the field to turn off."
+            "Manage names, technical terms and suggestions from Vocabulary in the sidebar."
         )
         vocabulary_hint.setWordWrap(True)
         form.addRow(vocabulary_hint)
@@ -371,8 +396,9 @@ class Settings(GlassDialog):
         self.mode.setCurrentIndex(self.mode.findData(config.mode))
         form.addRow("Mode", self.mode)
         mode_hint = QLabel(
-            "Raw delivers recognized text fastest. Polished adds a local editing step after "
-            "recognition; larger polishing models can take longer."
+            "Raw delivers recognized text fastest. Polished can adjust punctuation, capitals "
+            "and hesitation sounds. It rejects other word changes, so already-clean speech "
+            "may look unchanged. It does not reliably fix misheard words."
         )
         mode_hint.setWordWrap(True)
         form.addRow(mode_hint)
@@ -393,6 +419,10 @@ class Settings(GlassDialog):
         self.refinement_prompt.setPlainText(config.refinement_prompt)
         self.refinement_prompt.setMaximumHeight(100)
         self.refinement_prompt.setAccessibleName("Polishing instructions")
+        self.refinement_prompt.setToolTip(
+            "Formatting instructions do not override word preservation. "
+            "Word-changing model output falls back to the original transcription."
+        )
         polishing_form.addRow("Instructions", self.refinement_prompt)
         reset_prompt = QPushButton("Restore default instructions")
         reset_prompt.clicked.connect(lambda: self.refinement_prompt.setPlainText(DEFAULT_PROMPT))
@@ -469,7 +499,7 @@ class Settings(GlassDialog):
             max_seconds=self.duration.value(),
             cpu_threads=self.threads.value(),
             keep_microphone_ready=self.keep_ready.isChecked(),
-            vocabulary=self.vocabulary.text().strip(),
+            vocabulary=self.vocabulary_value,
             mode=self.mode.currentData(),
             refinement_model=self.refinement_model.currentText(),
             refinement_prompt=self.refinement_prompt.toPlainText().strip(),
@@ -478,6 +508,8 @@ class Settings(GlassDialog):
             live_preview=self.live_preview.isChecked(),
             theme=self.theme.currentData(),
             keep_history=self.keep_history.isChecked(),
+            recognition_quality=self.recognition_quality.currentData(),
+            activation_mode=self.activation_mode.currentData(),
         ).validate()
 
     def save(self) -> None:
@@ -624,6 +656,8 @@ class Desktop:
         self.latest = Latest()
         self.indicator = Indicator()
         self.settings: Settings | None = None
+        self.vocabulary_page: VocabularyPage | None = None
+        self.recording_app: Future[str] | None = None
         self.history_error = ""
         try:
             self.history = History(
@@ -652,7 +686,15 @@ class Desktop:
         self.tray.activated.connect(self.activated)
         self.insertion = TargetWorker()
         self.pipeline = self.make_pipeline(config)
-        self.hotkey = Hotkey(self.press, lambda: self.pipeline.release())
+        self.activation = ShortcutActivation(
+            self.press,
+            lambda: self.pipeline.release(),
+            self.toggle_shortcut,
+            lambda: self.pipeline.cancel(),
+            lambda: self.pipeline.state == State.RECORDING,
+            config.activation_mode,
+        )
+        self.hotkey = Hotkey(self.activation.key_down, self.activation.key_up)
         app.installNativeEventFilter(self.hotkey)
         self.hotkey_error = ""
         try:
@@ -669,7 +711,9 @@ class Desktop:
             self.quit,
             config.hotkey,
             latest=self.show_latest,
+            vocabulary=self.show_vocabulary,
         )
+        self.update_shortcut_hint()
         self.window.setWindowIcon(app_icon())
         self.tray.show()
         app.aboutToQuit.connect(self.shutdown)
@@ -741,6 +785,21 @@ class Desktop:
             return
         self.pipeline.press()
 
+    def toggle_shortcut(self) -> None:
+        if self.pipeline.state == State.RECORDING:
+            self.pipeline.release()
+        elif self.pipeline.state == State.IDLE:
+            self.press()
+
+    def update_shortcut_hint(self) -> None:
+        self.window.hint.setText(
+            f"Double-tap {self.config.hotkey} to start or stop recording."
+            if self.config.activation_mode == "double_tap"
+            else f"Hold {self.config.hotkey}, or double-tap to start / stop."
+            if self.config.activation_mode == "both"
+            else f"Hold {self.config.hotkey}, speak naturally, then release."
+        )
+
     def make_pipeline(self, config: Config) -> Dictation:
         self.recorder = Recorder(
             config.microphone, config.max_seconds, keep_ready=config.keep_microphone_ready
@@ -751,7 +810,10 @@ class Desktop:
         return Dictation(
             self.recorder,
             WhisperRecognizer(
-                Path(config.model_root) / config.model, config.cpu_threads, config.vocabulary
+                Path(config.model_root) / config.model,
+                config.cpu_threads,
+                config.vocabulary,
+                config.recognition_quality,
             ),
             self.insertion,
             self.bridge.queued.emit,
@@ -774,7 +836,13 @@ class Desktop:
             partial_result=self.indicator.preview,
             live_preview=config.live_preview,
             live_result=self.indicator.live_preview,
+            recording_started=self.recording_started,
         )
+
+    def recording_started(self, snapshot) -> None:
+        self.recording_app = None
+        if snapshot is not None and self.config.keep_history:
+            self.recording_app = self.audio_preparer.submit(application_name, snapshot.process_id)
 
     def notify(self, message: str) -> None:
         self.tray.showMessage(
@@ -787,8 +855,14 @@ class Desktop:
         self.latest.set_transcript(text, notice)
         if self.config.keep_history:
             try:
+                origin = "Unknown app"
+                if self.recording_app is not None and self.recording_app.done():
+                    try:
+                        origin = self.recording_app.result()
+                    except Exception:
+                        pass
                 self.history.add(
-                    self.latest.raw.toPlainText(), text, notice, self.pipeline.audio_seconds
+                    self.latest.raw.toPlainText(), text, notice, self.pipeline.audio_seconds, origin
                 )
                 self.window.refresh_history()
             except (sqlite3.DatabaseError, OSError, ValueError):
@@ -801,6 +875,8 @@ class Desktop:
                 )
 
     def state_changed(self, state: State, message: str) -> None:
+        if state in (State.IDLE, State.ERROR):
+            self.activation.reset()
         if state == State.ERROR and message:
             self.latest.record_error(message)
         label = (
@@ -861,6 +937,8 @@ class Desktop:
                 return
             # Tray interaction has changed focus: always use manual copy for this path.
             self.pipeline._clear_target()
+            self.recording_app = Future()
+            self.recording_app.set_result("LocalPhraser")
             self.pipeline.target_error = "Tray recording finished. Open Latest transcript to copy."
 
     def activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
@@ -896,6 +974,27 @@ class Desktop:
         self.window.raise_()
         self.window.activateWindow()
 
+    def show_vocabulary(self) -> None:
+        if self.vocabulary_page is None:
+            self.vocabulary_page = VocabularyPage(
+                self.history, lambda: self.config.vocabulary, self.save_vocabulary
+            )
+        self.vocabulary_page.refresh()
+        self.window.show_vocabulary(self.vocabulary_page)
+        self.window.showNormal()
+        self.window.raise_()
+        self.window.activateWindow()
+
+    def save_vocabulary(self, value: str) -> None:
+        if self.pipeline.state != State.IDLE:
+            raise ValueError("Finish dictation before changing vocabulary.")
+        config = replace(self.config, vocabulary=value)
+        save_config(config, self.config_path)
+        self.config = config
+        self.pipeline.recognizer.vocabulary = value
+        if self.settings:
+            self.settings.vocabulary_value = value
+
     def discard_settings(self) -> None:
         if self.settings is not None:
             previous = self.settings
@@ -917,6 +1016,7 @@ class Desktop:
     def begin_shortcut_capture(self, captured_caps: Callable[[], None]) -> None:
         if self.pipeline.state != State.IDLE:
             raise ValueError("Finish dictation before choosing a shortcut.")
+        self.activation.reset()
         self.hotkey.close()
         self.hotkey.capture_release_callback = None
         self.hotkey.capture_callback = captured_caps
@@ -973,13 +1073,20 @@ class Desktop:
                 self.hotkey.register(self.config.hotkey)
             raise
         appearance_only = (
-            replace(config, theme=self.config.theme, keep_history=self.config.keep_history)
+            replace(
+                config,
+                theme=self.config.theme,
+                keep_history=self.config.keep_history,
+                activation_mode=self.config.activation_mode,
+            )
             == self.config
         )
         if config.theme != self.config.theme:
             set_appearance(config.theme)
         self.config = config
-        self.window.hint.setText(f"Hold {config.hotkey}, speak naturally, then release.")
+        self.activation.mode = config.activation_mode
+        self.activation.reset()
+        self.update_shortcut_hint()
         self.window.record_button.setText(
             "Record to history" if config.keep_history else "Record (manual copy)"
         )
@@ -1004,6 +1111,7 @@ class Desktop:
             return
         self._shutdown_started = True
         self.closing = True
+        self.activation.reset()
         if self.settings:
             self.settings.hotkey.cancel_capture()
         self.hotkey.close()

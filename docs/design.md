@@ -1,6 +1,7 @@
 # Desktop glass appearance
 
-LocalPhraser is a desktop dictation workspace. A taskbar window contains Home and Settings,
+LocalPhraser is a desktop dictation workspace. A taskbar window contains Home, Settings,
+Vocabulary and Analytics,
 with history, speaking statistics and direct recovery access. Pearl/cyan/violet light behind
 frosted panels separates navigation, history and readable inset controls. Thin reflective
 edges, translucent gradients and fine static grain give the panels depth. The floating
@@ -18,7 +19,7 @@ or external background image is used.
 | Ambient light | Cyan `#4a9fe7`, violet `#9976de`, teal `#3ab7c7` |
 | Primary action | Blue/violet gradient; darker backing maintains white-label contrast |
 | Focus | Light `#365f95`; Dark `#9fd9ff`, visible 2 px border |
-| Typography | Installed Segoe UI; 28 px product title, 13–14 px labels and preview |
+| Typography | Bundled Space Grotesk; 28 px product title, 13–14 px labels and preview |
 
 The taskbar workspace has a left navigation rail, saved-word/dictation/pace summaries,
 and a history list beside an original/result detail pane. Settings retains a left-aligned
@@ -97,3 +98,22 @@ Long lists scroll and long labels elide; Escape and keyboard selection retain Qt
 The native roll-open effect is suppressed only while opening that popup so its unconstrained
 geometry is not animated first. Compact native checks cover all Settings dropdowns and a
 25-device synthetic list. No new UI library or copied external code is introduced.
+
+## Vocabulary, analytics and typography
+
+Vocabulary and Analytics are taskbar-workspace pages using the existing material and sidebar.
+Vocabulary separates approved recognition hints from reviewable suggestions; local pattern
+analysis is labeled explicitly, and correction/dismissal memory has an explicit deletion
+control. Analytics uses a simple application/24-hour/7-day/all-time table, describing the
+counting scope and unknown legacy entries. Both keep text selectable/plain and errors fixed.
+
+The interface, transcript panes and dictation widget use bundled Space Grotesk, a geometric
+sans-serif with readable text forms. The unmodified variable font and its copyright/OFL
+notice come from Google Fonts' repository and have recorded hashes in third-party notices.
+Windows font fallback covers missing glyphs. Native/system dialogs keep platform behavior.
+
+The desktop retains frameless glass but adds the resizable-frame style Windows requires for
+snapping. Native hit testing exposes caption drag regions, resize edges and the maximize
+button, including explicit native-button click handling. A compact sidebar and wrapped
+Settings rows reduce minimum-width pressure. Actual owned-window top-edge maximize and
+side snapping were inspected; this does not cover every DPI/monitor policy configuration.

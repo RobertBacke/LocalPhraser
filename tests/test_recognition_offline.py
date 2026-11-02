@@ -13,6 +13,19 @@ import pytest
 from localphraser.recognition import WhisperRecognizer
 
 
+@pytest.mark.parametrize("quality,beam", [("fast", 1), ("balanced", 3), ("accurate", 5)])
+def test_quality_affects_final_decode_but_live_preview_stays_fast(quality, beam):
+    recognizer = WhisperRecognizer(Path("unused"), quality=quality)
+    recognizer._model = Mock()
+    recognizer._model.transcribe.side_effect = lambda *args, **kwargs: (iter([]), None)
+    audio = np.zeros(16000, dtype=np.float32)
+    recognizer.transcribe(audio)
+    assert recognizer._model.transcribe.call_args.kwargs["beam_size"] == beam
+    recognizer.preview_ready = True
+    recognizer.preview(audio)
+    assert recognizer._model.transcribe.call_args.kwargs["beam_size"] == 1
+
+
 @pytest.mark.skipif(
     not os.environ.get("LOCALPHRASER_TEST_MODEL"), reason="No local test model selected"
 )

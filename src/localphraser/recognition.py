@@ -8,9 +8,12 @@ from typing import Any, Protocol
 import numpy as np
 
 from localphraser.audio import SAMPLE_RATE, Audio
+from localphraser.config import RECOGNITION_QUALITY
 
 
 class Recognizer(Protocol):
+    vocabulary: str
+
     def prepare(self) -> None: ...
     def transcribe(self, audio: Audio) -> str: ...
     def transcribe_stream(
@@ -19,10 +22,17 @@ class Recognizer(Protocol):
 
 
 class WhisperRecognizer:
-    def __init__(self, model_path: Path, cpu_threads: int = 4, vocabulary: str = ""):
+    def __init__(
+        self,
+        model_path: Path,
+        cpu_threads: int = 4,
+        vocabulary: str = "",
+        quality: str = "balanced",
+    ):
         self.path = model_path
         self.cpu_threads = cpu_threads
         self.vocabulary = vocabulary.strip()
+        self.beam_size = RECOGNITION_QUALITY[quality]
         self._model: Any = None
         self.preview_ready = False
 
@@ -62,7 +72,7 @@ class WhisperRecognizer:
         self.prepare()
         audio = np.zeros(16000, dtype=np.float32)
         try:
-            self._decode(audio)  # Initialize the VAD path, even without detected speech.
+            self._decode(audio, preview=True)  # Initialize VAD without a full beam search.
             segments, _ = self._model.transcribe(
                 audio,
                 language="en",
@@ -82,13 +92,15 @@ class WhisperRecognizer:
         # Cold imports/VAD initialization previously starved microphone callbacks.
         if not self.preview_ready or self._model is None:
             return ""
-        return self._decode(audio)
+        return self._decode(audio, preview=True)
 
-    def _decode(self, audio: Audio, partial: Callable[[str], None] | None = None) -> str:
+    def _decode(
+        self, audio: Audio, partial: Callable[[str], None] | None = None, *, preview: bool = False
+    ) -> str:
         segments, _ = self._model.transcribe(
             audio,
             language="en",
-            beam_size=1,
+            beam_size=1 if preview else self.beam_size,
             vad_filter=True,
             condition_on_previous_text=False,
             temperature=0,

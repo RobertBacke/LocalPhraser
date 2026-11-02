@@ -137,3 +137,26 @@ failures leave Latest transcript available. A 200 ms SQLite busy timeout replace
 five-second lock wait on the UI thread. Invalid saved timestamps have a display fallback.
 Settings now accurately explains enabled local history rather than claiming none is saved.
 These checks do not substitute for physical disk failure or clean-consumer-machine acceptance.
+
+## Reviewed vocabulary, app analytics and interaction — 2026-11-02
+
+Vocabulary is now a sidebar page with manual terms, local recurring-term suggestions,
+explicit corrected-spelling suggestions, approval/dismissal and feedback deletion. Existing
+approved hints remain in config.json and retain their 300-character recognition budget.
+Suggestions are pattern-based; neither a second LLM nor external app text monitoring is used.
+
+Analytics groups completed saved dictations by their starting app over rolling 24-hour,
+7-day and all-history windows. App names come from the initial foreground process identity,
+queried after capture begins. No titles/URLs/document text are collected. History upgrades
+preserve old rows as Unknown app, and deletion/disabled history govern counts.
+
+Balanced final decoding is the default, with Fast/Accurate choices; preview stays on the fast
+path. The polishing review compares Handy, OpenWhispr and VoiceInk through read-only public
+sources. Current word-preservation behavior is retained and explained in Settings.
+
+The default activation supports both hold/release and double-tap latch/stop for the selected
+shortcut. Hold-only and double-tap-only are selectable. Capture starts immediately in combined
+mode; lone quick taps cancel without delivery. The custom window now exposes native resize,
+caption and maximize hit tests. An owned native UI test verified top-edge maximize, mouse
+maximize/restore and full-height side snapping. Space Grotesk is bundled with its OFL notice.
+Broader voice accuracy, gesture timing, display-policy and clean-machine acceptance remain.

@@ -9,7 +9,9 @@ This is a development preview, not a stable release. Keep the entire folder toge
    Wait for "Speech model ready." No account or API key is needed. You can Cancel;
    retry with Download speech model. Later launches do not automatically retry.
    Already have models? Cancel, select their directory in Settings, then Save.
-4. Place the cursor in a text field, hold CapsLock, speak, then release it.
+4. Place the cursor in a text field. Hold CapsLock, speak, then release it; or double-tap
+   to start recording and double-tap again to finish. Settings can restrict activation
+   to hold-only or double-tap-only. The gesture follows your chosen global shortcut.
    Save is needed only if you changed settings; the default model works as soon as installed.
 5. Home and Settings are in the taskbar workspace. Theme changes apply immediately;
    Save applies other settings and keeps the page open. Minimize keeps the taskbar button;

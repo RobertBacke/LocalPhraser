@@ -24,9 +24,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from localphraser.analytics import AnalyticsPage
 from localphraser.appearance import DragHandle, GlassDialog, dark_surface
 from localphraser.branding import logo_pixmap
 from localphraser.history import History
+from localphraser.native_frame import enable_snap, hit_test, native_message
 
 
 class AppWindow(GlassDialog):
@@ -38,9 +40,11 @@ class AppWindow(GlassDialog):
         quit_app: Callable[[], None],
         shortcut: str,
         latest: Callable[[], None] | None = None,
+        vocabulary: Callable[[], None] | None = None,
     ):
         super().__init__()
         self.history = history
+        self._maximize_pressed = False
         self.setWindowFlags(
             Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
@@ -48,7 +52,7 @@ class AppWindow(GlassDialog):
             | Qt.WindowType.WindowSystemMenuHint
         )
         self.setWindowTitle("LocalPhraser")
-        self.setMinimumSize(740, 480)
+        self.setMinimumSize(600, 480)
         screen = QApplication.primaryScreen()
         area = screen.availableGeometry() if screen else None
         self.resize(
@@ -56,13 +60,15 @@ class AppWindow(GlassDialog):
             min(740, area.height() - 48) if area else 740,
         )
         outer = QHBoxLayout(self)
+        self.shell_layout = outer
         outer.setContentsMargins(18, 18, 18, 18)
         outer.setSpacing(24)
         sidebar = QFrame()
+        self.sidebar = sidebar
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(178)
         nav = QVBoxLayout(sidebar)
-        nav.setSpacing(12)
+        nav.setSpacing(6)
         brand_row = QHBoxLayout()
         brand_row.setSpacing(8)
         logo = QLabel()
@@ -77,7 +83,7 @@ class AppWindow(GlassDialog):
         brand.setObjectName("brand")
         brand_row.addWidget(brand, 1)
         nav.addLayout(brand_row)
-        nav.addSpacing(28)
+        nav.addSpacing(18)
         self.home_button = QPushButton("Home")
         self.home_button.setCheckable(True)
         self.home_button.setChecked(True)
@@ -90,6 +96,17 @@ class AppWindow(GlassDialog):
         self.settings_button.clicked.connect(settings)
         nav.addWidget(self.home_button)
         nav.addWidget(self.settings_button)
+        self.vocabulary_button = QPushButton("Vocabulary")
+        self.vocabulary_button.setCheckable(True)
+        self.navigation.addButton(self.vocabulary_button)
+        if vocabulary:
+            self.vocabulary_button.clicked.connect(vocabulary)
+        nav.addWidget(self.vocabulary_button)
+        self.analytics_button = QPushButton("Analytics")
+        self.analytics_button.setCheckable(True)
+        self.navigation.addButton(self.analytics_button)
+        self.analytics_button.clicked.connect(self.show_analytics)
+        nav.addWidget(self.analytics_button)
         if latest is not None:
             latest_button = QPushButton("Latest transcript")
             latest_button.clicked.connect(latest)
@@ -117,6 +134,7 @@ class AppWindow(GlassDialog):
         ):
             button = QPushButton(text)
             button.setAccessibleName(label)
+            button.setProperty("systemMaximizeButton", label == "Maximize or restore window")
             button.setToolTip(label)
             button.setFixedWidth(42)
             button.clicked.connect(callback)
@@ -128,9 +146,11 @@ class AppWindow(GlassDialog):
         layout.setContentsMargins(0, 14, 0, 0)
         layout.setSpacing(18)
         heading = QLabel("A space for your words")
+        heading.setWordWrap(True)
         heading.setObjectName("pageTitle")
         layout.addWidget(heading)
         self.hint = QLabel(f"Hold {shortcut}, speak naturally, then release.")
+        self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
         metrics = QHBoxLayout()
         self.metric_labels = []
@@ -200,12 +220,44 @@ class AppWindow(GlassDialog):
         self.storage_note.setWordWrap(True)
         layout.addWidget(self.storage_note)
         self.pages.addWidget(self.home)
+        self.analytics = AnalyticsPage(history)
+        self.pages.addWidget(self.analytics)
         content.addWidget(self.pages, 1)
         outer.addLayout(content, 1)
         self.refresh_history()
 
     def maximize_restore(self) -> None:
         self.showNormal() if self.isMaximized() else self.showMaximized()
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        enable_snap(self)
+
+    def resizeEvent(self, event: Any) -> None:
+        if hasattr(self, "sidebar"):
+            compact = self.width() < 820
+            self.sidebar.setFixedWidth(150 if compact else 178)
+            self.shell_layout.setContentsMargins(*([12] * 4 if compact else [18] * 4))
+            self.shell_layout.setSpacing(14 if compact else 24)
+        super().resizeEvent(event)
+
+    def nativeEvent(self, event_type: Any, message: int) -> Any:
+        msg = native_message(int(message))
+        if msg is not None:
+            if msg.message == 0x00A1 and msg.wParam == 9:  # Native maximize press.
+                self._maximize_pressed = True
+                return True, 0
+            if msg.message == 0x00A2 and self._maximize_pressed:
+                self._maximize_pressed = False
+                if msg.wParam == 9:
+                    self.maximize_restore()
+                return True, 0
+            if msg.message in (0x0201, 0x00A1):
+                self._maximize_pressed = False
+        result = hit_test(self, int(message))
+        if result is not None:
+            return True, result
+        return super().nativeEvent(event_type, message)
 
     def refresh_logo(self, *args: Any) -> None:
         self.logo.setPixmap(logo_pixmap(28, light=dark_surface()))
@@ -220,6 +272,17 @@ class AppWindow(GlassDialog):
         if self.pages.indexOf(widget) < 0:
             self.pages.addWidget(widget)
         self.pages.setCurrentWidget(widget)
+
+    def show_vocabulary(self, widget: QWidget) -> None:
+        self.vocabulary_button.setChecked(True)
+        if self.pages.indexOf(widget) < 0:
+            self.pages.addWidget(widget)
+        self.pages.setCurrentWidget(widget)
+
+    def show_analytics(self) -> None:
+        self.analytics_button.setChecked(True)
+        self.analytics.refresh()
+        self.pages.setCurrentWidget(self.analytics)
 
     def refresh_history(self) -> None:
         try:

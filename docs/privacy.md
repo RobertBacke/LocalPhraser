@@ -19,15 +19,22 @@ and any decode output are discarded; no microphone audio is used for preparation
 No dictated content is logged. Exceptions shown to users are sanitized. No external analytics,
 accounts, telemetry, updater, or cloud inference client.
 
-Optional vocabulary hints are text explicitly entered by the user and saved in local
-`config.json`. They are passed only to the local speech recognizer. They are never collected
-from dictated speech or surrounding documents. Clear the field and Save to remove hints
-from the current configuration; user-made backups may retain older settings.
+Approved vocabulary hints are explicitly added/reviewed in Vocabulary and saved in local
+`config.json`. Only approved hints reach the local speech recognizer; Remove selected word
+removes one. Opening Vocabulary scans bounded samples (first 3,000 characters of the latest
+200 saved raw dictations) for recurring names/technical terms. This local pattern analysis
+does not train a model or call an LLM/network service. It does not inspect external app text.
+Corrected spellings explicitly submitted on the page and dismissed terms are stored in a
+separate table in the same local history database. Forget suggestion history deletes that
+feedback, preserving approved hints; retained dictations can generate recurring suggestions
+again. Clearing dictations removes their derived evidence but does not silently delete
+explicit dictionary feedback or approved vocabulary. User/OS backups may retain older data.
 
 Latest transcript is a single in-memory recovery result, replaced by the next successful
 dictation, with Raw and Result versions in Polished mode. Both are explicitly clearable and
 cleared on exit. Separately, user-requested transcript history is enabled by default and saves
-original/result text, delivery notice, timestamp, recognized word count and recorded duration
+original/result text, delivery notice, timestamp, recognized word count, recorded duration
+and the starting application's display name
 in `history.sqlite3` beside the default configuration; custom configuration filenames have
 separate history files in that directory. It contains no microphone audio. This
 is ordinary local SQLite storage without application-level encryption; anyone with access
@@ -45,6 +52,21 @@ Smoke tests suppress persistent history. Build inventory and ZIP checks reject t
 database and its journal files; repository ignores cover the standard history filenames.
 Clipboard is untouched by automatic insertion. Explicit Copy transfers data to the Windows
 clipboard; OS clipboard history or sync may retain that copy outside LocalPhraser.
+
+Application identity comes from the existing initial foreground snapshot's process ID.
+After capture starts, a worker queries only that process's name and maps known executable
+names to readable labels. Unknown/inaccessible processes use Unknown app. Window titles,
+document contents, URLs and executable paths are not collected for app analytics. Counts
+come from saved dictations and disappear with their rows; disabling history stops new
+app-name saves/counts. Schema upgrades preserve old text and label prior entries Unknown app.
+The new database schema is not readable by older builds; retain a user-made backup before
+trying a downgrade rather than deleting a database reported as unavailable.
+
+The default shortcut mode buffers microphone audio immediately on first press. Holding for
+at least 200 ms records until release. Two short taps within 350 ms latch recording until
+another pair stops it. A lone quick tap is cancelled and its buffer cleared, without
+transcription, insertion or a history entry. Hold-only and double-tap-only modes are offered.
+The existing recording-duration limit and manual cancellation continue to apply.
 
 On the first normal launch of a new configuration profile, the app opens Settings and starts
 one visible download of the default `base.en` speech model if it is absent. Cancel is available.

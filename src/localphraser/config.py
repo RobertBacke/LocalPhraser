@@ -15,6 +15,7 @@ MODEL_HINTS = {
     "medium.en": "Largest option (~1.53 GB). More CPU and memory; expect longer processing.",
 }
 REFINEMENT_MODELS = ("qwen2.5-0.5b", "qwen2.5-1.5b")
+RECOGNITION_QUALITY = {"fast": 1, "balanced": 3, "accurate": 5}
 DEFAULT_REFINEMENT_MODEL = "qwen2.5-1.5b"
 DEFAULT_PROMPT = (
     "Edit this dictated text. Add punctuation and capitalization, and remove hesitation "
@@ -82,13 +83,22 @@ class Config:
     live_preview: bool = False
     theme: str = "system"
     keep_history: bool = True
+    recognition_quality: str = "balanced"
+    activation_mode: str = "both"
 
     def validate(self) -> "Config":
         if not isinstance(self.hotkey, str):
             raise ValueError("Hotkey must be text.")
         parse_hotkey(self.hotkey)
+        if self.activation_mode not in ("both", "hold", "double_tap"):
+            raise ValueError("Choose Hold or double-tap, Hold only, or Double-tap only.")
         if self.model not in MODELS:
             raise ValueError("Unsupported speech model.")
+        if (
+            not isinstance(self.recognition_quality, str)
+            or self.recognition_quality not in RECOGNITION_QUALITY
+        ):
+            raise ValueError("Choose Fast, Balanced or Accurate recognition.")
         if not isinstance(self.model_root, str) or not self.model_root.strip():
             raise ValueError("Choose a model directory.")
         if not Path(self.model_root).is_absolute():

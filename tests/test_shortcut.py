@@ -101,6 +101,7 @@ def test_capture_restores_existing_runtime_shortcut():
     desktop.pipeline = Mock(state=State.IDLE)
     desktop.config = Config(hotkey="Ctrl+Shift+F9")
     desktop.hotkey = Mock()
+    desktop.activation = Mock()
     desktop.hotkey._caps_handle = None
     desktop.closing = False
     callback = Mock()
@@ -112,17 +113,17 @@ def test_capture_restores_existing_runtime_shortcut():
     desktop.hotkey.register.assert_called_with("Ctrl+Shift+F9")
 
 
-def test_settings_edit_and_clear_vocabulary_without_changing_model(app, monkeypatch):
+def test_settings_preserves_vocabulary_managed_on_its_own_page(app, monkeypatch):
     monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
     applied = Mock()
     settings = Settings(Config(model="small.en", vocabulary="Codex"), applied)
-    assert settings.vocabulary.text() == "Codex"
-    settings.vocabulary.setText("  Codex, PySide, NumPy  ")
+    assert settings.vocabulary_value == "Codex"
+    settings.vocabulary_value = "Codex, PySide, NumPy"
     settings.save()
     config = applied.call_args.args[0]
     assert config.vocabulary == "Codex, PySide, NumPy"
     assert config.model == "small.en"
-    settings.vocabulary.clear()
+    settings.vocabulary_value = ""
     assert settings.values().vocabulary == ""
     settings.close()
 

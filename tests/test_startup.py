@@ -121,6 +121,7 @@ def test_unrelated_settings_save_with_startup_off_does_not_access_registry(tmp_p
     desktop.config_path = tmp_path / "config.json"
     desktop.pipeline = Mock(state=State.IDLE)
     desktop.hotkey = Mock(registered=True)
+    desktop.activation = Mock()
     desktop.make_pipeline = Mock(return_value=Mock())
     desktop.state_changed = Mock()
     monkeypatch.setattr(

@@ -68,6 +68,7 @@ class Dictation:
         partial_result: Callable[[str], None] | None = None,
         live_preview: bool = False,
         live_result: Callable[[str], None] | None = None,
+        recording_started: Callable[[Any], None] | None = None,
     ):
         self.recorder = recorder
         self.recognizer = recognizer
@@ -82,6 +83,7 @@ class Dictation:
         self.partial_result = partial_result
         self.live_preview = live_preview
         self.live_result = live_result
+        self.recording_started = recording_started
         self.preview_pending: Future[str] | None = None
         self.warm_pending: Future[Any] | None = None
         self.preview_after = 0.0
@@ -154,7 +156,7 @@ class Dictation:
         self.target_error = ""
         self.generation += 1
         snapshot = None
-        if self.auto_insert:
+        if self.auto_insert or self.recording_started is not None:
             try:
                 snapshot = self.insertion.snapshot()
             except Exception:
@@ -168,6 +170,11 @@ class Dictation:
             self.recorder.cancel()
             self._error("Cannot open microphone. Check device and Windows microphone permissions.")
             return
+        if self.recording_started:
+            try:
+                self.recording_started(snapshot)
+            except Exception:
+                pass  # Optional app statistics must not interrupt recording.
         # Audio is already buffered while potentially slow accessibility checks run.
         if self.auto_insert and snapshot is not None:
             try:

@@ -940,3 +940,38 @@ was used. This run does not establish the cause of the earlier intermittent nati
 ```powershell
 python scripts/native_shutdown_check.py --root .cache/models --temp-dir .cache/reliability-session --case complete --cycles 100 --capture-rate 48000 --report .cache/reliability-session-100.json --idle-seconds 60
 ```
+
+## Vocabulary, app analytics, gestures and native frame — 2026-11-02
+
+The final source suite passed **412 tests**, with Ruff check/format and mypy passing. The
+new checks exercise legacy database migration without losing text, rolling 24-hour/7-day
+app totals and deletion, process-name-only lookup, approved versus suggested vocabulary,
+correction/dismissal persistence and explicit feedback deletion, save/budget failures,
+default and optional shortcut gestures, real Qt lone-tap timeouts and stale-timer revocation.
+The new recognition-quality tests verify final beam settings while preview remains fast.
+The bundled font's SHA-256, OFL notice and actual Qt font selection are checked. A built
+wheel was inspected for new modules, font/license assets and the runtime psutil dependency.
+
+Native appearance checks passed every Settings dropdown in Light/Dark/System, including
+the new activation/quality selectors and 25 synthetic microphone choices. Menus stayed
+inside their owner and work area, preserved keyboard selection and dismissed with Escape.
+The detached Polished-mode group flash was reproduced before fixing layout/visibility order.
+The workspace check passed actual Vocabulary/Analytics navigation, active hint updates,
+preservation of unsaved settings, native frame flags, maximize hit-testing and click handling.
+Manual computer-use inspection of an owned no-microphone/no-hotkey fixture verified real
+top-edge maximize, mouse maximize/restore and full-height side snapping (960 × 1152 in a
+1920 × 1152 work area). Timed/explicit fixture exits were clean. Multiple monitors, mixed
+DPI and the user's own Windows Snap Layout preferences remain separate acceptance checks.
+
+Ten complete generated 48 kHz Base English/Balanced + local Qwen 1.5B sessions passed and
+closed cleanly. The recognition/polishing review and fixed-speech limitations are documented
+in [polishing-review.md](polishing-review.md). These are not human-voice accuracy guarantees.
+
+One earlier full run encountered WinError 5 while publishing an owned model-repair fixture;
+the existing rollback path ran. Its isolated regression passed three consecutive reruns,
+and the final full suite passed. The cause of that transient filesystem denial was not
+established and installer behavior was not changed based on an assumption.
+
+The opt-in native hotkey check now has `--gestures` for combined hold/latch/stop/lone-tap
+behavior on CapsLock or a registered chord. It refuses to run while LocalPhraser.exe is
+running, checks foreground ownership before input and never captures a microphone.

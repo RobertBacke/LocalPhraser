@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 import uuid
+from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import patch
 
@@ -51,11 +52,63 @@ def check(output: Path, models: Path) -> None:
             api.GetWindow.restype = ctypes.c_void_p
             assert not api.GetWindowLongPtrW(hwnd, -20) & 0x80, "Workspace is a tool window"
             assert not api.GetWindow(hwnd, 4), "Workspace has a hidden owner"
+            assert api.GetWindowLongPtrW(hwnd, -16) & 0x00040000, "Snap sizing style missing"
+            from ctypes import wintypes
+
+            from PySide6.QtCore import QPoint
+            from PySide6.QtWidgets import QPushButton
+
+            maximize = next(
+                button
+                for button in desktop.window.findChildren(QPushButton)
+                if button.property("systemMaximizeButton")
+            )
+            center = maximize.mapTo(desktop.window, maximize.rect().center())
+            scale = desktop.window.devicePixelRatioF()
+            point = wintypes.POINT(round(center.x() * scale), round(center.y() * scale))
+            api.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+            api.ClientToScreen(hwnd, ctypes.byref(point))
+            api.SendMessageW.argtypes = [
+                wintypes.HWND,
+                wintypes.UINT,
+                wintypes.WPARAM,
+                wintypes.LPARAM,
+            ]
+            api.SendMessageW.restype = ctypes.c_ssize_t
+            assert (
+                api.SendMessageW(hwnd, 0x84, 0, (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16))
+                == 9
+            )
+            for maximized in (True, False):
+                api.SendMessageW(hwnd, 0xA1, 9, 0)
+                api.SendMessageW(hwnd, 0xA2, 9, 0)
+                QTest.qWait(100)
+                assert desktop.window.isMaximized() == maximized
             desktop.pipeline.audio_seconds = 2
+            origin = Future()
+            origin.set_result("Codex")
+            desktop.recording_app = origin
             desktop.latest.raw.setPlainText("hello from the local workspace")
             desktop.complete_transcript("Hello from the local workspace.", "Inserted.")
             assert desktop.window.entries.count() == 1
             assert desktop.window.metric_labels[2].text() == "150 wpm"
+            desktop.window.analytics_button.click()
+            assert desktop.window.pages.currentWidget() is desktop.window.analytics
+            assert desktop.window.analytics.table.item(0, 0).text() == "Codex"
+            assert [desktop.window.analytics.table.item(0, i).text() for i in (1, 2, 3)] == [
+                "1",
+                "1",
+                "1",
+            ]
+            desktop.window.grab().save(str(folder / "analytics.png"))
+            desktop.window.vocabulary_button.click()
+            vocabulary = desktop.vocabulary_page
+            assert vocabulary is not None
+            vocabulary.entry.setText("Codex")
+            vocabulary.add_button.click()
+            assert load_config(config_path).vocabulary == "Codex"
+            assert desktop.pipeline.recognizer.vocabulary == "Codex"
+            desktop.window.grab().save(str(folder / "vocabulary.png"))
             desktop.show_settings()
             settings = desktop.settings
             assert settings is not None
@@ -81,7 +134,6 @@ def check(output: Path, models: Path) -> None:
             assert settings is not None
             desktop.window.resize(740, 480)
             QTest.qWait(50)
-            from PySide6.QtCore import QPoint
             from PySide6.QtWidgets import QDialogButtonBox
 
             buttons = settings.findChild(QDialogButtonBox)

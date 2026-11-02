@@ -31,7 +31,9 @@ size and RAM usage have not yet been benchmarked.
 
 1. Install a model explicitly, through the command above or Settings → Download.
 2. Focus a supported editable text field with an empty selection.
-3. Hold **Caps Lock**, speak, and release it.
+3. Hold **Caps Lock**, speak, and release it; or double-tap to start hands-free recording
+   and double-tap again to finish. Both gestures are enabled by default for the selected
+   shortcut. Settings also offers hold-only and double-tap-only modes.
 4. The indicator shows listening/transcribing. Verified targets receive Unicode input.
 5. If the field cannot be verified or focus/caret changes, use tray → Latest transcript → Copy.
 
@@ -124,6 +126,20 @@ one visible model setup download; later launches do not retry automatically.
 
 No telemetry, saved audio, cloud inference, or background update checks.
 Transcript history is saved locally by default in `history.sqlite3` beside `config.json` (custom profile filenames receive separate history files).
+**Analytics** compares completed dictations by starting app over rolling 24-hour/7-day
+windows and all saved history. Counts include manual recovery results; deleting history
+also removes its counts. Older entries are grouped as Unknown app.
+
+**Vocabulary** manages the existing recognition hints separately from Settings. Add a name
+or phrase, review recurring-term/corrected-spelling suggestions, approve or dismiss them,
+and remove terms when no longer useful. Approved hints have a 300-character budget and
+remain local. Suggestions never apply automatically and do not retrain a model. Forget
+suggestion history clears saved corrections/dismissals; approved vocabulary remains.
+
+Recognition quality defaults to **Balanced**; **Fast** and **Accurate** are selectable in
+Settings. More decoding search is a tradeoff, not an accuracy guarantee. Live preview stays
+fast. See the [polishing review](docs/polishing-review.md) for current behavior and the
+read-only comparison with other open-source dictation projects.
 Home offers individual deletion and Clear history. Turn off **Keep transcript history on
 this device** and Save to stop saving new entries; existing history remains until deleted.
 The database is plain local text, without application-level encryption. Speaking pace uses

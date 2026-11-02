@@ -389,3 +389,32 @@ def test_history_preference_change_preserves_loaded_pipeline(desktop):
     desktop.pipeline.shutdown.assert_not_called()
     assert not load_config(desktop.config_path).keep_history
     assert "manual copy" in desktop.window.record_button.text()
+
+
+def test_vocabulary_page_save_preserves_pipeline_and_unsaved_settings(desktop):
+    desktop.show_settings()
+    desktop.settings.duration.setValue(180)
+    desktop.show_vocabulary()
+    assert desktop.window.pages.currentWidget() is desktop.vocabulary_page
+    desktop.save_vocabulary("Codex, PySide")
+    assert desktop.config.vocabulary == "Codex, PySide"
+    assert desktop.pipeline.recognizer.vocabulary == "Codex, PySide"
+    assert desktop.settings.values().vocabulary == "Codex, PySide"
+    assert desktop.settings.duration.value() == 180
+    desktop.pipeline.shutdown.assert_not_called()
+    assert load_config(desktop.config_path).vocabulary == "Codex, PySide"
+
+
+def test_history_uses_recording_app_identity_and_skips_counts_when_disabled(desktop):
+    from concurrent.futures import Future
+
+    origin = Future()
+    origin.set_result("Codex")
+    desktop.recording_app = origin
+    desktop.pipeline.audio_seconds = 1
+    desktop.latest.raw.setPlainText("test words")
+    desktop.complete_transcript("Test words.", "Inserted.")
+    assert desktop.history.app_stats()[0]["app"] == "Codex"
+    desktop.config = replace(desktop.config, keep_history=False)
+    desktop.complete_transcript("Not saved.", "Inserted.")
+    assert desktop.history.app_stats()[0]["total"] == 1

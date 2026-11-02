@@ -29,6 +29,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from localphraser.typography import interface_family
+
 
 def high_contrast() -> bool:
     hints = QApplication.styleHints()
@@ -125,6 +127,10 @@ def paint_surface(
 
 
 class DragHandle(QLabel):
+    def __init__(self, text: str):
+        super().__init__(text)
+        self.setProperty("systemDragHandle", True)
+
     def mousePressEvent(self, event: Any) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             handle = self.window().windowHandle()
@@ -199,7 +205,7 @@ class GlassDialog(QDialog):
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setSizeGripEnabled(True)
-        self.setFont(QFont("Segoe UI", 10))
+        self.setFont(QFont(interface_family(), 10))
         self.refresh_surface()
 
     def header(self, title: str) -> QHBoxLayout:
@@ -247,9 +253,13 @@ class GlassDialog(QDialog):
                 "QLabel#metricNumber { font-size: 28px; font-weight: 600; }"
                 f"QFrame#metric, QFrame#sidebar, QWidget#transcriptPanel {{ background: {glass};"
                 f" border: 1px solid {border}; border-radius: 20px; }}"
-                f"QListWidget {{ color: {text}; background: {glass}; border: 1px solid {border};"
+                f"QListWidget, QTableWidget {{ color: {text}; background: {glass}; "
+                f"border: 1px solid {border};"
                 " border-radius: 20px; padding: 8px; }"
                 "QListWidget::item { padding: 12px 8px; border-radius: 8px; }"
+                f"QHeaderView::section {{ color: {text}; background: {field}; "
+                "border: none; padding: 10px 6px; }"
+                "QTableWidget::item { padding: 10px 6px; }"
                 f"QListWidget::item:selected {{ background: {selected};"
                 f" color: {text}; border: 1px solid {border}; }}"
                 "QWidget#glassBody, QScrollArea { background: transparent; border: none; }"
@@ -326,7 +336,7 @@ class GlassLabel(QLabel):
         )
         self.setStyleSheet(
             f"background: transparent; color: {color}; padding: 14px 24px;"
-            "font-family: 'Segoe UI'; font-size: 14px; font-weight: 500;"
+            f"font-family: '{interface_family()}'; font-size: 14px; font-weight: 500;"
         )
         self.update()
 

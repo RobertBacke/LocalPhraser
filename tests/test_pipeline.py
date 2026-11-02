@@ -94,6 +94,21 @@ def finish(callbacks):
     callbacks.get(timeout=5)()
 
 
+def test_app_identity_callback_runs_after_audio_starts_without_requiring_insertion(setup):
+    pipeline, recorder, _, insertion, _, _, _ = setup
+    pipeline.auto_insert = False
+    seen = []
+
+    def started(snapshot):
+        assert recorder.started == 1
+        seen.append(snapshot)
+
+    pipeline.recording_started = started
+    pipeline.press()
+    assert seen == [insertion.window]
+    assert pipeline.target is None
+
+
 @pytest.mark.parametrize("outcome", ["ready", "failure", "shutdown"])
 def test_live_warmup_blocks_capture_and_recovers_without_polishing(setup, outcome):
     pipeline, recorder, recognizer, insertion, callbacks, changes, results = setup

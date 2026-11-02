@@ -40,3 +40,12 @@ close known notice omissions but do not establish exact native binary/source cor
 versions, declared terms, notice locations, and FFmpeg self-reported configuration/license
 strings. `BUNDLE_REVIEW.md` lists pending review. Reports do not certify distribution rights;
 see [bundled dependency review](https://github.com/RobertBacke/LocalPhraser/blob/main/docs/bundled-dependencies.md) for actual findings.
+
+## Bundled interface font
+
+Space Grotesk, Copyright 2020 The Space Grotesk Project Authors, is bundled unmodified
+under the SIL Open Font License 1.1. Its complete copyright and license text is in
+`localphraser/assets/fonts/OFL.txt` beside the font (under `_internal` in frozen builds).
+Source: https://github.com/google/fonts/tree/main/ofl/spacegrotesk
+Upstream: https://github.com/floriankarsten/space-grotesk
+Font SHA-256: `acad6de1fc93436f5c0f1f4137751ef04f1aea3063e7036535970ffcfbd79f72`.
