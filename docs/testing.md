@@ -975,3 +975,7 @@ established and installer behavior was not changed based on an assumption.
 The opt-in native hotkey check now has `--gestures` for combined hold/latch/stop/lone-tap
 behavior on CapsLock or a registered chord. It refuses to run while LocalPhraser.exe is
 running, checks foreground ownership before input and never captures a microphone.
+Both `CapsLock --gestures` and `Ctrl+Shift+F10 --gestures` passed against the owned input
+fixture after the running app was quit: hold/release, latch/stop, lone-tap cancellation,
+repeat suppression, released keys and unchanged Caps Lock toggle state. These checks use
+real Windows/Qt shortcut events with fake recording callbacks, not personal microphone audio.
