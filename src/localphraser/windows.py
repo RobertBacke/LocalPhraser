@@ -136,6 +136,14 @@ class CaretNotReady(ValueError):
     """No input sent: a preceding batch may still be advancing the caret."""
 
 
+class TargetNotReady(ValueError):
+    """The focused provider still exposes its window container, not an editable field."""
+
+    def __init__(self, process_id: int):
+        super().__init__("Text-field accessibility is not ready.")
+        self.process_id = process_id
+
+
 class WindowsInsertion:
     def __init__(self) -> None:
         import uiautomation as automation
@@ -179,13 +187,17 @@ class WindowsInsertion:
     def _selection(self) -> tuple[Any, Any]:
         auto = self.automation
         control = auto.GetFocusedControl()
-        if (
-            control is None
-            or control.IsPassword
-            or not control.IsEnabled
-            or control.ControlType
-            not in (auto.ControlType.EditControl, auto.ControlType.DocumentControl)
+        if control is None or control.IsPassword or not control.IsEnabled:
+            raise ValueError("Focus is not a supported non-password text field.")
+        if control.ControlType not in (
+            auto.ControlType.EditControl,
+            auto.ControlType.DocumentControl,
         ):
+            if control.ControlType in (
+                auto.ControlType.PaneControl,
+                auto.ControlType.WindowControl,
+            ):
+                raise TargetNotReady(control.ProcessId)
             raise ValueError("Focus is not a supported non-password text field.")
         pattern = control.GetPattern(auto.PatternId.TextPattern)
         if pattern is None:
@@ -229,7 +241,20 @@ class WindowsInsertion:
             if self.snapshot() != before:
                 raise ValueError("Focus changed during target verification.")
             return native
-        control, caret = self._selection()
+        deadline = time.monotonic() + 0.5
+        while True:
+            try:
+                control, caret = self._selection()
+                break
+            except TargetNotReady as exc:
+                # Chromium can expose its container on first access, before its field provider.
+                if exc.process_id != before.process_id or time.monotonic() >= deadline:
+                    raise
+                if self.snapshot() != before:
+                    raise ValueError("Focus changed during target verification.") from None
+                time.sleep(0.02)
+                if self.snapshot() != before:
+                    raise ValueError("Focus changed during target verification.") from None
         pid = wt.DWORD()
         self.api.GetWindowThreadProcessId(hwnd, ct.byref(pid))
         if not hwnd or control.ProcessId != pid.value:

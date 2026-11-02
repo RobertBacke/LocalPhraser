@@ -854,3 +854,29 @@ These are developer-machine observations with instrumentation and other developm
 running, not isolated benchmarks, real-speech accuracy measurements or proof of no memory leak.
 Clean consumer PCs, real microphone/device removal, physical multi-monitor/DPI behavior,
 licensing/source review and signing remain release requirements.
+
+## 2026-11-02: first-use Chromium target readiness
+
+An owned Chrome profile without `--force-renderer-accessibility` reproduced the reported
+pattern: the first focused-control query returned a same-process Pane (UIA type 50033),
+then later queries returned the editable field (50004). The old capture failed immediately
+on the Pane. The existing browser insertion check had hidden this path by forcing renderer
+accessibility and reading the field before target capture.
+
+Capture now waits only for a same-process Pane/Window readiness response, for up to 500 ms
+between provider checks. It verifies the original native window/process/focused child/caret
+snapshot before and after every wait. Password/disabled controls, selected text, unknown or
+read-only editability, foreign processes and actual focus/caret changes are still refused.
+The existing two-second worker deadline and late-target disposal remain unchanged. This
+retries target readiness only: text delivery is never retried.
+
+The cold owned field verified on its first capture after 135 ms, including the Pane-to-Edit
+transition; subsequent captures completed in 5-7 ms. The revised native browser check no longer
+primes the field or forces accessibility and passed 2,736 characters in one checked dispatch,
+with selected-text refusal. Five regression cases cover readiness success, focus changes,
+foreign process, deadline and unsafe selection. The full local suite passed 350 tests, with
+additional icon/capture checks after the exact user-authorized logo color inversion.
+
+This is a reproduced Chromium cause matching the symptom, not proof of the exact cause in
+the user's Codex field. First-dictation acceptance in Codex remains a manual check. No personal
+field text, microphone capture or general desktop input was used for the reproduction.

@@ -50,7 +50,6 @@ def main() -> None:
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-background-networking",
-            "--force-renderer-accessibility",
             "--app=" + fixture.resolve().as_uri(),
         ]
     )
@@ -81,8 +80,8 @@ def main() -> None:
             assert control.ProcessId == pid.value and control.Name == "LocalPhraser owned field"
             return control
 
-        worker.executor.submit(focused).result(timeout=5)
         token = worker.capture(worker.snapshot()).result(timeout=5)
+        worker.executor.submit(focused).result(timeout=5)
         worker.insert_async(token, text).result(timeout=30)
         assert delivered_batches == [len(text)], "Expected one complete checked delivery."
 

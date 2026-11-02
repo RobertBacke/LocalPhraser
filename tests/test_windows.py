@@ -8,6 +8,7 @@ from localphraser.windows import (
     INPUT,
     NativeTarget,
     Target,
+    TargetNotReady,
     WindowsInsertion,
     WindowSnapshot,
     unicode_inputs,
@@ -112,6 +113,40 @@ def test_caret_snapshot_change_during_start_rejects_new_target():
     with pytest.raises(ValueError, match="Focus changed"):
         insertion.capture(expected)
     insertion._selection.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", [None, "focus", "foreign", "deadline", "unsafe"])
+def test_first_access_readiness_wait_is_bounded_and_never_sends_input(monkeypatch, failure):
+    insertion, caret, _ = insertion_fixture()
+    expected = WindowSnapshot(123, 42, 456, 456, (1, 2, 3, 4))
+    insertion.snapshot = Mock(return_value=expected)
+    insertion._native_target = Mock(return_value=None)
+    control = SimpleNamespace(ProcessId=42, GetRuntimeId=lambda: [1, 2, 3])
+    insertion.api.GetWindowThreadProcessId.side_effect = lambda hwnd, pid: (
+        setattr(pid._obj, "value", 42) or 1
+    )
+    unready = TargetNotReady(99 if failure == "foreign" else 42)
+    insertion._selection.side_effect = [
+        unready,
+        ValueError("Selection must be a single empty caret.")
+        if failure == "unsafe"
+        else (control, caret),
+    ]
+    monkeypatch.setattr("localphraser.windows.time.sleep", Mock())
+    monkeypatch.setattr("localphraser.windows.time.monotonic", Mock(return_value=0))
+    if failure == "focus":
+        insertion.snapshot.side_effect = [expected, WindowSnapshot(999, 42, 456, 456, (1, 2, 3, 4))]
+    elif failure == "deadline":
+        monkeypatch.setattr("localphraser.windows.time.monotonic", Mock(side_effect=[0, 1]))
+    if failure:
+        with pytest.raises(ValueError):
+            insertion.capture(expected)
+        assert insertion._selection.call_count == (2 if failure == "unsafe" else 1)
+    else:
+        target = insertion.capture(expected)
+        assert target.hwnd == 123 and target.process_id == 42
+        assert insertion._selection.call_count == 2
+    insertion.api.SendInput.assert_not_called()
 
 
 @pytest.mark.parametrize("change", [None, "caret", "window", "expired"])

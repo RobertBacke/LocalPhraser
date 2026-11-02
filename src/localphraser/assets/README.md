@@ -23,3 +23,17 @@ Final generation prompt:
 > NO microphone, NO speech bubble outline, NO text or letters, NO watermark, NO surrounding
 > shadows, NO mockup or presentation sheet. Think precision minimalist operating-system app
 > icon with an understated science-fiction feel.
+
+## Exact color swap — 2026-11-02
+
+The user requested the exact same design with a white tile and black symbol. Two built-in
+image-edit attempts added edge/alpha artifacts and were rejected. The user explicitly chose
+an exact pixel inversion instead. Qt inverted RGB only; all 1,572,516 alpha values and the
+1254 by 1254 dimensions were verified unchanged, and every RGB channel was verified equal
+to 255 minus its original value after saving/reloading the PNG. The source PNG SHA-256 before
+inversion was `f8b47abae6f296a6a445b1653dd78a291a98b3968d7d339ff9e05fedee090038`.
+The multi-resolution ICO was regenerated from this final PNG.
+
+The rejected image-edit prompt requested a strict black/white swap, preserving every
+silhouette, stroke width, bar length, placement, corner radius, spacing, canvas size and
+transparency. Neither generated edit is bundled with the application.
