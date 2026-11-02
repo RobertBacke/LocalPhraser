@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from localphraser.appearance import DragHandle, GlassDialog
+from localphraser.appearance import DragHandle, GlassDialog, dark_surface
 from localphraser.branding import logo_pixmap
 from localphraser.history import History
 
@@ -65,7 +65,11 @@ class AppWindow(GlassDialog):
         brand_row = QHBoxLayout()
         brand_row.setSpacing(8)
         logo = QLabel()
-        logo.setPixmap(logo_pixmap(28))
+        self.logo = logo
+        self.refresh_logo()
+        application = QApplication.instance()
+        if isinstance(application, QApplication):
+            application.paletteChanged.connect(self.refresh_logo)
         logo.setAccessibleName("LocalPhraser speech prism")
         brand_row.addWidget(logo)
         brand = DragHandle("LocalPhraser")
@@ -194,6 +198,9 @@ class AppWindow(GlassDialog):
 
     def maximize_restore(self) -> None:
         self.showNormal() if self.isMaximized() else self.showMaximized()
+
+    def refresh_logo(self, *args: Any) -> None:
+        self.logo.setPixmap(logo_pixmap(28, light=dark_surface()))
 
     def show_home(self) -> None:
         self.home_button.setChecked(True)

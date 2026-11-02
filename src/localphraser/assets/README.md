@@ -37,3 +37,15 @@ The multi-resolution ICO was regenerated from this final PNG.
 The rejected image-edit prompt requested a strict black/white swap, preserving every
 silhouette, stroke width, bar length, placement, corner radius, spacing, canvas size and
 transparency. Neither generated edit is bundled with the application.
+
+## Transparent, enlarged mark — 2026-11-02
+
+At the user's request, the white tile was removed using the precise pixel-editing approach
+previously approved. Black foreground coverage was extracted from the white source; faint
+background texture was discarded, and the symbol was cropped and centered on a transparent
+859 by 859 canvas. The retained symbol bounds are 773 by 588 pixels, occupying 90% of the
+canvas width without changing the bar proportions. All visible source pixels are black.
+Qt renders the same alpha mask in white for dark app surfaces and dark Windows taskbars;
+the Windows system/taskbar preference is read without changing settings. The packaged ICO
+uses the transparent black source. All standard icon sizes were regenerated and reviewed
+against light and dark backgrounds.
