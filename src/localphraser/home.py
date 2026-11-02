@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QEvent, QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from localphraser.analytics import AnalyticsPage
-from localphraser.appearance import DragHandle, GlassDialog, dark_surface
+from localphraser.appearance import CaptionButton, DragHandle, GlassDialog, dark_surface
 from localphraser.branding import logo_pixmap
 from localphraser.history import History
 from localphraser.native_frame import enable_snap, hit_test, native_message
@@ -125,18 +125,18 @@ class AppWindow(GlassDialog):
         outer.addWidget(sidebar)
         content = QVBoxLayout()
         chrome = QHBoxLayout()
+        chrome.setSpacing(6)
         drag = DragHandle("Your words. On your device.")
         chrome.addWidget(drag, 1)
-        for text, label, callback in (
-            ("−", "Minimize window", self.showMinimized),
-            ("□", "Maximize or restore window", self.maximize_restore),
-            ("×", "Close to background", self.close),
+        for kind, label, callback in (
+            ("minimize", "Minimize window", self.showMinimized),
+            ("maximize", "Maximize or restore window", self.maximize_restore),
+            ("close", "Close to background", self.close),
         ):
-            button = QPushButton(text)
+            button = CaptionButton(kind)
             button.setAccessibleName(label)
             button.setProperty("systemMaximizeButton", label == "Maximize or restore window")
             button.setToolTip(label)
-            button.setFixedWidth(42)
             button.clicked.connect(callback)
             chrome.addWidget(button)
         content.addLayout(chrome)
@@ -227,7 +227,7 @@ class AppWindow(GlassDialog):
         self.refresh_history()
 
     def maximize_restore(self) -> None:
-        self.showNormal() if self.isMaximized() else self.showMaximized()
+        self.showNormal() if self.isMaximized() or self.isFullScreen() else self.showMaximized()
 
     def showEvent(self, event: Any) -> None:
         super().showEvent(event)
@@ -236,7 +236,6 @@ class AppWindow(GlassDialog):
     def resizeEvent(self, event: Any) -> None:
         if hasattr(self, "sidebar"):
             compact = self.width() < 820
-            self.sidebar.setFixedWidth(150 if compact else 178)
             self.shell_layout.setContentsMargins(*([12] * 4 if compact else [18] * 4))
             self.shell_layout.setSpacing(14 if compact else 24)
         super().resizeEvent(event)
@@ -258,6 +257,12 @@ class AppWindow(GlassDialog):
         if result is not None:
             return True, result
         return super().nativeEvent(event_type, message)
+
+    def changeEvent(self, event: Any) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            for button in self.findChildren(CaptionButton):
+                button.update()
 
     def refresh_logo(self, *args: Any) -> None:
         self.logo.setPixmap(logo_pixmap(28, light=dark_surface()))

@@ -979,3 +979,23 @@ Both `CapsLock --gestures` and `Ctrl+Shift+F10 --gestures` passed against the ow
 fixture after the running app was quit: hold/release, latch/stop, lone-tap cancellation,
 repeat suppression, released keys and unchanged Caps Lock toggle state. These checks use
 real Windows/Qt shortcut events with fake recording callbacks, not personal microphone audio.
+
+## Caption, font and navigation corrections — 2026-11-02
+
+The outer-window font test missed a Windows-specific child-font fallback. A shown native
+probe reproduced Segoe UI on title/body/editor/Settings controls, despite Space Grotesk on
+the root dialog. A regression with an explicit Segoe UI application default failed before
+the fix and now checks both requested and resolved fonts on real descendants. A second
+shown-window native probe confirmed Space Grotesk on all sampled controls, with 10 pt body
+text and the existing larger heading sizes. Native Light/Dark captures were inspected.
+Caption controls now draw centered symbols instead of tiny font glyphs and retain native
+maximize hit testing. Compact navigation labels were checked for clipping at the corrected
+font size; the rail retains its readable width.
+
+Maximized/full-screen navigation regressions reproduced that Desktop page actions called
+showNormal. Shared reveal now preserves state and normal/snapped geometry, including
+restoring a minimized maximized window. Native checks exercise Settings/Vocabulary/Home
+while maximized, followed by minimize/restore and actual caption actions. The final full
+suite passed **416 tests**, with Ruff check/format and mypy passing. An earlier concurrent
+build/test run hit another WinError 5 in an unrelated model-repair fixture; the isolated
+full run passed, and model installation code was not changed as part of these UI fixes.

@@ -950,7 +950,12 @@ class Desktop:
 
     def show_home(self) -> None:
         self.window.show_home()
-        self.window.showNormal()
+        self.reveal_workspace()
+
+    def reveal_workspace(self) -> None:
+        if self.window.isMinimized():
+            self.window.setWindowState(self.window.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.window.show()
         self.window.raise_()
         self.window.activateWindow()
 
@@ -970,9 +975,7 @@ class Desktop:
             self.settings.saved.connect(self.discard_settings)
             self.settings.embed(self.window.pages)
         self.window.show_settings(self.settings)
-        self.window.showNormal()
-        self.window.raise_()
-        self.window.activateWindow()
+        self.reveal_workspace()
 
     def show_vocabulary(self) -> None:
         if self.vocabulary_page is None:
@@ -981,9 +984,7 @@ class Desktop:
             )
         self.vocabulary_page.refresh()
         self.window.show_vocabulary(self.vocabulary_page)
-        self.window.showNormal()
-        self.window.raise_()
-        self.window.activateWindow()
+        self.reveal_workspace()
 
     def save_vocabulary(self, value: str) -> None:
         if self.pipeline.state != State.IDLE:

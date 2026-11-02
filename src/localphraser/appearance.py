@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListView,
+    QPushButton,
     QToolButton,
     QWidget,
 )
@@ -141,6 +142,41 @@ class DragHandle(QLabel):
             super().mousePressEvent(event)
 
 
+class CaptionButton(QPushButton):
+    """Caption symbols drawn at logical-pixel sizes, independent of font glyph metrics."""
+
+    def __init__(self, kind: str):
+        super().__init__("")
+        self.kind = kind
+        self.setObjectName("captionButton")
+        self.setFixedSize(46, 36)
+
+    def paintEvent(self, event: Any) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(self.palette().color(QPalette.ColorRole.ButtonText), 1.4)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        box = QRectF((self.width() - 12) / 2, (self.height() - 12) / 2, 12, 12)
+        if self.kind == "minimize":
+            painter.drawLine(
+                QPointF(box.left(), box.center().y()), QPointF(box.right(), box.center().y())
+            )
+        elif self.kind == "close":
+            painter.drawLine(box.topLeft(), box.bottomRight())
+            painter.drawLine(box.topRight(), box.bottomLeft())
+        elif self.window().isMaximized() or self.window().isFullScreen():
+            x, y = box.left(), box.top()
+            painter.drawLine(QPointF(x + 3, y + 3), QPointF(x + 3, y))
+            painter.drawLine(QPointF(x + 3, y), QPointF(x + 12, y))
+            painter.drawLine(QPointF(x + 12, y), QPointF(x + 12, y + 9))
+            painter.drawLine(QPointF(x + 12, y + 9), QPointF(x + 9, y + 9))
+            painter.drawRect(QRectF(x, y + 3, 9, 9))
+        else:
+            painter.drawRect(box)
+
+
 class GlassComboBox(QComboBox):
     """A standard keyboard-accessible list with comfortable, opaque popup rows."""
 
@@ -245,6 +281,7 @@ class GlassDialog(QDialog):
             )
             menu = "#1b2a40" if dark else "#f5faff"
             self.setStyleSheet(
+                f"* {{ font-family: '{interface_family()}'; font-size: 10pt; }}"
                 f"QDialog#glassDialog {{ color: {text}; }}"
                 f"QLabel, QCheckBox, QGroupBox {{ color: {text}; background: transparent; }}"
                 "QLabel#windowTitle { font-size: 13px; font-weight: 600; padding: 2px; }"
@@ -279,6 +316,7 @@ class GlassDialog(QDialog):
                 f"QPushButton, QToolButton {{ color: {text}; background: {field};"
                 f" border: 1px solid {border}; border-radius: 10px; padding: 8px 12px; }}"
                 "QPushButton:hover, QToolButton:hover { border-color: #8cbddd; }"
+                "QPushButton#captionButton { padding: 0; }"
                 "QPushButton:focus, QToolButton:focus, QLineEdit:focus, QTextEdit:focus,"
                 f" QComboBox:focus, QSpinBox:focus {{ border: 2px solid {focus}; }}"
                 "QPushButton[primary=true], QPushButton:checked {"

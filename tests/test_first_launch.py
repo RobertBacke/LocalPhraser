@@ -126,6 +126,36 @@ def publish_fixture_model(desktop):
         (folder / name).write_bytes(b"presence fixture; not inference")
 
 
+@pytest.mark.parametrize("state", ["maximized", "fullscreen"])
+def test_workspace_navigation_keeps_window_state(desktop, state, app):
+    if state == "maximized":
+        desktop.window.showMaximized()
+    else:
+        desktop.window.showFullScreen()
+    expected = desktop.window.windowState()
+    for navigate in (desktop.show_settings, desktop.show_vocabulary, desktop.show_home):
+        navigate()
+        app.processEvents()
+        assert desktop.window.windowState() == expected
+    desktop.window.showMinimized()
+    desktop.show_home()
+    app.processEvents()
+    assert not desktop.window.isMinimized()
+    assert desktop.window.windowState() == expected
+
+
+def test_workspace_navigation_keeps_normal_window_geometry(desktop, app):
+    desktop.window.setGeometry(40, 40, 900, 700)
+    desktop.window.show()
+    app.processEvents()
+    expected = desktop.window.geometry()
+    desktop.show_settings()
+    desktop.show_vocabulary()
+    desktop.show_home()
+    app.processEvents()
+    assert desktop.window.geometry() == expected
+
+
 def test_explicit_quit_hides_workspace_and_cleans_up_once(desktop):
     from PySide6.QtWidgets import QPushButton
 

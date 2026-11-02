@@ -84,6 +84,20 @@ def check(output: Path, models: Path) -> None:
                 api.SendMessageW(hwnd, 0xA2, 9, 0)
                 QTest.qWait(100)
                 assert desktop.window.isMaximized() == maximized
+                if maximized:
+                    for navigate in (
+                        desktop.show_settings,
+                        desktop.show_vocabulary,
+                        desktop.show_home,
+                    ):
+                        navigate()
+                        QTest.qWait(50)
+                        assert desktop.window.isMaximized(), (
+                            "Navigation restored a maximized window"
+                        )
+                    desktop.window.showMinimized()
+                    desktop.show_home()
+                    assert desktop.window.isMaximized() and not desktop.window.isMinimized()
             desktop.pipeline.audio_seconds = 2
             origin = Future()
             origin.set_result("Codex")
@@ -134,6 +148,8 @@ def check(output: Path, models: Path) -> None:
             assert settings is not None
             desktop.window.resize(740, 480)
             QTest.qWait(50)
+            for nav_button in desktop.window.sidebar.findChildren(QPushButton):
+                assert nav_button.width() >= nav_button.minimumSizeHint().width(), nav_button.text()
             from PySide6.QtWidgets import QDialogButtonBox
 
             buttons = settings.findChild(QDialogButtonBox)

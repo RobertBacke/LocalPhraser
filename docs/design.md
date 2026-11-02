@@ -117,3 +117,18 @@ snapping. Native hit testing exposes caption drag regions, resize edges and the 
 button, including explicit native-button click handling. A compact sidebar and wrapped
 Settings rows reduce minimum-width pressure. Actual owned-window top-edge maximize and
 side snapping were inspected; this does not cover every DPI/monitor policy configuration.
+
+### Visible font and caption correction
+
+Windows child widgets were still using Segoe UI because Qt stylesheet font settings did
+not inherit the outer window's explicit font. The scoped widget stylesheet now specifies
+Space Grotesk at 10 pt for descendants, preserving larger heading selectors. Tests inspect
+the transcript editors, page title, navigation and Settings controls under a Segoe UI app
+default, with an actual shown-window Windows probe as well. See
+[Qt stylesheet inheritance](https://doc.qt.io/qt-6/stylesheet-syntax.html#inheritance).
+
+The sidebar retains enough width for complete labels at that font size. Caption controls
+use centered drawn symbols in fixed 46 × 36 logical-pixel buttons instead of font glyphs;
+the maximize symbol changes to Restore when appropriate. Page changes reveal the existing
+window without restoring its size/state. Minimized windows are unminimized while retaining
+their maximized/full-screen state, and normal/snapped geometry is preserved.
