@@ -1,21 +1,25 @@
 # Generated transcription mark
 
-`logo.png` was created with the built-in image generation tool on 2026-10-30 at the user's
-explicit request. It is the shared source for the sidebar, window/tray icons and packaged
-Windows icon. The generated alpha channel is retained. Runtime Qt scales it for each icon
-size; `python scripts/build_icon.py` regenerates the multi-size `packaging/localphraser.ico`.
+`logo.png` was created with the built-in image generation tool on 2026-11-02 at the user's
+explicit request for a simpler black/white/gray taskbar icon. It replaces the earlier blue
+glass mark. It is the shared source for the sidebar, window/tray icons and packaged Windows
+icon. The generated alpha channel is retained. Runtime Qt scales it for each icon size;
+`python scripts/build_icon.py` regenerates the multi-size `packaging/localphraser.ico`.
 No external image service is contacted by the application.
 
 Final generation prompt:
 
-> Create one premium futuristic Windows desktop application icon for LocalPhraser, a private
-> offline voice-to-text transcription app. A single distinctive sculptural monogram-like
-> speech ribbon, combining three clean audio-wave bars transitioning into two written-text
-> strokes, inside a softly rounded squircle. Liquid optical glass, frosted cyan edges and
-> deep cobalt blue body, restrained icy highlights, dimensional precision, confident and
-> elegant rather than a generic microphone or chat bubble. Bold simple silhouette, thick
-> strokes, no tiny details, recognizable when scaled to 16 pixels. Centered front-facing
-> app icon, fills 88% of a square canvas with clear padding. Transparent background outside
-> the icon, genuine alpha, no checkerboard. The icon itself has a dark blue glass interior
-> for strong contrast. No words, letters, typography, watermark, extra objects, mockup, or
-> cast shadow outside the icon. Produce exactly one finished app icon, not a sheet of variants.
+> Design exactly ONE finished app icon for LocalPhraser, an offline speech-to-text Windows
+> app. Monochrome only: pure white symbol on a near-black charcoal rounded-square tile,
+> with at most one subtle medium-gray edge. Extremely simple, flat, crisp, bold, futuristic
+> geometric identity. The symbol combines three thick vertical audio bars of unequal heights
+> on the left with two short thick horizontal transcription strokes on the right, integrated
+> into one balanced compact emblem with generous negative space. It must be instantly readable
+> at 16x16 and 24x24 taskbar size. Strong simple silhouette, uniform thick strokes, no tiny
+> details. Front facing, perfectly square, centered, tile occupies 88 percent of canvas with
+> transparent padding outside rounded corners. Genuine transparent alpha outside tile.
+> Opaque black tile interior and solid opaque white symbol. NO blue, NO colors, NO glow,
+> NO reflections, NO texture, NO intricate glass shapes, NO gradients, NO 3D perspective,
+> NO microphone, NO speech bubble outline, NO text or letters, NO watermark, NO surrounding
+> shadows, NO mockup or presentation sheet. Think precision minimalist operating-system app
+> icon with an understated science-fiction feel.

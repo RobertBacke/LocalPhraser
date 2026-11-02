@@ -80,6 +80,8 @@ class Bridge(QObject):
 class Indicator(GlassLabel):
     def __init__(self) -> None:
         super().__init__()
+        self.anchor_screen: str | None = None
+        self.last_state = State.IDLE
         self.setWindowFlags(
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
@@ -94,7 +96,11 @@ class Indicator(GlassLabel):
         self.setMaximumWidth(560)
 
     def display(self, state: State) -> None:
+        if state == State.RECORDING and self.last_state != State.RECORDING:
+            self.anchor_screen = None
+        self.last_state = state
         if state == State.IDLE:
+            self.anchor_screen = None
             self.clear()
             self.hide()
             return
@@ -111,11 +117,22 @@ class Indicator(GlassLabel):
 
     def _show_text(self, text: str) -> None:
         self.setText(text)
-        self.adjustSize()
-        screen = QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+        screen = next((s for s in QApplication.screens() if s.name() == self.anchor_screen), None)
+        screen = screen or QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
         if screen:
+            self.anchor_screen = screen.name()
             area = screen.availableGeometry()
-            self.move(area.center().x() - self.width() // 2, area.bottom() - self.height() - 32)
+            width = max(1, area.width() - 32)
+            self.setMinimumWidth(min(320, width))
+            self.setMaximumWidth(min(560, width))
+            self.setMaximumHeight(max(1, area.height() - 64))
+            self.adjustSize()
+            self.move(
+                area.x() + (area.width() - self.width()) // 2,
+                max(area.top() + 16, area.bottom() - self.height() - 32),
+            )
+        else:
+            self.adjustSize()
         self.show()
 
 

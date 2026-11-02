@@ -1,13 +1,54 @@
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, QRect, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QToolButton
 
 from localphraser import appearance
 from localphraser.config import Config
 from localphraser.ui import Indicator, Settings
+
+
+def test_indicator_stays_on_recording_monitor_and_recovers_if_removed(app, monkeypatch):
+    from localphraser.pipeline import State
+
+    left = Mock()
+    left.name.return_value = "left"
+    left.availableGeometry.return_value = QRect(-1280, 0, 1280, 720)
+    right = Mock()
+    right.name.return_value = "right"
+    right.availableGeometry.return_value = QRect(0, 0, 1920, 1080)
+    screens, pointer = [left, right], [left]
+    monkeypatch.setattr(QApplication, "screens", lambda: screens)
+    monkeypatch.setattr(QApplication, "screenAt", lambda point: pointer[0])
+    indicator = Indicator()
+    indicator.display(State.RECORDING)
+    assert left.availableGeometry().contains(indicator.geometry())
+    pointer[0] = right
+    indicator.live_preview("Words stay on the recording screen.")
+    assert left.availableGeometry().contains(indicator.geometry())
+    screens.remove(left)
+    indicator.preview("The removed monitor falls back to an available monitor.")
+    assert right.availableGeometry().contains(indicator.geometry())
+    indicator.display(State.IDLE)
+    indicator.display(State.RECORDING)
+    assert right.availableGeometry().contains(indicator.geometry())
+    indicator.close()
+    indicator.deleteLater()
+
+
+def test_indicator_fits_small_work_area_with_a_long_draft(app, monkeypatch):
+    screen = Mock()
+    screen.name.return_value = "small"
+    screen.availableGeometry.return_value = QRect(-300, 10, 280, 240)
+    monkeypatch.setattr(QApplication, "screens", lambda: [screen])
+    monkeypatch.setattr(QApplication, "screenAt", lambda point: screen)
+    indicator = Indicator()
+    indicator.live_preview("a long speech preview " * 30)
+    assert screen.availableGeometry().contains(indicator.geometry())
+    indicator.close()
+    indicator.deleteLater()
 
 
 def test_palette_notifications_do_not_reapply_stylesheet_recursively(app, capsys):

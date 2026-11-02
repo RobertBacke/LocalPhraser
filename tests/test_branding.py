@@ -1,6 +1,8 @@
 import struct
 from pathlib import Path
 
+import numpy as np
+
 from localphraser.branding import app_icon, logo_pixmap
 
 
@@ -27,4 +29,14 @@ def test_windows_icon_contains_valid_images_matching_app_mark(app):
         size = width or 256
         assert (height or 256) == size and planes == 1 and depth == 32
         image = QImage.fromData(data[offset : offset + length], "PNG")
-        assert image == logo_pixmap(size).toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        assert not image.isNull() and image.width() == size and image.height() == size
+        # Compare premultiplied colors: PNG round-trips/SIMD scaling can round by 1-2 levels.
+        actual = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+        expected = (
+            logo_pixmap(size).toImage().convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+        )
+        difference = np.abs(
+            np.frombuffer(actual.bits(), dtype=np.uint8).astype(np.int16)
+            - np.frombuffer(expected.bits(), dtype=np.uint8).astype(np.int16)
+        )
+        assert difference.max() <= 2

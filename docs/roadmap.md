@@ -98,3 +98,19 @@ complete checked dispatch. An owned reactive Chrome editor passed exact 2,736-ch
 insertion in one dispatch with prefix preservation and selected-text refusal. Live preview
 remains in the floating widget. The capsule now uses one translucent Qt surface without a
 native DWM frame; the desktop workspace uses softer ice-blue layered glass styling.
+
+## Display and verification hardening — 2026-11-02
+
+The generated taskbar mark is now a simple monochrome waveform/text symbol. Icon checks
+validate every embedded Windows size against premultiplied pixel content, allowing at most
+two channel levels of image-conversion rounding rather than requiring QImage object equality.
+The previous installer run passed while its separate source check failed the old equality
+assertion. The revised check still rejects incorrect dimensions, invalid PNGs and mismatched
+artwork; the new GitHub runs must confirm compatibility on the hosted runner.
+
+The dictation capsule now anchors to its initial recording monitor, stays there when the
+pointer moves, falls back if that monitor is removed, and fits the available work area.
+Negative-coordinate, removed-monitor and small-area regression tests passed after first
+reproducing the failures. These are simulated screen geometries; physical multi-monitor,
+mixed-DPI and device/driver acceptance remain necessary. Release licensing/source review,
+signing and clean consumer-machine validation remain open.
