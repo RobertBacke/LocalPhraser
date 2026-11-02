@@ -40,6 +40,8 @@ def check(output: Path) -> None:
                 assert app.activeWindow() is active
                 assert indicator.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
                 assert indicator.windowFlags() & Qt.WindowType.WindowTransparentForInput
+                screen = next(s for s in app.screens() if s.name() == indicator.anchor_screen)
+                assert screen.availableGeometry().contains(indicator.geometry())
                 for label, widget in (
                     ("settings", settings),
                     ("latest", latest),

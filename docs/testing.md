@@ -823,3 +823,34 @@ and separate histories/locks for custom configuration files in one directory. Cu
 history filenames and journals are also refused by packaging. The final suite passed
 **328 tests** with real offline inference. An owned external Qt editor passed real small.en
 recognition, preview, Qwen1.5B polishing and exact complete final insertion with a clean exit.
+
+## 2026-11-02: monochrome branding, display handling and sustained-session checks
+
+The generated mark was reviewed at 16, 24, 32, 48 and 64 logical pixels on light and dark
+surfaces. The icon regression now checks the dimensions and premultiplied pixel content of
+every embedded Windows image, allowing at most two levels of channel rounding. The separate
+Windows source check for the prior blue logo failed strict QImage equality; the revised
+check passed on the hosted runner. This remains a content check, not a Windows icon-cache test.
+
+- **345 local tests passed**, including real offline Small English inference. Ruff check/format
+  and mypy passed. Screen-placement regressions failed before the fix and passed afterward.
+  They cover negative coordinates, pointer movement between screens, screen removal and a
+  work area smaller than the capsule's previous minimum size. Real mixed-DPI monitors remain
+  an acceptance check.
+- The owned native appearance check passed Light/Dark/System menus, keyboard selection,
+  click-through/no-focus preview, compact controls, and capsule containment within its chosen
+  real work area. These checks use owned windows and no personal text or microphone capture.
+- **50 complete synthetic Qt dictations** at 48 kHz with Base English and Qwen2.5 1.5B passed,
+  followed by a 30-second loaded-idle observation and clean shutdown. Warm median recognition
+  was 0.533 seconds and polishing 0.715 seconds for the fixed short fixture. Sampled process-tree
+  RSS peaked at 2.240 GiB; first/last cycle RSS was 2.021/2.066 GiB. The largest observed Qt timer
+  gap was 0.266 seconds. Idle process-tree CPU was 5.73% of one core with resource polling active.
+  The report contains timings/system metadata only and remains in the ignored test cache.
+- Three separate owned processes each closed during model loading and during polishing:
+  **six clean exits**, no microphone or target-app insertion. This does not establish the root
+  cause or absence of the previously observed intermittent native shutdown failure.
+
+These are developer-machine observations with instrumentation and other development work
+running, not isolated benchmarks, real-speech accuracy measurements or proof of no memory leak.
+Clean consumer PCs, real microphone/device removal, physical multi-monitor/DPI behavior,
+licensing/source review and signing remain release requirements.

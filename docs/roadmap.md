@@ -106,7 +106,7 @@ validate every embedded Windows size against premultiplied pixel content, allowi
 two channel levels of image-conversion rounding rather than requiring QImage object equality.
 The previous installer run passed while its separate source check failed the old equality
 assertion. The revised check still rejects incorrect dimensions, invalid PNGs and mismatched
-artwork; the new GitHub runs must confirm compatibility on the hosted runner.
+artwork. Windows source checks passed for this change on the hosted runner.
 
 The dictation capsule now anchors to its initial recording monitor, stays there when the
 pointer moves, falls back if that monitor is removed, and fits the available work area.
