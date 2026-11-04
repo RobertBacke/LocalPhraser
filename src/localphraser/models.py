@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -101,6 +102,18 @@ def install_artifacts(
         return _install_artifacts(name, root, repo, files, job_id)
 
 
+def _rename_directory(source: Path, destination: Path) -> None:
+    # A brief open child-file handle can deny a Windows directory rename.
+    for attempt in range(6):
+        try:
+            source.rename(destination)
+            return
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in (5, 32, 33) or attempt == 5:
+                raise
+            time.sleep(0.05 * 2**attempt)
+
+
 def _install_artifacts(
     name: str, root: Path, repo: str, files: tuple[str, ...], job_id: str
 ) -> Path:
@@ -180,15 +193,15 @@ def _install_artifacts(
             backup = root / f".{name}.{job_id}.damaged"
             if backup.exists() or backup.is_symlink() or backup.is_junction():
                 raise ValueError("Repair backup already exists; no files were replaced.")
-            destination.rename(backup)
+            _rename_directory(destination, backup)
             try:
-                stage.rename(destination)
+                _rename_directory(stage, destination)
             except BaseException:
-                backup.rename(destination)
+                _rename_directory(backup, destination)
                 raise
             print(f"Previous damaged files preserved in {backup.name}", flush=True)
         else:
-            stage.rename(destination)
+            _rename_directory(stage, destination)
     finally:
         if stage.exists():
             cleanup_install(name, root, job_id)

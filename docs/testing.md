@@ -999,6 +999,7 @@ while maximized, followed by minimize/restore and actual caption actions. The fi
 suite passed **416 tests**, with Ruff check/format and mypy passing. An earlier concurrent
 build/test run hit another WinError 5 in an unrelated model-repair fixture; the isolated
 full run passed, and model installation code was not changed as part of these UI fixes.
+
 ## Embedded Microsoft editor and download checks (2026-11-03)
 
 `python scripts/native_webview_check.py --sdk <unpacked-Microsoft-WebView2-SDK>` is an opt-in
@@ -1020,3 +1021,12 @@ Unit tests cover fragmented process output, unknown totals, >2 GiB counts, aggre
 sizes, verifying/installed states and cancellation. Hub transfers retain the official
 [Hugging Face downloader](https://huggingface.co/docs/huggingface_hub/v0.36.0/guides/download);
 progress observes only incomplete transfer files in the job's owned staging directory.
+
+The final source suite passed **431 tests**, with Ruff check/format and mypy clean. Actual
+owned WebView2 insertion and real partial downloads from both source and the first rebuilt
+EXE passed. A separate final-suite run reproduced the earlier intermittent WinError 5 at
+model-directory publication. Holding an owned child file open without delete-sharing
+reproduced the same error. Publication now retries only Windows permission/sharing errors
+5/32/33 for a bounded 1.55 seconds, including repair/rollback renames. A real temporary-handle
+test verifies eventual publication; persistent failures still raise without changing ACLs.
+The process responsible for the original intermittent handle was not identified.

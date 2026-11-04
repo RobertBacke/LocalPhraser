@@ -1,5 +1,26 @@
 # Development
 
+## Keep the working app available
+
+`dist/LocalPhraser/LocalPhraser.exe` is the user's stable installation. Source edits do not
+change its frozen code. Build and test a separate executable and profile instead:
+
+```powershell
+python -m PyInstaller --noconfirm --distpath .cache/development-build --workpath .cache/development-work packaging/localphraser.spec
+.cache/development-build/LocalPhraser/LocalPhraser.exe --config C:/Users/robbi/Projects/LocalPhraser/.cache/development-profile/config.json
+```
+
+Use the appropriate absolute workspace path on another machine. The dedicated development
+profile must be created before launch to avoid automatic first-launch setup. Its initial
+config uses Ctrl+Shift+F11, separate model storage and disabled automatic insertion,
+microphone keep-ready, live preview, history and startup. It does not copy personal data.
+The config path scopes history, vocabulary feedback, process locks and activation IPC.
+Only launch interactive development windows when they will not interrupt the user.
+Use disposable profiles for smoke tests and leave the stable app running. Promote the
+verified build to the stable path only when the user is ready to switch.
+
+## Engine development
+
 Speech-model preparation starts on the existing inference executor after microphone start,
 before polishing-model preparation. Verification and native construction stay on that worker;
 `transcribe` also calls the idempotent `prepare` method for CLI/direct callers and to retry
