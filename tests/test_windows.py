@@ -34,11 +34,59 @@ def insertion_fixture():
     insertion.api.IsWindow.return_value = True
     insertion.api.GetForegroundWindow.return_value = 123
     insertion.api.GetAsyncKeyState.return_value = 0
+    insertion.api.GetWindowThreadProcessId.side_effect = lambda hwnd, pid: (
+        setattr(pid._obj, "value", 42) or 1
+    )
     control = SimpleNamespace(ProcessId=42, GetRuntimeId=lambda: [1, 2, 3])
     caret = Mock()
     caret.Compare.return_value = True
     insertion._selection = Mock(return_value=(control, caret))
     return insertion, caret, Target(123, 42, (1, 2, 3), object())
+
+
+@pytest.mark.parametrize("failure", [None, "foreign_window", "missing_ancestor", "cycle"])
+def test_embedded_cross_process_editor_requires_exact_native_window_ancestry(failure):
+    insertion, caret, _ = insertion_fixture()
+    expected = WindowSnapshot(123, 42, 456, 0, (0, 0, 0, 0))
+    insertion.snapshot = Mock(return_value=expected)
+    insertion._native_target = Mock(return_value=None)
+    parent = SimpleNamespace(ProcessId=99, NativeWindowHandle=456)
+    control = SimpleNamespace(
+        ProcessId=99,
+        NativeWindowHandle=0,
+        GetRuntimeId=lambda: [1, 2, 3],
+        GetParentControl=Mock(return_value=parent),
+    )
+    insertion._selection.return_value = (control, caret)
+    insertion.api.GetAncestor.return_value = 999 if failure == "foreign_window" else 123
+    if failure == "missing_ancestor":
+        control.GetParentControl.return_value = None
+    elif failure == "cycle":
+        control.GetParentControl.return_value = control
+    if failure:
+        with pytest.raises(ValueError, match="does not belong"):
+            insertion.capture(expected)
+        insertion.api.SendInput.assert_not_called()
+        assert control.GetParentControl.call_count <= 64
+    else:
+        target = insertion.capture(expected)
+        assert target.process_id == 99
+        assert target.host_process_id == 42
+        insertion.api.SendInput.side_effect = lambda count, *_: count
+        insertion.insert(target, "owned editor test")
+        insertion.api.SendInput.assert_called_once()
+        insertion.api.GetAncestor.return_value = 999
+        with pytest.raises(ValueError, match="Target field changed"):
+            insertion.insert(target, "must not go to another window")
+        assert insertion.api.SendInput.call_count == 1
+
+
+def test_embedded_editor_rejects_reused_host_handle_with_another_process():
+    insertion, _, target = insertion_fixture()
+    target.host_process_id = 777
+    with pytest.raises(ValueError, match="Target field changed"):
+        insertion.insert(target, "must not insert")
+    insertion.api.SendInput.assert_not_called()
 
 
 @pytest.mark.parametrize("change", ["window", "caret", "modifier", "identity"])

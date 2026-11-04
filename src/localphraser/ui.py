@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -463,11 +464,19 @@ class Settings(GlassDialog):
         )
         self.progress.setWordWrap(True)
         layout.addWidget(self.progress)
+        self.download_bar = QProgressBar()
+        self.download_bar.setAccessibleName("Model download progress")
+        self.download_bar.hide()
+        layout.addWidget(self.download_bar)
+        self.download_bytes = QLabel()
+        self.download_bytes.hide()
+        layout.addWidget(self.download_bytes)
         self.cancel_download = QPushButton("Cancel download")
         self.cancel_download.setEnabled(False)
         layout.addWidget(self.cancel_download)
         self.downloader = ModelDownload(self)
         self.downloader.message.connect(self.progress.setText)
+        self.downloader.progress.connect(self.update_download_progress)
         self.downloader.finished.connect(self.download_finished)
         self.cancel_download.clicked.connect(self.downloader.cancel)
         buttons = QDialogButtonBox(
@@ -573,7 +582,33 @@ class Settings(GlassDialog):
         )
         self.scroll_area.ensureWidgetVisible(self.cancel_download)
 
+    def update_download_progress(self, completed: int, total: int | None) -> None:
+        def size(value: int) -> str:
+            return (
+                f"{value / 1_000_000_000:.2f} GB"
+                if value >= 1_000_000_000
+                else f"{value / 1_000_000:.2f} MB"
+            )
+
+        self.download_bar.show()
+        self.download_bytes.show()
+        if total is None or total == 0:
+            self.download_bar.setRange(0, 0)
+            self.download_bytes.setText(f"{size(completed)} downloaded · total size unavailable")
+        else:
+            self.download_bar.setRange(0, 1000)
+            self.download_bar.setValue(min(1000, completed * 1000 // total))
+            self.download_bar.setFormat(f"{completed * 100 // total}% downloaded")
+            self.download_bytes.setText(f"{size(completed)} / {size(total)}")
+
     def download_finished(self, success: bool, cancelled: bool) -> None:
+        if not success:
+            self.download_bar.hide()
+            self.download_bytes.hide()
+        else:
+            self.download_bar.setRange(0, 1000)
+            self.download_bar.setValue(1000)
+            self.download_bar.setFormat("Installed and verified")
         self.install.setEnabled(True)
         self.install_refinement.setEnabled(True)
         self.cancel_download.setEnabled(False)

@@ -175,3 +175,23 @@ so copy any needed text before quitting.
 SQLite lock waits are limited to 200 ms to avoid its default five-second UI pause. This does
 not bound every operating-system disk operation. If Clear history fails during final database
 compaction, deletion may already have committed; click Home to check which entries remain.
+## Outlook and Teams desktop editors
+
+New Outlook and other embedded WebView2 editors can expose text fields from a different
+process than the app window. LocalPhraser verifies a native ancestor belongs to the exact
+original window before accepting these fields. It still checks the original host process,
+field identity and empty caret again before insertion. It never pastes blindly into an
+unverified field. If verification fails, recover the text from Latest transcript.
+
+If a Microsoft editor still fails, note the app/version, the notification and whether the
+transcript appears in history. A valid transcript plus “Target could not be verified” means
+recognition completed but insertion was blocked. Selected text, changed focus, unsupported
+accessibility providers and elevated target apps can still prevent safe insertion.
+
+## Model download progress
+
+Settings shows a byte-based progress bar and transferred/total MB or GB for speech and
+polishing downloads. Total size comes from the pinned publisher metadata. If unavailable,
+the bar is indeterminate and says the total is unavailable. Download completion is followed
+by hash verification and installation; “Installed and verified” appears only after success.
+Cancel stops the owned installer and cleans only that job's temporary download.

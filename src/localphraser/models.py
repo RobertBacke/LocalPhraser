@@ -10,6 +10,7 @@ from pathlib import Path
 from filelock import FileLock
 
 from localphraser.config import MODELS, REFINEMENT_MODELS
+from localphraser.install_progress import TransferProgress, report
 
 FILES = ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt")
 
@@ -137,16 +138,24 @@ def _install_artifacts(
     try:
         hashes = {}
         siblings = {f.rfilename: f for f in (info.siblings or [])}
+        sizes = [getattr(siblings[filename], "size", None) for filename in files]
+        known_sizes = [size for size in sizes if isinstance(size, int) and size >= 0]
+        total = sum(known_sizes) if len(known_sizes) == len(files) else None
+        completed = 0
         for index, filename in enumerate(files, 1):
             print(f"Downloading {index}/{len(files)}: {filename}", flush=True)
-            downloaded = Path(
-                hf_hub_download(
-                    repo,
-                    filename,
-                    revision=revision,
-                    local_dir=stage,
+            with TransferProgress(stage, completed, total):
+                downloaded = Path(
+                    hf_hub_download(
+                        repo,
+                        filename,
+                        revision=revision,
+                        local_dir=stage,
+                    )
                 )
-            )
+            completed += downloaded.stat().st_size
+            report(completed, total)
+            print(f"Verifying {filename}…", flush=True)
             checksum = digest(downloaded)
             metadata = siblings[filename]
             if filename.endswith(".gguf") and not metadata.lfs:
@@ -159,6 +168,7 @@ def _install_artifacts(
             encoding="utf-8",
         )
         verify_artifacts(stage, files)
+        print("Verification complete. Installing model…", flush=True)
         if damaged and destination.exists():
             if (
                 destination.is_symlink()

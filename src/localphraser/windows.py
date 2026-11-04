@@ -113,6 +113,7 @@ class Target:
     process_id: int
     runtime_id: tuple[int, ...]
     caret: Any
+    host_process_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -139,9 +140,10 @@ class CaretNotReady(ValueError):
 class TargetNotReady(ValueError):
     """The focused provider still exposes its window container, not an editable field."""
 
-    def __init__(self, process_id: int):
+    def __init__(self, process_id: int, control: Any = None):
         super().__init__("Text-field accessibility is not ready.")
         self.process_id = process_id
+        self.control = control
 
 
 class WindowsInsertion:
@@ -197,7 +199,7 @@ class WindowsInsertion:
                 auto.ControlType.PaneControl,
                 auto.ControlType.WindowControl,
             ):
-                raise TargetNotReady(control.ProcessId)
+                raise TargetNotReady(control.ProcessId, control)
             raise ValueError("Focus is not a supported non-password text field.")
         pattern = control.GetPattern(auto.PatternId.TextPattern)
         if pattern is None:
@@ -231,6 +233,20 @@ class WindowsInsertion:
             (rect.left, rect.top, rect.right, rect.bottom),
         )
 
+    def _belongs_to_window(self, control: Any, hwnd: int, host_pid: int) -> bool:
+        if control.ProcessId == host_pid:
+            return True
+        # WebView2 fields live in a separate process. Require a native ancestor
+        # rooted in this exact host window, never merely a related process.
+        for _ in range(64):
+            if control is None:
+                return False
+            handle = control.NativeWindowHandle
+            if handle:
+                return bool(self.api.IsWindow(handle) and self.api.GetAncestor(handle, 2) == hwnd)
+            control = control.GetParentControl()
+        return False
+
     def capture(self, expected: WindowSnapshot | None = None) -> Target | NativeTarget:
         before = self.snapshot()
         if expected is not None and before != expected:
@@ -248,7 +264,13 @@ class WindowsInsertion:
                 break
             except TargetNotReady as exc:
                 # Chromium can expose its container on first access, before its field provider.
-                if exc.process_id != before.process_id or time.monotonic() >= deadline:
+                if time.monotonic() >= deadline or (
+                    exc.process_id != before.process_id
+                    and (
+                        exc.control is None
+                        or not self._belongs_to_window(exc.control, hwnd, before.process_id)
+                    )
+                ):
                     raise
                 if self.snapshot() != before:
                     raise ValueError("Focus changed during target verification.") from None
@@ -257,14 +279,14 @@ class WindowsInsertion:
                     raise ValueError("Focus changed during target verification.") from None
         pid = wt.DWORD()
         self.api.GetWindowThreadProcessId(hwnd, ct.byref(pid))
-        if not hwnd or control.ProcessId != pid.value:
+        if not hwnd or not self._belongs_to_window(control, hwnd, pid.value):
             raise ValueError("Focused field does not belong to foreground window.")
         runtime_id = tuple(control.GetRuntimeId())
         if not runtime_id:
             raise ValueError("Field identity unavailable.")
         if self.snapshot() != before:
             raise ValueError("Focus changed during target verification.")
-        return Target(hwnd, pid.value, runtime_id, caret.Clone())
+        return Target(hwnd, control.ProcessId, runtime_id, caret.Clone(), pid.value)
 
     def insert(
         self,
@@ -287,9 +309,13 @@ class WindowsInsertion:
                 raise CaretNotReady("Native field or caret changed.")
         else:
             control, caret = self._selection()
+            host_pid = wt.DWORD()
+            self.api.GetWindowThreadProcessId(target.hwnd, ct.byref(host_pid))
             if (
                 control.ProcessId != target.process_id
+                or host_pid.value != (target.host_process_id or target.process_id)
                 or tuple(control.GetRuntimeId()) != target.runtime_id
+                or not self._belongs_to_window(control, target.hwnd, host_pid.value)
             ):
                 raise ValueError("Target field changed.")
             if not caret.Compare(target.caret):
@@ -360,7 +386,13 @@ class WindowsInsertion:
                     # caret from the current document start without reading its text.
                     caret = self._document_start(control)
                     ready = caret.Move(0, origin + offset, waitTime=0) == origin + offset
-                    expected = Target(target.hwnd, target.process_id, target.runtime_id, caret)
+                    expected = Target(
+                        target.hwnd,
+                        target.process_id,
+                        target.runtime_id,
+                        caret,
+                        target.host_process_id,
+                    )
                 if ready:
                     try:
                         self.insert(expected, text[offset : offset + 32], permitted)

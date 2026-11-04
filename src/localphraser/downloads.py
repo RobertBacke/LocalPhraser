@@ -1,16 +1,19 @@
 """One owned installer process and asynchronous cancellation cleanup."""
 
+import json
 import sys
 import uuid
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QProcess, QTimer, Signal
 
+from localphraser.install_progress import PREFIX
 from localphraser.models import cleanup_install
 
 
 class ModelDownload(QObject):
     message = Signal(str)
+    progress = Signal(object, object)  # Python integers: model sizes can exceed 2 GiB.
     finished = Signal(bool, bool)  # Installed successfully, user cancelled.
 
     def __init__(self, parent: QObject | None = None):
@@ -25,6 +28,7 @@ class ModelDownload(QObject):
         self.job_id = ""
         self.name = ""
         self.root = Path()
+        self._buffer = ""
 
     @property
     def busy(self) -> bool:
@@ -41,7 +45,9 @@ class ModelDownload(QObject):
             raise ValueError("A model download or cleanup is already running.")
         self.job_id, self.name, self.root = uuid.uuid4().hex, name, root.resolve()
         self.cancelled = False
+        self._buffer = ""
         self.phase = "download"
+        self.progress.emit(0, None)
         self.message.emit("Installing model… You can cancel this download.")
         self._launch(
             [
@@ -72,10 +78,29 @@ class ModelDownload(QObject):
         output = bytes(self.process.readAllStandardOutput().data()).decode(
             "utf-8", errors="replace"
         )
-        if self.phase == "download" and not self.cancelled:
-            lines = output.strip().splitlines()
-            if lines:
-                self.message.emit(lines[-1][-200:])
+        self._consume(output)
+
+    def _consume(self, output: str, *, final: bool = False) -> None:
+        self._buffer += output.replace("\r", "\n")
+        lines = self._buffer.split("\n")
+        self._buffer = "" if final else lines.pop()
+        for line in lines:
+            if self.phase != "download" or self.cancelled or not line.strip():
+                continue
+            if line.startswith(PREFIX):
+                try:
+                    data = json.loads(line[len(PREFIX) :])
+                    count, total = data["completed"], data["total"]
+                    if type(count) is not int or count < 0:
+                        continue
+                    if total is not None and (type(total) is not int or total < count):
+                        continue
+                except (ValueError, KeyError, TypeError):
+                    continue
+                self.progress.emit(count, total)
+            elif not any(token in line for token in ("|", "Traceback", 'File "')):
+                self.message.emit(line[-200:])
+        self._buffer = self._buffer[-8192:]
 
     def _finish(self, success: bool, text: str) -> None:
         self.phase = "idle"
@@ -83,6 +108,8 @@ class ModelDownload(QObject):
         self.finished.emit(success, self.cancelled)
 
     def _completed(self, exit_code: int, status: QProcess.ExitStatus) -> None:
+        self._output()
+        self._consume("", final=True)
         if self.phase == "download":
             if exit_code == 0 and status == QProcess.ExitStatus.NormalExit and not self.cancelled:
                 self._finish(True, "Model installed and verified. Save if you changed settings.")

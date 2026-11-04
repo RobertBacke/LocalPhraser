@@ -18,7 +18,9 @@ def catalog(tmp_path, monkeypatch):
         sha="fixed-revision",
         siblings=[
             SimpleNamespace(
-                rfilename=name, lfs=SimpleNamespace(sha256=hashlib.sha256(data).hexdigest())
+                rfilename=name,
+                size=len(data),
+                lfs=SimpleNamespace(sha256=hashlib.sha256(data).hexdigest()),
             )
             for name, data in payloads.items()
         ],
@@ -35,6 +37,23 @@ def catalog(tmp_path, monkeypatch):
         sys.modules, "huggingface_hub", SimpleNamespace(HfApi=lambda: api, hf_hub_download=fetch)
     )
     return tmp_path, payloads, api, fetch
+
+
+def test_install_reports_aggregate_bytes_before_verified_publication(catalog, capsys):
+    from localphraser.install_progress import PREFIX
+
+    root, payloads, _, _ = catalog
+    install_model("tiny.en", root)
+    lines = capsys.readouterr().out.splitlines()
+    reports = [json.loads(line[len(PREFIX) :]) for line in lines if line.startswith(PREFIX)]
+    expected = sum(len(data) for data in payloads.values())
+    assert reports[0] == {"completed": 0, "total": expected}
+    assert reports[-1] == {"completed": expected, "total": expected}
+    assert all(report["total"] == expected for report in reports)
+    assert next(i for i, line in enumerate(lines) if "Verification complete" in line) > max(
+        i for i, line in enumerate(lines) if line.startswith(PREFIX)
+    )
+    verify_model(root / "tiny.en")
 
 
 def damaged_model(root, name="tiny.en", files=FILES):

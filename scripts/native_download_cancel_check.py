@@ -17,6 +17,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--executable", type=Path, help="Test a frozen installer instead of source")
+    parser.add_argument(
+        "--wait-for-progress", action="store_true", help="Wait for model byte progress"
+    )
     args = parser.parse_args()
     root = args.root.resolve()
     if (root / "tiny.en").exists() or list(root.glob(".*.installing")):
@@ -27,6 +30,8 @@ def main() -> None:
         executable = str(args.executable.resolve())
         job._launch = lambda arguments: job.process.start(executable, arguments)
     results = []
+    progress = []
+    job.progress.connect(lambda count, total: progress.append((count, total)))
     job.finished.connect(
         lambda installed, cancelled: (results.append((installed, cancelled)), app.quit())
     )
@@ -34,7 +39,15 @@ def main() -> None:
     stage = staging_path("tiny.en", root, job.job_id)
     timer = QTimer()
     timer.setInterval(20)
-    timer.timeout.connect(lambda: job.cancel() if (stage / ".localphraser-job").exists() else None)
+
+    def cancel_when_ready():
+        ready = (stage / ".localphraser-job").exists()
+        if args.wait_for_progress:
+            ready = any(total and 1_000_000 < count < total for count, total in progress)
+        if ready:
+            job.cancel()
+
+    timer.timeout.connect(cancel_when_ready)
     timer.start()
     QTimer.singleShot(30000, app.quit)
     app.exec()
@@ -42,6 +55,9 @@ def main() -> None:
     job.shutdown()
     assert results == [(False, True)], "Owned CLI download did not complete cancellation"
     assert not stage.exists(), "Owned partial download was not removed"
+    if args.wait_for_progress:
+        assert any(total and 1_000_000 < count < total for count, total in progress)
+        print("Real download byte progress and publisher total size received.")
     print(
         "Real CLI download cancellation and offline cleanup passed; no installed model was removed."
     )

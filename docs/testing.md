@@ -999,3 +999,24 @@ while maximized, followed by minimize/restore and actual caption actions. The fi
 suite passed **416 tests**, with Ruff check/format and mypy passing. An earlier concurrent
 build/test run hit another WinError 5 in an unrelated model-repair fixture; the isolated
 full run passed, and model installation code was not changed as part of these UI fixes.
+## Embedded Microsoft editor and download checks (2026-11-03)
+
+`python scripts/native_webview_check.py --sdk <unpacked-Microsoft-WebView2-SDK>` is an opt-in
+Windows regression test. It compiles a disposable WinForms editor using Microsoft's official
+WebView2 SDK, launches a separate empty profile, and refuses input unless that owned window
+and named fixture field have focus. SDK files stay outside the app bundle. This reproduced
+the former cross-process target rejection and verifies long synthetic insertion, existing
+draft word preservation and selected-text refusal. It does not open or send Outlook/Teams
+messages; final acceptance in those apps is still a user check. Obtain the SDK through
+[Microsoft's official NuGet package](https://www.nuget.org/packages/Microsoft.Web.WebView2).
+The multi-process behavior is documented in
+[Microsoft's process model](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-model).
+
+`python scripts/native_download_cancel_check.py --root <empty-owned-root> --wait-for-progress`
+waits for real model bytes and the publisher's total size before cancelling and checking
+cleanup. Add `--executable <rebuilt-exe>` to exercise the frozen install subprocess.
+This explicitly uses the network and receives a partial tiny.en model, never personal audio.
+Unit tests cover fragmented process output, unknown totals, >2 GiB counts, aggregate model
+sizes, verifying/installed states and cancellation. Hub transfers retain the official
+[Hugging Face downloader](https://huggingface.co/docs/huggingface_hub/v0.36.0/guides/download);
+progress observes only incomplete transfer files in the job's owned staging directory.
