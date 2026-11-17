@@ -205,20 +205,130 @@ def test_capsule_invites_speech_then_shows_live_words_and_partial_text(app):
         indicator.deleteLater()
 
 
-def test_capsule_dot_is_painted_red_while_listening(app):
+def test_capsule_shows_the_live_meter_while_listening_and_a_painted_dot_otherwise(app):
     from localphraser.pipeline import State
 
     indicator = Indicator()
     try:
         indicator.display(State.RECORDING)
         app.processEvents()
-        image = indicator.grab().toImage()
-        centre = indicator.dot.mapTo(indicator, indicator.dot.rect().center())
-        pixel = image.pixelColor(centre)
-        assert pixel.red() > pixel.green() + 60 and pixel.red() > pixel.blue() + 60
+        # Listening: the level meter takes the dot's place, left of the status line.
+        assert indicator.meter.isVisible() and not indicator.dot.isVisible()
+        assert indicator.meter.width() >= 48 and indicator.meter.height() <= 28
+        assert indicator.meter.geometry().right() < indicator.status.geometry().left()
+        indicator.live_preview("words while speaking")
+        assert indicator.meter.isVisible() and not indicator.dot.isVisible()
+        quiet = indicator.grab().toImage()
+        for _ in range(6):
+            indicator.set_level(0.9)
+        app.processEvents()
+        assert indicator.grab().toImage() != quiet  # The level is drawn, not only stored.
+        for state, channel in ((State.ERROR, "red"), (State.TRANSCRIBING, "amber")):
+            indicator.display(state)
+            app.processEvents()
+            assert indicator.dot.isVisible() and not indicator.meter.isVisible()
+            assert not any(indicator.meter.levels)  # Left flat for the next recording.
+            image = indicator.grab().toImage()
+            centre = indicator.dot.mapTo(indicator, indicator.dot.rect().center())
+            pixel = image.pixelColor(centre)
+            assert pixel.red() > pixel.blue() + 60
+            if channel == "red":
+                assert pixel.red() > pixel.green() + 60
+            else:
+                assert pixel.green() > pixel.blue() + 60
+        indicator.preview("Partial words.")
+        assert indicator.dot.isVisible() and not indicator.meter.isVisible()
     finally:
         indicator.close()
         indicator.deleteLater()
+
+
+def test_capsule_is_the_same_dark_pill_in_both_themes_with_a_gradient_rim(app, monkeypatch):
+    from localphraser.pipeline import State
+
+    images = {}
+    for dark in (False, True):
+        monkeypatch.setattr(appearance, "dark_surface", lambda dark=dark: dark)
+        indicator = Indicator()
+        try:
+            indicator.display(State.TRANSCRIBING)
+            app.processEvents()
+            image = indicator.grab().toImage()
+            images[dark] = image
+            middle = image.height() // 2
+            body = image.pixelColor(image.width() // 2, image.height() - 6)
+            assert body.alpha() >= 235 and body.lightness() < 40  # Deep, nearly opaque.
+            words = QColor(appearance.theme(True).text)
+            assert contrast(words, body) >= 12
+            left, right = image.pixelColor(0, middle), image.pixelColor(image.width() - 1, middle)
+            assert left.green() > left.red() + 40  # Cyan at one end of the rim...
+            assert right.blue() > right.green() + 40  # ...violet at the other.
+        finally:
+            indicator.close()
+            indicator.deleteLater()
+    assert images[False] == images[True]
+
+
+def meter_image(meter, app):
+    app.processEvents()
+    return meter.grab().toImage()
+
+
+def test_level_meter_draws_levels_scrolls_them_left_and_flattens_on_reset(app):
+    meter = appearance.LevelMeter(bars=12)
+    meter.resize(96, 32)
+    meter.show()
+    try:
+        idle = meter_image(meter, app)
+        assert len(meter.levels) == 12 and not any(meter.levels) and not meter.active
+
+        def ink(image, columns):
+            background = image.pixelColor(0, 0)
+            return sum(
+                image.pixelColor(x, y) != background for x in columns for y in range(image.height())
+            )
+
+        right, left = range(64, 96), range(0, 32)
+        assert ink(idle, range(96)) > 0  # Idle still shows short flat bars.
+        meter.set_level(0.3)
+        low = meter_image(meter, app)
+        meter.reset()
+        meter.set_level(1.0)
+        high = meter_image(meter, app)
+        assert meter.active and meter.levels[-1] == 1.0 and len(meter.levels) == 12
+        # Different levels paint differently: louder means taller bars.
+        assert ink(high, right) > ink(low, right) > ink(idle, right)
+        assert ink(high, left) == ink(idle, left)  # The newest level is on the right.
+        for _ in range(11):
+            meter.set_level(0.0)
+        scrolled = meter_image(meter, app)
+        assert meter.levels[0] == 1.0 and len(meter.levels) == 12  # A fixed-length history.
+        assert ink(scrolled, left) > ink(idle, left) and ink(scrolled, right) < ink(high, right)
+        meter.set_level(7.0)
+        meter.set_level(-3.0)
+        assert list(meter.levels)[-2:] == [1.0, 0.0]  # Clamped to the meter's range.
+        meter.reset()
+        assert not meter.active and not any(meter.levels)
+        assert meter_image(meter, app) == idle
+    finally:
+        meter.close()
+        meter.deleteLater()
+
+
+def test_level_meter_uses_the_palette_text_colour_in_high_contrast(app, monkeypatch):
+    monkeypatch.setattr(appearance, "high_contrast", lambda: True)
+    meter = appearance.LevelMeter(bars=8)
+    meter.resize(64, 24)
+    meter.show()
+    try:
+        for _ in range(8):
+            meter.set_level(1.0)
+        image = meter_image(meter, app)
+        text = meter.palette().color(QPalette.ColorRole.WindowText)
+        assert image.pixelColor(image.width() - 5, image.height() // 2) == text
+    finally:
+        meter.close()
+        meter.deleteLater()
 
 
 def test_capsule_keeps_transcript_text_plain(app):

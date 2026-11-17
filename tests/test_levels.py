@@ -51,3 +51,27 @@ def test_boost_gain_is_one_without_boost_and_limited_for_very_quiet_audio(tone):
     assert boost_gain(tone(0.02)) == pytest.approx(15.0, rel=0.05)
     assert boost_gain(tone(0.001)) == BOOST_LIMIT
     assert boost_gain(tone(0.05, rate=48000), 48000) == pytest.approx(6.0, rel=0.05)
+
+
+def decibels(value):
+    return 10 ** (value / 20)
+
+
+def test_display_level_maps_minus_54_to_minus_6_dbfs_onto_the_meter():
+    from localphraser.levels import display_level
+
+    assert display_level(decibels(-54)) == pytest.approx(0.0, abs=1e-6)
+    assert display_level(decibels(-30)) == pytest.approx(0.5, abs=1e-6)
+    assert display_level(decibels(-6)) == pytest.approx(1.0, abs=1e-6)
+    # Quiet speech is visible: a peak of 0.01 (-40 dBFS) already shows over a quarter.
+    assert display_level(0.01) == pytest.approx(14 / 48, abs=1e-6)
+
+
+def test_display_level_is_clamped_and_never_decreases_with_level():
+    from localphraser.levels import display_level
+
+    assert display_level(0.0) == 0.0 and display_level(-1.0) == 0.0
+    assert display_level(1.0) == 1.0 and display_level(4.0) == 1.0
+    assert display_level(float("nan")) == 0.0
+    steps = [display_level(index / 200) for index in range(201)]
+    assert steps == sorted(steps)

@@ -1258,3 +1258,26 @@ def test_immediate_target_failure_notice_says_why(setup):
     assert results[0][1] == (
         "Target could not be verified. selected text. Open Latest transcript to copy."
     )
+
+
+def test_input_level_is_the_recorder_level_only_while_recording(setup):
+    pipeline, recorder, recognizer, _, callbacks, _, _ = setup
+    recorder.level = lambda: 0.37
+    assert pipeline.input_level() == 0.0  # Idle: nothing is being captured.
+    pipeline.press()
+    assert pipeline.state == State.RECORDING
+    assert pipeline.input_level() == pytest.approx(0.37)
+    recognizer.gate.clear()
+    pipeline.release()
+    assert pipeline.state != State.RECORDING
+    assert pipeline.input_level() == 0.0
+    recognizer.gate.set()
+
+
+def test_input_level_is_zero_for_a_recorder_without_a_level(setup):
+    pipeline, recorder, _, _, _, _, _ = setup
+    assert not hasattr(recorder, "level")
+    pipeline.press()
+    assert pipeline.state == State.RECORDING
+    assert pipeline.input_level() == 0.0
+    pipeline.cancel()

@@ -1,4 +1,6 @@
-"""Click-tolerant speech level and the quiet-input boost shared by the recognisers."""
+"""Click-tolerant speech level, the quiet-input boost and the level-meter scale."""
+
+import math
 
 import numpy as np
 
@@ -9,6 +11,16 @@ BOOST_TARGET = 0.3
 BOOST_LIMIT = 40.0
 _IGNORED_FRAMES = 3
 _MIN_FRAMES = 8
+
+
+def display_level(level: float) -> float:
+    """Meter position (0..1) for an input peak: -54 dBFS shows 0 and -6 dBFS shows 1.
+
+    A decibel scale keeps quiet speech visible instead of pinning it to the floor.
+    """
+    if level != level:  # NaN
+        return 0.0
+    return min(1.0, max(0.0, (20.0 * math.log10(max(level, 1e-4)) + 54.0) / 48.0))
 
 
 def _peak(values: Audio) -> float:

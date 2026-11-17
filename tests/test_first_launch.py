@@ -99,6 +99,7 @@ def desktop(app, monkeypatch, tmp_path, request):
     monkeypatch.setattr(ui, "QSystemTrayIcon", Mock())
     monkeypatch.setattr(ui.Desktop, "notify", Mock())
     pipeline = Mock(state=State.IDLE)
+    pipeline.input_level.return_value = 0.0
     monkeypatch.setattr(ui.Desktop, "make_pipeline", lambda *args: pipeline)
     monkeypatch.setattr(ui.ModelDownload, "start", Mock())
     controller = ui.Desktop(
@@ -623,3 +624,38 @@ def test_nothing_recognised_quiet_message_notifies_every_time(desktop):
     desktop.state_changed(State.IDLE, QUIET_MESSAGE)
     desktop.state_changed(State.IDLE, QUIET_MESSAGE)
     assert desktop.notify.call_count == 2
+
+
+def test_level_timer_runs_only_while_recording_and_zeroes_afterwards(desktop):
+    from localphraser.levels import display_level
+
+    desktop.pipeline.input_level.return_value = 0.1
+    assert not desktop.level_timer.isActive()
+    assert 20 <= desktop.level_timer.interval() <= 50
+    desktop.state_changed(State.RECORDING, "")
+    assert desktop.level_timer.isActive()
+    desktop.update_level()
+    meter = desktop.indicator.meter
+    assert meter.active and meter.levels[-1] == pytest.approx(display_level(0.1))
+    desktop.pipeline.input_level.return_value = 0.5
+    desktop.update_level()
+    assert list(meter.levels)[-2:] == pytest.approx([display_level(0.1), display_level(0.5)])
+    for state in (State.TRANSCRIBING, State.POLISHING, State.INSERTING, State.ERROR, State.IDLE):
+        desktop.state_changed(State.RECORDING, "")
+        desktop.update_level()
+        assert desktop.level_timer.isActive() and any(meter.levels)
+        desktop.state_changed(state, "")
+        assert not desktop.level_timer.isActive(), state
+        assert not meter.active and not any(meter.levels), state
+    desktop.state_changed(State.WARMING, "")
+    assert not desktop.level_timer.isActive()
+
+
+def test_level_timer_stops_and_zeroes_on_shutdown(desktop):
+    desktop.pipeline.input_level.return_value = 0.5
+    desktop.state_changed(State.RECORDING, "")
+    desktop.update_level()
+    assert desktop.level_timer.isActive() and any(desktop.indicator.meter.levels)
+    desktop.shutdown()
+    assert not desktop.level_timer.isActive()
+    assert not any(desktop.indicator.meter.levels)

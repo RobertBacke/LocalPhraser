@@ -288,3 +288,46 @@ def test_preview_copy_is_bounded_independent_and_empty_when_idle(device):
     recorder.stop().fill(0)
     assert not recorder.preview_audio().size
     recorder.close()
+
+
+def test_level_is_the_peak_of_the_latest_block_and_resets_when_capture_ends(device):
+    recorder = Recorder(None, 1)
+    assert recorder.level() == 0.0
+    recorder.start()
+    stream = recorder.stream
+    block = np.zeros((160, 1), dtype=np.float32)
+    block[40, 0] = 0.25
+    stream.callback(block, 160, None, False)
+    assert recorder.level() == pytest.approx(0.25)
+    block[40, 0] = -0.5  # A negative peak counts by its size.
+    stream.callback(block, 160, None, False)
+    assert recorder.level() == pytest.approx(0.5)
+    stream.callback(np.zeros((160, 1), dtype=np.float32), 160, None, False)
+    assert recorder.level() == 0.0  # Only the most recent block.
+    stream.callback(np.full((160, 1), 3.0, dtype=np.float32), 160, None, False)
+    assert recorder.level() == 1.0  # Clipped input still reads as full scale.
+    assert isinstance(recorder.level(), float)
+    recorder.stop()
+    assert recorder.level() == 0.0
+
+
+@pytest.mark.parametrize("ending", ["cancel", "close"])
+def test_level_resets_on_cancel_and_close(device, ending):
+    recorder = Recorder(None, 1)
+    recorder.start()
+    recorder.stream.callback(np.full((160, 1), 0.4, dtype=np.float32), 160, None, False)
+    assert recorder.level() == pytest.approx(0.4)
+    getattr(recorder, ending)()
+    assert recorder.level() == 0.0
+
+
+def test_level_survives_a_callback_after_the_buffer_is_full(device):
+    recorder = Recorder(None, 1)
+    recorder.start()
+    stream = recorder.stream
+    with pytest.raises(device.CallbackStop):
+        stream.callback(np.full((16000, 1), 0.3, dtype=np.float32), 16000, None, False)
+    with pytest.raises(device.CallbackStop):  # A late block has no room and no samples to read.
+        stream.callback(np.full((160, 1), 0.9, dtype=np.float32), 160, None, False)
+    assert recorder.level() == 0.0
+    recorder.stop()

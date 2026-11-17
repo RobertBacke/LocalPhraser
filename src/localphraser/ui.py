@@ -62,6 +62,7 @@ from localphraser.downloads import ModelDownload
 from localphraser.history import History
 from localphraser.home import AppWindow
 from localphraser.hotkey import Hotkey
+from localphraser.levels import display_level
 from localphraser.models import model_present
 from localphraser.pipeline import QUIET_MESSAGE, TAIL_SECONDS, Dictation, State
 from localphraser.recognition import make_recognizer
@@ -128,27 +129,29 @@ class Indicator(GlassCapsule):
             self.anchor_screen = None
             self.status.clear()
             self.words.clear()
+            self.clear_level()
             self.hide()
             return
         status = state.value
         if state == State.RECORDING and self.expects_words:
             status = "Listening — speak now"
-        self._show(status, "", state_tone(state))
+        self._show(status, "", state_tone(state), state == State.RECORDING)
 
     def preview(self, text: str) -> None:
-        self._show("Transcribing · preview", text[-200:], "busy")
+        self._show("Transcribing · preview", text[-200:], "busy", False)
 
     def live_preview(self, text: str) -> None:
         if text:
-            self._show("Listening", text[-200:], "recording")
+            self._show("Listening", text[-200:], "recording", True)
         else:
             self.display(State.RECORDING)
 
-    def _show(self, status: str, words: str, tone: str) -> None:
+    def _show(self, status: str, words: str, tone: str, metering: bool) -> None:
         self.status.setText(status)
         self.words.setText(words)
         self.words.setVisible(bool(words))
         self.dot.set_tone(tone)
+        self.set_metering(metering)
         screen = next((s for s in QApplication.screens() if s.name() == self.anchor_screen), None)
         screen = screen or QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
         if screen:
@@ -912,6 +915,10 @@ class Desktop:
         self.watchdog = QTimer()
         self.watchdog.setInterval(100)
         self.watchdog.timeout.connect(self.check_audio)
+        # Feeds the level meters about 30 times a second, only while recording.
+        self.level_timer = QTimer()
+        self.level_timer.setInterval(33)
+        self.level_timer.timeout.connect(self.update_level)
         self.window = AppWindow(
             self.history,
             self.show_settings,
@@ -1126,8 +1133,10 @@ class Desktop:
         self.cancel_action.setEnabled(state == State.RECORDING)
         if state == State.RECORDING:
             self.watchdog.start()
+            self.level_timer.start()
         else:
             self.watchdog.stop()
+            self.stop_level()
         if (
             message
             and state == State.IDLE
@@ -1140,6 +1149,13 @@ class Desktop:
             )
         ):
             self.notify(message)
+
+    def update_level(self) -> None:
+        self.indicator.set_level(display_level(self.pipeline.input_level()))
+
+    def stop_level(self) -> None:
+        self.level_timer.stop()
+        self.indicator.clear_level()
 
     def check_audio(self) -> None:
         if self.recorder.full.is_set():
@@ -1353,6 +1369,7 @@ class Desktop:
             self.settings.hotkey.cancel_capture()
         self.hotkey.close()
         self.watchdog.stop()
+        self.stop_level()
         self.pipeline.shutdown()
         self.insertion.close()
         self.audio_preparer.shutdown(wait=False, cancel_futures=True)

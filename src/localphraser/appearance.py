@@ -3,6 +3,7 @@
 import ctypes
 import random
 import sys
+from collections import deque
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -853,6 +854,65 @@ class StatusDot(QWidget):
         painter.drawEllipse(area.adjusted(2, 2, -2, -2))
 
 
+class LevelMeter(QWidget):
+    """A scrolling bar waveform of recent input levels, newest on the right.
+
+    It shows real input only: ``set_level`` appends a shown level (0..1) and ``reset``
+    flattens the history. Idle is a row of short, muted bars.
+    """
+
+    def __init__(self, bars: int = 24, *, dark: bool | None = None) -> None:
+        super().__init__()
+        self.levels: deque[float] = deque([0.0] * bars, maxlen=bars)
+        self.active = False
+        self.dark = dark  # Fixed for the capsule, which is dark in both themes.
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setMinimumSize(bars * 3, 16)
+
+    def set_level(self, shown: float) -> None:
+        self.levels.append(min(1.0, max(0.0, shown)) if shown == shown else 0.0)
+        self.active = True
+        self.update()
+
+    def reset(self) -> None:
+        if self.active or any(self.levels):
+            self.levels.extend([0.0] * len(self.levels))
+            self.active = False
+            self.update()
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        tokens = theme(dark_surface() if self.dark is None else self.dark)
+        area = QRectF(self.rect())
+        if high_contrast():
+            painter.setBrush(self.palette().color(QPalette.ColorRole.WindowText))
+        elif self.active:
+            live = QLinearGradient(area.topLeft(), area.topRight())
+            oldest = QColor(tokens.violet)
+            oldest.setAlpha(150)
+            live.setColorAt(0, oldest)
+            live.setColorAt(1, QColor(tokens.glow))
+            painter.setBrush(live)
+        else:
+            idle = QColor(tokens.muted)
+            idle.setAlpha(120)
+            painter.setBrush(idle)
+        pitch = area.width() / len(self.levels)
+        width = max(2.0, pitch * 0.56)
+        floor = min(area.height(), max(3.0, width))
+        for index, level in enumerate(self.levels):
+            height = max(floor, level * area.height())
+            bar = QRectF(
+                area.left() + index * pitch + (pitch - width) / 2,
+                area.center().y() - height / 2,
+                width,
+                height,
+            )
+            painter.drawRoundedRect(bar, width / 2, width / 2)
+
+
 class NoteLabel(QLabel):
     """Wrapped plain text. As a hint (the default) it is muted and slightly smaller."""
 
@@ -1088,7 +1148,7 @@ class GlassDialog(QDialog):
 
 
 class GlassCapsule(QWidget):
-    """A dark, plain-text HUD pill: a painted state dot, a short status and the words."""
+    """A dark, plain-text HUD pill: a level meter or state dot, a status and the words."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -1096,13 +1156,15 @@ class GlassCapsule(QWidget):
         self.surface_mode: tuple[bool, bool] | None = None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        layout = QVBoxLayout(self)
+        layout = QHBoxLayout(self)
         self.capsule_layout = layout
         layout.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)  # fit() sizes it.
-        layout.setContentsMargins(22, 13, 24, 15)
-        layout.setSpacing(6)
-        row = QHBoxLayout()
-        row.setSpacing(9)
+        layout.setContentsMargins(20, 12, 26, 13)
+        layout.setSpacing(13)
+        # Left: the live level while recording, the state dot in every other state.
+        self.meter = LevelMeter(bars=14, dark=True)
+        self.meter.setFixedSize(56, 24)
+        self.meter.hide()
         self.dot = StatusDot(dark=True)
         self.status = QLabel()
         self.status.setObjectName("capsuleStatus")
@@ -1114,10 +1176,13 @@ class GlassCapsule(QWidget):
             label.setTextFormat(Qt.TextFormat.PlainText)  # Transcripts are never markup.
             label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         self.words.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        row.addWidget(self.dot, 0, Qt.AlignmentFlag.AlignVCenter)
-        row.addWidget(self.status, 1)
-        layout.addLayout(row)
-        layout.addWidget(self.words)
+        layout.addWidget(self.meter, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        text = QVBoxLayout()
+        text.setSpacing(3)
+        text.addWidget(self.status)
+        text.addWidget(self.words)
+        layout.addLayout(text, 1)
         self.refresh_surface()
         application = QApplication.instance()
         if isinstance(application, QApplication):
@@ -1141,16 +1206,32 @@ class GlassCapsule(QWidget):
         self.dot.update()
         self.update()
 
+    def set_metering(self, metering: bool) -> None:
+        """Show the live level meter (recording) or the state dot (every other state)."""
+        if not metering:
+            self.meter.reset()
+        self.meter.setVisible(metering)
+        self.dot.setVisible(not metering)
+
+    def set_level(self, shown: float) -> None:
+        self.meter.set_level(shown)
+
+    def clear_level(self) -> None:
+        self.meter.reset()
+
     def fit(self) -> None:
         """Grow to fit the words on one line within the width limits, then wrap."""
         for label in (self.status, self.words):
             label.ensurePolished()
         margins = self.capsule_layout.contentsMargins()
-        status = (
-            self.dot.width() + 9 + self.status.fontMetrics().horizontalAdvance(self.status.text())
-        )
+        lead = self.meter if self.meter.isVisibleTo(self) else self.dot
+        status = self.status.fontMetrics().horizontalAdvance(self.status.text())
         words = self.words.fontMetrics().horizontalAdvance(self.words.text())
-        wanted = max(status, words if self.words.isVisibleTo(self) else 0)
+        wanted = (
+            lead.width()
+            + self.capsule_layout.spacing()
+            + max(status, words if self.words.isVisibleTo(self) else 0)
+        )
         width = max(
             self.minimumWidth(),
             min(self.maximumWidth(), wanted + 8 + margins.left() + margins.right()),
@@ -1159,6 +1240,7 @@ class GlassCapsule(QWidget):
         height = self.heightForWidth(width)
         if height < 0:
             height = self.sizeHint().height()
+        height = max(48, height)  # One height for every single-line state, meter or dot.
         self.resize(width, max(self.minimumHeight(), min(self.maximumHeight(), height)))
 
     def changeEvent(self, event: Any) -> None:

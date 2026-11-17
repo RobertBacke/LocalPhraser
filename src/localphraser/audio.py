@@ -135,6 +135,7 @@ class Recorder:
         self.recording = False
         self.last_frame_at: float | None = None
         self.closed = False
+        self._level = 0.0
         self._lock = threading.RLock()
         self._callback_stop: Any = RuntimeError
 
@@ -142,13 +143,19 @@ class Recorder:
         if status:
             self.failed = True
         count = min(frames, self.limit - self.position)
-        self.buffer[self.position : self.position + count] = indata[:count, 0]
+        block = indata[:count, 0]  # A view; the meter level below is a reduction over it.
+        self.buffer[self.position : self.position + count] = block
         self.position += count
+        self._level = min(1.0, max(float(block.max()), -float(block.min()))) if count else 0.0
         self.last_frame_at = monotonic()
         self.first_frame.set()
         if self.position == self.limit:
             self.full.set()
             raise self._callback_stop
+
+    def level(self) -> float:
+        """Peak of the most recent input block, 0..1; one number, never audio."""
+        return self._level
 
     def prepare(self) -> None:
         """Open an inactive stream; no callbacks or idle pre-roll recording."""
@@ -244,6 +251,7 @@ class Recorder:
             finally:
                 self.recording = False
                 self.last_frame_at = None
+                self._level = 0.0
                 self.buffer.fill(0)
                 self.position = 0
                 if self.stream is None:
@@ -265,6 +273,7 @@ class Recorder:
                 self.stream = None
                 self.recording = False
                 self.last_frame_at = None
+                self._level = 0.0
                 self.position = 0
                 self.buffer.fill(0)
                 self.buffer = np.empty(0, dtype=np.float32)

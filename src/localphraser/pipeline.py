@@ -158,6 +158,13 @@ class Dictation:
             audio.fill(0)
         self._post(callback)
 
+    def input_level(self) -> float:
+        """The recorder's input peak (0..1) while recording, for the level meters."""
+        if self.state != State.RECORDING:
+            return 0.0
+        level = getattr(self.recorder, "level", None)
+        return float(level()) if callable(level) else 0.0
+
     def warm_live_preview(self) -> bool:
         warm = getattr(self.recognizer, "warm_preview", None)
         if (
