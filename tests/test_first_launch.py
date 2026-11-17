@@ -11,7 +11,7 @@ from localphraser import main as entry
 from localphraser import ui
 from localphraser.config import Config, load_config, save_config
 from localphraser.models import FILES
-from localphraser.pipeline import State
+from localphraser.pipeline import QUIET_MESSAGE, State
 
 
 @pytest.fixture
@@ -448,3 +448,26 @@ def test_history_uses_recording_app_identity_and_skips_counts_when_disabled(desk
     desktop.config = replace(desktop.config, keep_history=False)
     desktop.complete_transcript("Not saved.", "Inserted.")
     assert desktop.history.app_stats()[0]["total"] == 1
+
+
+def test_tray_shows_quiet_notice_once_per_session(desktop):
+    desktop.pipeline.audio_seconds = 2.0
+    desktop.notify.reset_mock()
+    desktop.complete_transcript("First.", f"Inserted. {QUIET_MESSAGE}")
+    desktop.complete_transcript("Second.", f"Polishing applied. Inserted. {QUIET_MESSAGE}")
+    desktop.complete_transcript("Third.", "Inserted.")
+    assert [c.args[0] for c in desktop.notify.call_args_list].count(QUIET_MESSAGE) == 1
+
+
+def test_tray_shows_no_quiet_notice_for_normal_results(desktop):
+    desktop.pipeline.audio_seconds = 2.0
+    desktop.notify.reset_mock()
+    desktop.complete_transcript("Fine.", "Inserted.")
+    assert QUIET_MESSAGE not in [c.args[0] for c in desktop.notify.call_args_list]
+
+
+def test_nothing_recognised_quiet_message_notifies_every_time(desktop):
+    desktop.notify.reset_mock()
+    desktop.state_changed(State.IDLE, QUIET_MESSAGE)
+    desktop.state_changed(State.IDLE, QUIET_MESSAGE)
+    assert desktop.notify.call_count == 2

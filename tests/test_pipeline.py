@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from localphraser.pipeline import TAIL_SECONDS, Dictation, State
+from localphraser.pipeline import QUIET_MESSAGE, TAIL_SECONDS, Dictation, State
 
 
 class FakeRecorder:
@@ -1063,3 +1063,110 @@ def test_tail_that_cannot_be_scheduled_stops_capture_at_once(tail_setup):
     finish(pipeline.callbacks)
     assert pipeline.results == [("Hello, world.", "Inserted.")]
     assert [state for state, _ in changes].count(State.TRANSCRIBING) == 1
+
+
+def dictate(pipeline, callbacks):
+    pipeline.press()
+    pipeline.release()
+    while pipeline.state not in (State.IDLE, State.ERROR) or callbacks.qsize():
+        finish(callbacks)
+
+
+def test_quiet_input_adds_notice_to_result_but_not_to_state(setup):
+    pipeline, recorder, _, _, callbacks, changes, results = setup
+    recorder.audio = np.full(16000, 0.005, dtype=np.float32)
+    dictate(pipeline, callbacks)
+    assert results[-1] == ("Hello, world.", f"Inserted. {QUIET_MESSAGE}")
+    assert changes[-1] == (State.IDLE, "Inserted.")
+
+
+def test_normal_input_adds_no_notice(setup):
+    pipeline, _, _, _, callbacks, _, results = setup
+    dictate(pipeline, callbacks)
+    assert results[-1] == ("Hello, world.", "Inserted.")
+
+
+def test_quiet_input_with_no_text_replaces_no_speech_message(setup):
+    pipeline, recorder, recognizer, _, callbacks, changes, results = setup
+    recognizer.transcribe = lambda audio: ""
+    recorder.audio = np.full(16000, 0.005, dtype=np.float32)
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    assert changes[-1] == (State.IDLE, QUIET_MESSAGE)
+    assert results == []
+
+
+def test_no_text_with_normal_input_keeps_no_speech_message(setup):
+    pipeline, recorder, recognizer, _, callbacks, changes, _ = setup
+    recognizer.transcribe = lambda audio: ""
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    assert changes[-1] == (State.IDLE, "No speech recognized.")
+
+
+def test_click_does_not_hide_quiet_input(setup):
+    pipeline, recorder, _, _, callbacks, _, results = setup
+    recorder.audio = np.full(16000, 0.005, dtype=np.float32)
+    recorder.audio[8000:8100] = 0.9
+    dictate(pipeline, callbacks)
+    assert QUIET_MESSAGE in results[-1][1]
+
+
+def test_silent_capture_keeps_no_speech_captured_message(setup):
+    pipeline, recorder, _, _, _, changes, _ = setup
+    recorder.audio = np.zeros(16000, dtype=np.float32)
+    pipeline.press()
+    pipeline.release()
+    assert changes[-1] == (State.IDLE, "No speech captured.")
+
+
+def test_quiet_input_notice_is_appended_after_polishing_notice(setup):
+    pipeline, recorder, _, _, callbacks, changes, results = setup
+    pipeline.refiner = Mock()
+    pipeline.refiner.refine.return_value = "Hello, world."
+    recorder.audio = np.full(16000, 0.005, dtype=np.float32)
+    dictate(pipeline, callbacks)
+    assert results[-1][1] == f"Polishing checked; no changes needed. Inserted. {QUIET_MESSAGE}"
+    assert changes[-1][1] == "Polishing checked; no changes needed. Inserted."
+
+
+def test_quiet_notice_is_appended_to_insertion_failure_notice(setup):
+    pipeline, recorder, _, insertion, callbacks, _, results = setup
+    insertion.insert_error = True
+    recorder.audio = np.full(16000, 0.005, dtype=np.float32)
+    dictate(pipeline, callbacks)
+    notice = "Insertion was not confirmed. Check the target before copying the transcript."
+    assert results[-1][1] == f"{notice} {QUIET_MESSAGE}"
+
+
+def test_quiet_recording_does_not_leak_into_the_next_recording(setup):
+    pipeline, recorder, _, _, callbacks, _, results = setup
+    recorder.audio = np.full(16000, 0.005, dtype=np.float32)
+    dictate(pipeline, callbacks)
+    assert QUIET_MESSAGE in results[-1][1]
+    recorder.audio = np.full(16000, 0.05, dtype=np.float32)
+    dictate(pipeline, callbacks)
+    assert results[-1] == ("Hello, world.", "Inserted.")
+
+
+def test_cancelled_quiet_recording_does_not_leak_into_the_next_recording(setup):
+    pipeline, recorder, _, _, callbacks, _, results = setup
+    recorder.audio = np.full(16000, 0.005, dtype=np.float32)
+    dictate(pipeline, callbacks)
+    pipeline.press()
+    pipeline.cancel()
+    recorder.audio = np.full(16000, 0.05, dtype=np.float32)
+    dictate(pipeline, callbacks)
+    assert results[-1] == ("Hello, world.", "Inserted.")
+
+
+def test_quiet_input_is_measured_after_the_tail(tail_setup):
+    pipeline, recorder, scheduled, changes = tail_setup
+    recorder.audio = np.full(16000, 0.005, dtype=np.float32)
+    pipeline.press()
+    pipeline.release()
+    scheduled[0][1]()
+    finish(pipeline.callbacks)
+    assert pipeline.results[-1] == ("Hello, world.", f"Inserted. {QUIET_MESSAGE}")

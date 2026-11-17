@@ -52,7 +52,7 @@ from localphraser.history import History
 from localphraser.home import AppWindow
 from localphraser.hotkey import Hotkey
 from localphraser.models import model_present
-from localphraser.pipeline import TAIL_SECONDS, Dictation, State
+from localphraser.pipeline import QUIET_MESSAGE, TAIL_SECONDS, Dictation, State
 from localphraser.recognition import WhisperRecognizer
 from localphraser.refinement import LocalRefiner
 from localphraser.shortcut import HINT, ShortcutRecorder
@@ -679,6 +679,7 @@ class Desktop:
         persist_history: bool = True,
     ):
         self.closing = False
+        self.quiet_notice_shown = False
         self._shutdown_started = False
         self.allow_live_warmup = warm_on_launch
         self.first_launch_setup_started = False
@@ -891,6 +892,9 @@ class Desktop:
         if self.closing:
             return
         self.latest.set_transcript(text, notice)
+        if QUIET_MESSAGE in notice and not self.quiet_notice_shown:
+            self.quiet_notice_shown = True
+            self.notify(QUIET_MESSAGE)
         if self.config.keep_history:
             try:
                 origin = "Unknown app"

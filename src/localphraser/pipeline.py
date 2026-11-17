@@ -11,11 +11,17 @@ from typing import Any, Protocol
 import numpy as np
 
 from localphraser.audio import SAMPLE_RATE, Audio, resample_audio
+from localphraser.levels import QUIET_LEVEL, speech_level
 from localphraser.recognition import Recognizer
 from localphraser.refinement import RefinementRejected, Refiner, preserve_words
 
 # People release push-to-talk while finishing the last word; keep capturing briefly.
 TAIL_SECONDS = 0.25
+
+QUIET_MESSAGE = (
+    "Microphone input was very quiet. Raise the input level in Windows Sound settings "
+    "or move closer."
+)
 
 
 class State(StrEnum):
@@ -100,6 +106,7 @@ class Dictation:
         self.preview_disabled = False
         self.released_at: float | None = None
         self.audio_seconds = 0.0
+        self.quiet_input = False
         self.state = State.IDLE
         self.target: Any = None
         self.target_future: Future[Any] | None = None
@@ -176,6 +183,7 @@ class Dictation:
             return
         self.target = None
         self.target_error = ""
+        self.quiet_input = False
         self.generation += 1
         snapshot = None
         if self.auto_insert or self.recording_started is not None:
@@ -347,6 +355,7 @@ class Dictation:
     def _capture_stopped(self) -> None:
         """Stop the recorder and hand the recording to transcription."""
         audio = None
+        self.quiet_input = False
         try:
             audio = self.recorder.stop()
             sample_rate = getattr(self.recorder, "sample_rate", SAMPLE_RATE)
@@ -356,6 +365,7 @@ class Dictation:
                 self._clear_target()
                 self._state(State.IDLE, "No speech captured.")
                 return
+            self.quiet_input = speech_level(audio, sample_rate) < QUIET_LEVEL
             if self.state != State.TRANSCRIBING:
                 self._state(State.TRANSCRIBING)
             self.executor.submit(self._prepare_models)
@@ -428,7 +438,7 @@ class Dictation:
             return
         if not text:
             self._clear_target()
-            self._state(State.IDLE, "No speech recognized.")
+            self._state(State.IDLE, QUIET_MESSAGE if self.quiet_input else "No speech recognized.")
             return
         if self.target_future is not None:
             self.pending_transcription = future
@@ -471,7 +481,8 @@ class Dictation:
             self.raw_result(transcript.raw)
         if transcript.notice:
             notice = f"{transcript.notice} {notice}"
-        self.result(transcript.text.strip(), notice)
+        result_notice = f"{notice} {QUIET_MESSAGE}" if self.quiet_input else notice
+        self.result(transcript.text.strip(), result_notice)
         if self.timing_result is not None:
             total = (
                 perf_counter() - self.released_at
@@ -482,6 +493,7 @@ class Dictation:
         self._state(State.IDLE, notice)
 
     def _error(self, message: str) -> None:
+        self.quiet_input = False
         self._clear_target()
         self._state(State.ERROR, message)
         self._state(State.IDLE, message)
@@ -490,6 +502,7 @@ class Dictation:
         if self.state == State.RECORDING or self.tail_pending:
             self._end_tail()
             self.recorder.cancel()
+            self.quiet_input = False
             self._clear_target()
             self._state(State.IDLE, "Recording cancelled.")
 
