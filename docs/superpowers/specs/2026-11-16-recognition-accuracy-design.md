@@ -1,6 +1,6 @@
 # Recognition accuracy: quiet, paused speech and a second speech engine
 
-Status: awaiting approval. Date: 2026-11-16.
+Status: approved by the user on 2026-11-16. Date: 2026-11-16.
 
 ## Why
 

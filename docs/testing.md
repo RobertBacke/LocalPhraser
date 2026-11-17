@@ -1093,6 +1093,9 @@ Against the design's "What counts as done", the benchmark **passed every mark ex
   it as within the noise of an 88-word cell. The mark at 0.014 had been set in the design
   without an earlier measurement at that level. Parakeet was still the best of the three
   engines in that cell (`small.en` 8.0, `base.en` 10.2).
+  The Settings hint for Parakeet differs from the design's copy ("Most accurate and fastest")
+  because the measured results did not support "fastest" without qualification: Parakeet was
+  faster than `base.en` on continuous clips and the 10 s clip but slower on paused clips.
 - Normal level: Parakeet 0.0 / 0.0, no worse than `base.en` as shipped in the earlier trial
   (0.0 / 2.3).
 - No engine or setting invented a word on any noise-only clip, including the `+retry` rows.
@@ -1112,3 +1115,40 @@ per clip there.
 The raw JSON stays in the ignored `.cache/quality-bench` folder. The development build and
 the user's own voice (design verification steps 3 and 4) remain to be checked before any
 switch of the stable installation.
+
+### Limits of this evidence
+
+- "Noise only" means four clips of stationary white noise with a key click, decoded with an
+  empty vocabulary. Non-stationary noise (breath, typing, distant voices) and decoding with a
+  vocabulary were not measured. Whisper now amplifies such input up to 40 times before its
+  speech filter, and Parakeet has no speech filter, so invented text on real room noise is not
+  ruled out.
+- The level measure ignores the three loudest 20 ms frames, which covers the benchmark's 8 ms
+  clicks. A transient longer than about 60 ms, or clicks that straddle frame boundaries, can
+  raise the measured level, in which case the quiet notice and Whisper's correction do not
+  fire (behaviour as before this work).
+- The long-recording result scored words only. Parakeet decodes each piece of a long recording
+  independently and adds its own capitals and full stops, so a spurious sentence break at a
+  cut is possible. Case and punctuation at cuts were not scored, and the 132 s clip used whole
+  sentences with 1 s gaps, the easiest case for a cut.
+
+### Repetition guard narrowed (2026-11-16)
+
+After the recorded run, Whisper's repetition guard was narrowed: segments with a compression
+ratio above 2.4 are now dropped only when the level correction raised the audio 10 times or
+more (measured speech level at or below 0.03), the range where repetition loops were measured.
+Ordinary repeated speech exceeds the ratio: " Testing, testing, testing, testing, testing,
+testing." scores 2.45, and "Yes, yes…" ten times 2.78. Under 30 s all segments share one
+window, so the earlier unconditional guard could remove a whole dictation and report "No
+speech recognized."
+
+The `base.en` and `small.en` rows were run again with the narrowed guard:
+
+```powershell
+.venv\Scripts\python.exe scripts\benchmark_quiet_speech.py --root .cache\models --models base.en small.en --temp-dir .cache\quality-bench > .cache\quality-bench\quiet-speech-after-guard.json
+```
+
+All 20 error cells (`errors_per_100`, five levels, continuous and paused) and both noise-only
+rows (`words_invented` 0, 0, 0, 0) are identical to the recorded `base.en` and `small.en` rows
+above. Every benchmark level at or below 0.02 is boosted 15 times or more, so the guard still
+applies there; at 0.25 it no longer applies and nothing changed.

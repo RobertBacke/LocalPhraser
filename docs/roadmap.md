@@ -169,7 +169,7 @@ engine and the default for new profiles. Its first-launch download is ~660 MB, w
 `base.en` was ~145 MB. Existing profiles keep their model. Parakeet loads in the background
 at app start, decodes recordings longer than 30 s in pieces, and restores the spelling of
 approved vocabulary terms instead of taking hints. For Whisper, quiet audio is raised before
-decoding and repetition loops are dropped. Every engine now uses Automatic threads (physical
+decoding, and repetition loops are dropped from audio raised 10 times or more. Every engine now uses Automatic threads (physical
 cores, at most eight), so a saved 16 is capped. Capture continues for 250 ms after release.
 Very quiet recordings show a notice to raise the input level.
 

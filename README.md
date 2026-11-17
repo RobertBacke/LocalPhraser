@@ -25,9 +25,10 @@ uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
 ```
 
 You can also use Python's `venv` and `pip install -e ".[dev]"` instead of uv.
-The default installation requires roughly hundreds of MB for the runtime and model;
-allow at least 2 GB free disk space for development and build artifacts. Actual installer
-size and RAM usage have not yet been benchmarked.
+The default Parakeet model is a ~660 MB download. With it loaded the app uses about 1 GB of
+memory: 784 MB after loading and a peak of 1,246 MB while decoding a 132 s recording in the
+synthetic benchmark ([testing](docs/testing.md)). Allow at least 2 GB free disk space for
+development and build artifacts. Actual installer size has not yet been benchmarked.
 
 1. Install a model explicitly, through the command above or Settings → Download.
 2. Focus a supported editable text field with an empty selection.
@@ -119,8 +120,10 @@ uses synthetic speech, and human speech is not yet verified ([testing](docs/test
 The Whisper models `tiny.en`, `base.en`, `small.en` and the distilled and medium variants
 remain available. They are the MIT-licensed Systran CTranslate2 conversions of OpenAI Whisper
 English models. Whisper inference uses CPU INT8, one worker and bundled Silero voice activity
-detection. Very quiet recordings are raised in level before decoding, and repetition loops
-are dropped. CPU threads default to Automatic for every engine.
+detection. Very quiet recordings are raised in level before decoding. When a recording is
+raised 10 times or more, segments that look like repetition loops (compression ratio above
+2.4) are dropped; at other levels repeated speech such as "testing, testing, testing" is
+kept. CPU threads default to Automatic for every engine.
 With live preview disabled, a Whisper model loads on the background inference worker
 after recording stops. With live preview enabled, it prepares before recording becomes
 available, including a discarded silence decode to initialize VAD and the speech decoder.
@@ -174,7 +177,9 @@ recognized words. Parakeet cannot take hints. Instead, recognised words that mat
 approved term exactly, ignoring case, spaces and hyphens, are replaced by its approved
 spelling ("local phraser" becomes "LocalPhraser"). Sound-alike or partial matches are not
 replaced, and a term that begins or ends with punctuation (for example `.NET`) is not
-restored. The Vocabulary page says which behavior the selected engine uses.
+restored. Every exact occurrence is rewritten, so avoid ordinary words: with `IT, US`,
+"it helped us" becomes "IT helped US". The Vocabulary page says which behavior the selected
+engine uses.
 Hints are saved in local settings, independently of transcripts. Clear the field to disable
 them. Too many or unrelated hints can reduce accuracy; start with a few relevant terms.
 Manual Copy intentionally changes the clipboard and may enter OS clipboard history.

@@ -22,7 +22,8 @@ Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone
 - `recognition.py`: the `Recognizer` protocol and `make_recognizer`, which picks the engine
   from the model name. Lazy CPU INT8 local Whisper model, bundled VAD, optional user-entered
   vocabulary hints through `hotwords`, quiet-level correction before decoding, segments
-  with a compression ratio above 2.4 (repetition loops) dropped, and no implicit downloads.
+  with a compression ratio above 2.4 (repetition loops) dropped only when that correction
+  raised the audio 10 times or more (`REPEAT_GUARD_GAIN`), and no implicit downloads.
 - `parakeet.py`: Parakeet TDT 0.6b v2 int8 ONNX through `onnx-asr` and ONNX Runtime's CPU
   provider, loaded from a verified local directory only. Recordings over 30 s are decoded
   in pieces cut at the quietest 200 ms between 20 s and 30 s. Approved vocabulary terms

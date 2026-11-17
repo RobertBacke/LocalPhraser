@@ -88,7 +88,10 @@ Parakeet cannot take hints. With Parakeet, `parakeet.restore_spelling` replaces 
 consecutive recognised words with an approved term when they match it exactly, ignoring case,
 spaces and hyphens. Punctuation attached to the words is kept. A sound-alike or partial
 match is not replaced. A term that itself begins or ends with punctuation (for example
-`.NET`) is not restored. Latest transcript shows the text after this step.
+`.NET`) is not restored. Every exact occurrence is rewritten, so a term that is also an
+ordinary word changes ordinary speech: with `LinkedIn`, "it's linked in the doc" becomes
+"it's LinkedIn the doc". The Vocabulary page warns to avoid ordinary words. Latest transcript
+shows the text after this step.
 
 Phase 2 has an optional `polish` extra. The tested Windows CPU wheel and its added
 dependencies are pinned in `requirements-polish.lock`, using the upstream documented CPU
