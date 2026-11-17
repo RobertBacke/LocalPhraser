@@ -2,9 +2,11 @@ import sqlite3
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QMessageBox, QPushButton
 
+from localphraser import appearance
 from localphraser.history import History
 from localphraser.home import AppWindow
 
@@ -164,7 +166,15 @@ def test_entry_notice_is_a_separate_wrapped_hint(app):
         history.close()
 
 
-def test_sidebar_separates_navigation_from_actions_and_shows_a_state_dot(app):
+def colour_distance(first, second):
+    return (
+        (first.red() - second.red()) ** 2
+        + (first.green() - second.green()) ** 2
+        + (first.blue() - second.blue()) ** 2
+    ) ** 0.5
+
+
+def test_sidebar_separates_navigation_from_actions_and_shows_a_state_chip(app):
     history = History(None)
     window = AppWindow(history, Mock(), Mock(), Mock(), "CapsLock")
     try:
@@ -176,10 +186,74 @@ def test_sidebar_separates_navigation_from_actions_and_shows_a_state_dot(app):
         ):
             assert button.property("nav") is True
         assert window.record_button.property("nav") is not True
+        quit_button = next(
+            b for b in window.sidebar.findChildren(QPushButton) if b.text() == "Quit LocalPhraser"
+        )
+        # Quit is a quiet row with the power icon: not navigation, not a boxed button.
+        assert quit_button.property("nav") is not True
+        assert quit_button.property("quiet") is True and quit_button.glyph == "power"
         window.set_state("Listening", "recording")
         assert window.state_label.text() == "Listening"
         assert window.state_dot.tone == "recording"
+        # The dot and its label sit together in one status chip at the foot of the sidebar.
+        assert window.state_dot.parentWidget() is window.state_label.parentWidget()
+        assert window.sidebar.isAncestorOf(window.state_label)
     finally:
+        window.deleteLater()
+        history.close()
+
+
+def test_navigation_rows_have_icons_and_mark_the_current_page(app):
+    history = History(None)
+    window = AppWindow(history, Mock(), Mock(), Mock(), "CapsLock", latest=Mock())
+    window.resize(1040, 740)
+    window.show()
+    app.processEvents()
+    try:
+        rows = {
+            "Home": (window.home_button, "home"),
+            "Settings": (window.settings_button, "settings"),
+            "Vocabulary": (window.vocabulary_button, "vocabulary"),
+            "Analytics": (window.analytics_button, "analytics"),
+            "Latest transcript": (
+                next(
+                    b
+                    for b in window.sidebar.findChildren(QPushButton)
+                    if b.text() == "Latest transcript"
+                ),
+                "transcript",
+            ),
+        }
+        image = window.grab().toImage()
+        for text, (button, glyph) in rows.items():
+            assert button.text() == text and button.glyph == glyph  # Icon beside the label.
+            # The icon is really painted: its box holds strokes that differ from the row.
+            box = button.glyph_rect().toRect()
+            origin = button.mapTo(window, box.topLeft())
+            background = image.pixelColor(origin)
+            strokes = sum(
+                colour_distance(image.pixelColor(origin.x() + x, origin.y() + y), background) > 60
+                for x in range(box.width())
+                for y in range(box.height())
+            )
+            assert strokes >= 12, (text, strokes)
+
+        glow = QColor(appearance.current_theme().glow)
+
+        def marker(button):
+            app.processEvents()
+            rect = button.marker_rect().toRect()
+            point = button.mapTo(window, QPoint(rect.center().x(), rect.top() + 2))
+            return window.grab().toImage().pixelColor(point)
+
+        assert colour_distance(marker(window.home_button), glow) < 40
+        assert colour_distance(marker(window.analytics_button), glow) > 80
+        window.show_analytics()
+        assert colour_distance(marker(window.analytics_button), glow) < 40
+        assert colour_distance(marker(window.home_button), glow) > 80
+        assert window.analytics_button.isChecked() and not window.home_button.isChecked()
+    finally:
+        window.hide()
         window.deleteLater()
         history.close()
 

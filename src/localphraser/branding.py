@@ -4,20 +4,27 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
 
 
-def logo_pixmap(size: int, recording: bool = False, *, light: bool = False) -> QPixmap:
+def logo_pixmap(
+    size: int,
+    recording: bool = False,
+    *,
+    light: bool = False,
+    tint: QBrush | QColor | None = None,
+) -> QPixmap:
+    """The mark in black, in white (``light``) or filled with ``tint``."""
     source = QPixmap(str(Path(__file__).with_name("assets") / "logo.png"))
     if source.isNull():
         raise RuntimeError("The LocalPhraser logo asset is missing.")
     pixmap = source.scaled(
         size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
     )
-    if light:
+    if light or tint is not None:
         painter = QPainter(pixmap)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-        painter.fillRect(pixmap.rect(), QColor("#ffffff"))
+        painter.fillRect(pixmap.rect(), tint if tint is not None else QColor("#ffffff"))
         painter.end()
     if recording:
         painter = QPainter(pixmap)

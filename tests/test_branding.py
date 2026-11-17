@@ -36,6 +36,22 @@ def test_transparent_mark_fills_icon_width_and_has_light_variant(app):
     assert np.array_equal(data[:, :, 3], light[:, :, 3])
 
 
+def test_mark_can_be_tinted_with_an_accent_without_changing_its_shape(app):
+    from PySide6.QtGui import QColor, QImage
+
+    plain = logo_pixmap(64).toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+    tinted = (
+        logo_pixmap(64, tint=QColor("#22D3EE"))
+        .toImage()
+        .convertToFormat(QImage.Format.Format_RGBA8888)
+    )
+    shape = np.frombuffer(plain.bits(), dtype=np.uint8).reshape(64, 64, 4)
+    colour = np.frombuffer(tinted.bits(), dtype=np.uint8).reshape(64, 64, 4)
+    assert np.array_equal(shape[:, :, 3], colour[:, :, 3])
+    solid = colour[colour[:, :, 3] >= 240]
+    assert len(solid) and np.abs(solid[:, :3].astype(int) - (0x22, 0xD3, 0xEE)).max() <= 6
+
+
 @pytest.mark.parametrize("setting, expected", [(0, True), (1, False), (None, False)])
 def test_taskbar_variant_uses_windows_system_theme_and_safe_fallback(
     monkeypatch, setting, expected

@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from PySide6.QtCore import QEvent, QSignalBlocker, Qt
+from PySide6.QtGui import QBrush, QColor, QLinearGradient
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -28,10 +29,12 @@ from localphraser.appearance import (
     DragHandle,
     GlassDialog,
     GlassPanel,
+    IconButton,
     NoteLabel,
     SegmentedTabs,
     StatusDot,
-    dark_surface,
+    current_theme,
+    high_contrast,
 )
 from localphraser.branding import logo_pixmap
 from localphraser.history import History
@@ -72,11 +75,14 @@ class AppWindow(GlassDialog):
         outer.setSpacing(24)
         sidebar = GlassPanel("sidebar")
         self.sidebar = sidebar
-        sidebar.setFixedWidth(178)
+        sidebar.setFixedWidth(208)
         nav = QVBoxLayout(sidebar)
-        nav.setSpacing(6)
+        self.sidebar_layout = nav
+        nav.setContentsMargins(12, 16, 12, 12)
+        nav.setSpacing(4)
         brand_row = QHBoxLayout()
-        brand_row.setSpacing(8)
+        brand_row.setContentsMargins(8, 0, 0, 0)
+        brand_row.setSpacing(10)
         logo = QLabel()
         self.logo = logo
         self.refresh_logo()
@@ -90,11 +96,11 @@ class AppWindow(GlassDialog):
         brand_row.addWidget(brand, 1)
         nav.addLayout(brand_row)
         nav.addSpacing(18)
-        self.home_button = self.nav_button("Home")
+        self.home_button = self.nav_button("Home", "home")
         self.home_button.setCheckable(True)
         self.home_button.setChecked(True)
         self.home_button.clicked.connect(self.show_home)
-        self.settings_button = self.nav_button("Settings")
+        self.settings_button = self.nav_button("Settings", "settings")
         self.settings_button.setCheckable(True)
         self.navigation = QButtonGroup(self)
         self.navigation.addButton(self.home_button)
@@ -102,39 +108,42 @@ class AppWindow(GlassDialog):
         self.settings_button.clicked.connect(settings)
         nav.addWidget(self.home_button)
         nav.addWidget(self.settings_button)
-        self.vocabulary_button = self.nav_button("Vocabulary")
+        self.vocabulary_button = self.nav_button("Vocabulary", "vocabulary")
         self.vocabulary_button.setCheckable(True)
         self.navigation.addButton(self.vocabulary_button)
         if vocabulary:
             self.vocabulary_button.clicked.connect(vocabulary)
         nav.addWidget(self.vocabulary_button)
-        self.analytics_button = self.nav_button("Analytics")
+        self.analytics_button = self.nav_button("Analytics", "analytics")
         self.analytics_button.setCheckable(True)
         self.navigation.addButton(self.analytics_button)
         self.analytics_button.clicked.connect(self.show_analytics)
         nav.addWidget(self.analytics_button)
         if latest is not None:
-            latest_button = self.nav_button("Latest transcript")
+            latest_button = self.nav_button("Latest transcript", "transcript")
             latest_button.clicked.connect(latest)
             nav.addWidget(latest_button)
         nav.addStretch()
-        state_row = QHBoxLayout()
-        state_row.setContentsMargins(4, 0, 0, 2)
-        state_row.setSpacing(8)
+        # The status chip: the state as a dot and as words, never by colour alone.
+        self.state_chip = GlassPanel("stateChip", nested=True, radius=12)
+        state_row = QHBoxLayout(self.state_chip)
+        state_row.setContentsMargins(12, 9, 12, 9)
+        state_row.setSpacing(9)
         self.state_dot = StatusDot()
         self.state_label = QLabel("Ready")
         self.state_label.setWordWrap(True)
         dot_column = QVBoxLayout()
-        dot_column.setContentsMargins(0, 5, 0, 0)  # Centre on the first line of text.
+        dot_column.setContentsMargins(0, 4, 0, 0)  # Centre on the first line of text.
         dot_column.addWidget(self.state_dot, 0, Qt.AlignmentFlag.AlignTop)
         state_row.addLayout(dot_column)
         state_row.addWidget(self.state_label, 1)
-        nav.addLayout(state_row)
-        self.record_button = QPushButton("Record to history")
+        nav.addWidget(self.state_chip)
+        nav.addSpacing(6)
+        self.record_button = IconButton("Record to history", "microphone", "primary")
         self.record_button.clicked.connect(record)
         self.record_button.setToolTip("Use your shortcut in another app for automatic insertion.")
         nav.addWidget(self.record_button)
-        quit_button = QPushButton("Quit LocalPhraser")
+        quit_button = IconButton("Quit LocalPhraser", "power", "quiet")
         quit_button.clicked.connect(quit_app)
         nav.addWidget(quit_button)
         outer.addWidget(sidebar)
@@ -265,10 +274,8 @@ class AppWindow(GlassDialog):
         self.set_hint(f"Hold {shortcut}, speak naturally, then release.")
         self.refresh_history()
 
-    def nav_button(self, text: str) -> QPushButton:
-        button = QPushButton(text)
-        button.setProperty("nav", True)
-        return button
+    def nav_button(self, text: str, glyph: str) -> IconButton:
+        return IconButton(text, glyph, "nav")
 
     def set_hint(self, text: str) -> None:
         """Show how to dictate with the current shortcut, also in the empty history."""
@@ -292,7 +299,11 @@ class AppWindow(GlassDialog):
         if hasattr(self, "sidebar"):
             compact = self.width() < 820
             self.shell_layout.setContentsMargins(*([12] * 4 if compact else [18] * 4))
-            self.shell_layout.setSpacing(14 if compact else 24)
+            self.shell_layout.setSpacing(12 if compact else 22)
+            self.sidebar.setFixedWidth(178 if compact else 208)
+            self.sidebar_layout.setContentsMargins(
+                *((8, 12, 8, 8) if compact else (12, 16, 12, 12))
+            )
         super().resizeEvent(event)
 
     def nativeEvent(self, event_type: Any, message: int) -> Any:
@@ -320,7 +331,18 @@ class AppWindow(GlassDialog):
                 button.update()
 
     def refresh_logo(self, *args: Any) -> None:
-        self.logo.setPixmap(logo_pixmap(28, light=dark_surface()))
+        tokens = current_theme()
+        ratio = self.devicePixelRatioF()
+        size = round(28 * ratio)
+        if high_contrast():
+            mark = logo_pixmap(size, light=tokens.dark)
+        else:  # The mark carries the accent.
+            tint = QLinearGradient(0, 0, size, size)
+            for stop, colour in zip((0.0, 0.5, 1.0), tokens.brand, strict=True):
+                tint.setColorAt(stop, QColor(colour))
+            mark = logo_pixmap(size, tint=QBrush(tint))
+        mark.setDevicePixelRatio(ratio)
+        self.logo.setPixmap(mark)
 
     def show_home(self) -> None:
         self.home_button.setChecked(True)

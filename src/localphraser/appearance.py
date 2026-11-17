@@ -12,6 +12,8 @@ from PySide6.QtGui import (
     QBrush,
     QColor,
     QFont,
+    QFontMetrics,
+    QIcon,
     QImage,
     QLinearGradient,
     QPainter,
@@ -36,6 +38,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyleOptionButton,
     QStyleOptionSpinBox,
+    QStylePainter,
     QTabBar,
     QTabWidget,
     QToolButton,
@@ -43,6 +46,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from localphraser import icons
 from localphraser.typography import interface_family
 
 Rgba = tuple[int, int, int, int]
@@ -400,6 +404,126 @@ class GlassPanel(QFrame):
             return
         painter = QPainter(self)
         paint_panel(painter, QRectF(self.rect()), current_theme(), self.radius, nested=self.nested)
+
+
+class Glyph(QWidget):
+    """A painted icon in a theme colour; decoration beside text that names the thing."""
+
+    def __init__(self, name: str, role: str = "glow", size: int = 20) -> None:
+        super().__init__()
+        self.name = name
+        self.role = role  # "glow", "text" or "muted".
+        self.setFixedSize(size, size)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def paintEvent(self, event: Any) -> None:
+        if high_contrast():
+            color = self.palette().color(QPalette.ColorRole.WindowText)
+        else:
+            color = QColor(getattr(current_theme(), self.role))
+        icons.paint(QPainter(self), self.name, QRectF(self.rect()), color)
+
+
+class IconButton(QPushButton):
+    """A button with a painted icon beside its text. The stylesheet draws the surface.
+
+    ``role`` is "primary", "danger", "nav" (a sidebar place), "quiet" or "" (glass).
+    """
+
+    GLYPH = 18
+    GAP = 9
+
+    def __init__(self, text: str, glyph: str = "", role: str = "") -> None:
+        super().__init__(text)
+        self.glyph = glyph
+        self.role = role
+        if role:
+            self.setProperty(role, True)
+
+    def set_glyph(self, glyph: str) -> None:
+        if glyph != self.glyph:
+            self.glyph = glyph
+            self.update()
+
+    def label_font(self) -> QFont:
+        font = self.font()
+        if self.role == "primary" or self.isChecked():
+            font.setWeight(QFont.Weight.DemiBold)
+        return font
+
+    def sizeHint(self) -> QSize:
+        size = super().sizeHint()
+        extra = self.GLYPH + self.GAP + 6 if self.glyph else 0  # 6: room for bold text.
+        return QSize(size.width() + extra, max(size.height(), 38))
+
+    def minimumSizeHint(self) -> QSize:
+        size = super().minimumSizeHint()
+        extra = self.GLYPH + self.GAP + 6 if self.glyph else 0
+        return QSize(size.width() + extra, max(size.height(), 38))
+
+    def left_aligned(self) -> bool:
+        return self.role in ("nav", "quiet")
+
+    def glyph_rect(self) -> QRectF:
+        """Where the icon is painted, in this button's coordinates."""
+        width = QFontMetrics(self.label_font()).horizontalAdvance(self.text())
+        total = self.GLYPH + self.GAP + width
+        x = 13.0 if self.left_aligned() else max(10.0, (self.width() - total) / 2)
+        return QRectF(x, (self.height() - self.GLYPH) / 2, self.GLYPH, self.GLYPH)
+
+    def marker_rect(self) -> QRectF:
+        """The accent bar on the left edge of the current navigation row."""
+        return QRectF(0.5, 10, 3, self.height() - 20)
+
+    def content_colors(self, tokens: Theme) -> tuple[QColor, QColor]:
+        """Icon and text colours for the button's role and state."""
+        text, muted = QColor(tokens.text), QColor(tokens.muted)
+        if not self.isEnabled():
+            return muted, muted
+        if self.role == "primary" or (self.isChecked() and self.role != "nav"):
+            return QColor("white"), QColor("white")
+        if self.role == "danger":
+            return QColor(tokens.danger), QColor(tokens.danger)
+        if self.role == "nav" and self.isChecked():
+            return QColor(tokens.glow), text
+        if self.left_aligned():
+            return (text, text) if self.underMouse() or self.hasFocus() else (muted, muted)
+        return text, text
+
+    def paintEvent(self, event: Any) -> None:
+        if high_contrast() or not self.glyph:
+            super().paintEvent(event)
+            return
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        option.text = ""
+        option.icon = QIcon()
+        painter = QStylePainter(self)
+        painter.drawControl(QStyle.ControlElement.CE_PushButton, option)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        tokens = current_theme()
+        glyph_color, text_color = self.content_colors(tokens)
+        box = self.glyph_rect()
+        icons.paint(painter, self.glyph, box, glyph_color)
+        font = self.label_font()
+        painter.setFont(font)
+        painter.setPen(text_color)
+        left = box.right() + self.GAP
+        room = max(0.0, self.width() - left - 8)
+        label = QFontMetrics(font).elidedText(self.text(), Qt.TextElideMode.ElideRight, int(room))
+        painter.drawText(
+            QRectF(left, 0, room, self.height()),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            label,
+        )
+        if self.role == "nav" and self.isChecked():
+            bar = self.marker_rect()
+            fill = QLinearGradient(bar.topLeft(), bar.bottomLeft())
+            fill.setColorAt(0, QColor(tokens.glow))
+            fill.setColorAt(1, QColor(tokens.violet))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(fill)
+            painter.drawRoundedRect(bar, 1.5, 1.5)
 
 
 class DragHandle(QLabel):
@@ -885,6 +1009,11 @@ def stylesheet(tokens: Theme) -> str:
         f" background: {rgba(tokens.nav_selected)};"
         f" border: 1px solid {rgba(tokens.button_border)}; font-weight: 600; }}"
         f"QPushButton[nav=true]:focus {{ border: 2px solid {focus}; padding: 8px 11px; }}"
+        # A quiet row: an action that reads like the navigation around it.
+        f"QPushButton[quiet=true] {{ color: {muted}; background: transparent;"
+        " border: 1px solid transparent; text-align: left; padding: 9px 12px; }"
+        f"QPushButton[quiet=true]:hover {{ color: {text}; background: {hover}; }}"
+        f"QPushButton[quiet=true]:focus {{ border: 2px solid {focus}; padding: 8px 11px; }}"
         # Caption glyphs: no box, a hover fill, red for close.
         "QPushButton#captionButton, QToolButton#closeGlyph { background: transparent;"
         " border: none; border-radius: 8px; padding: 0; }"
