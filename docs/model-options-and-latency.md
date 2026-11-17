@@ -47,7 +47,8 @@ peak of 1246 MB. The evidence is synthetic speech; human speech is not yet verif
 CPU threads default to **Automatic**: the number of physical cores, at most eight. A saved
 value is capped at that limit when used, so a saved 16 on a 6-core CPU runs with 6. The
 configuration file is not rewritten. In the earlier trial, 16 threads on 6 cores made Whisper
-recognition 3 to 10 times slower. The same limit applies to Whisper, Parakeet and polishing.
+recognition about 6 to 10 times slower: `base.en` went from 1.1 s to 7.0 s and `small.en` from
+4.6 s to 46.7 s on a 10-second clip, against 6 threads. The same limit applies to Whisper, Parakeet and polishing.
 The timestamp measurement below used a fixed four threads, the default at that time.
 
 ## Decoding change

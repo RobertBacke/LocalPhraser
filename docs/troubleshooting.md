@@ -13,9 +13,9 @@ A cold driver start no longer consumes the callback-stall grace period before ca
 ready. This fixes a reproduced timeout path, not every possible first-recording failure.
 Latest transcript retains the last sanitized error through later successes until Clear/exit.
 A real-device cold-start test also reproduced an input overflow while speech-model loading
-overlapped capture. With live preview disabled, loading waits until recording stops; first transcription
-therefore includes cold loading time. With live preview enabled, preparation happens
-before capture; wait for Ready before speaking. Overflow and disconnected-device checks remain enabled.
+overlapped capture. With a Whisper model and live preview disabled, loading waits until recording stops; first transcription
+therefore includes cold loading time. With live preview enabled, or with Parakeet (the default for
+new profiles) selected, preparation happens before capture; wait for Ready before speaking. Overflow and disconnected-device checks remain enabled.
 
 ## Output appears unevenly
 
@@ -53,8 +53,12 @@ insertion notice. Returning to the original window does not trigger delayed inse
 
 ## Recognition misses a word
 
-Speak clearly at a normal level, check the selected microphone and compare `base.en` with
-`small.en`. Try a short vocabulary list for relevant names/terms. Polished improves formatting
+Speak clearly at a normal level and check the selected microphone. If the result says the
+microphone input was very quiet, raise the input level in Windows Sound settings or move
+closer. Capture continues for 250 ms after release, so the last word is kept. New profiles use
+Parakeet; compare it with `small.en` or `base.en` on your own speech. Try a short vocabulary
+list for relevant names/terms. With Parakeet, vocabulary restores the spelling of terms it
+hears exactly, rather than guiding recognition. Polished improves formatting
 but refuses word substitutions and does not repair every recognition error. Compare Result
 and Raw transcription; neither model's accuracy is guaranteed.
 
@@ -128,8 +132,8 @@ The normal EXE uses the default profile under `%LOCALAPPDATA%\LocalPhraser`. A d
 command with `--config .cache/dev/config.json` uses a different profile and may point to
 `.cache/models`. Open Settings, choose that existing model directory and the matching model,
 then Save; or start the EXE with the same absolute `--config` path as your old command.
-Do not run two copies with competing shortcuts. A new profile now downloads base.en once
-on first launch. Cancel or failure leaves manual retry available via Download speech model;
+Do not run two copies with competing shortcuts. A new profile now downloads the default Parakeet
+speech model (~660 MB) once on first launch. Cancel or failure leaves manual retry available via Download speech model;
 later launches never retry automatically. Offline first use requires a model already installed.
 
 
