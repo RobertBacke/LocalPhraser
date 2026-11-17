@@ -71,6 +71,41 @@ def test_transcribe_decodes_pieces_in_order_and_reports_partials():
     assert all(c.kwargs == {"sample_rate": 16000} for c in calls)
 
 
+def test_partials_start_only_once_there_is_text():
+    recognizer = ParakeetRecognizer(Path("unused"))
+    recognizer._model = Mock(recognize=Mock(side_effect=["  ", "two", "three"]))
+    rng = np.random.default_rng(3)
+    partials: list[str] = []
+    text = recognizer.transcribe_stream(
+        rng.normal(0, 0.05, 70 * RATE).astype(np.float32), partials.append
+    )
+    assert text == "two three"
+    assert partials == ["two", "two three"]
+
+
+def test_cut_search_zeroes_its_first_temporary_when_a_later_allocation_fails(monkeypatch):
+    from localphraser import parakeet
+
+    made: list[np.ndarray] = []
+
+    class FailingNumpy:
+        def __getattr__(self, name):
+            return getattr(np, name)
+
+        def abs(self, values):
+            made.append(np.abs(values))
+            return made[-1]
+
+        def zeros(self, *args, **kwargs):
+            raise MemoryError("fixture allocation failure")
+
+    monkeypatch.setattr(parakeet, "np", FailingNumpy())
+    audio = np.random.default_rng(4).normal(0, 0.05, 40 * RATE).astype(np.float32)
+    with pytest.raises(MemoryError):
+        split_long(audio)
+    assert len(made) == 1 and not made[0].any()
+
+
 def test_prepare_verifies_then_loads_local_int8_files_offline(monkeypatch, tmp_path):
     import onnx_asr
 

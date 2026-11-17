@@ -186,6 +186,25 @@ def test_start_up_warming_needs_only_warm_on_start_and_leaves_live_preview_off(s
     pipeline.cancel()
 
 
+@pytest.mark.parametrize(
+    ("live_preview", "message"),
+    [
+        (True, "Live preview could not be prepared. Dictation will try after recording."),
+        (False, "Speech model could not be prepared. Dictation will try again after recording."),
+    ],
+)
+def test_warm_failure_names_live_preview_only_when_it_is_on(setup, live_preview, message):
+    pipeline, _, recognizer, _, callbacks, changes, _ = setup
+    recognizer.preview_ready = False
+    recognizer.warm_preview = Mock(side_effect=RuntimeError("fixture failure"))
+    pipeline.live_preview = live_preview
+    pipeline.warm_on_start = not live_preview
+    assert pipeline.warm_live_preview()
+    pipeline.executor.shutdown(wait=True)
+    finish(callbacks)
+    assert changes[-1] == (State.IDLE, message)
+
+
 def test_end_to_end_with_injected_ports(setup):
     pipeline, recorder, _, insertion, callbacks, changes, results = setup
     pipeline.press()

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from localphraser.levels import boost_quiet, speech_level
+from localphraser.levels import BOOST_LIMIT, boost_gain, boost_quiet, speech_level
 
 
 def test_level_ignores_three_loudest_frames(tone):
@@ -43,3 +43,11 @@ def test_boost_is_limited_clipped_and_never_attenuates(tone):
     assert float(np.max(np.abs(boost_quiet(clicked)))) == 1.0
     silent = np.zeros(16000, dtype=np.float32)
     assert boost_quiet(silent) is silent
+
+
+def test_boost_gain_is_one_without_boost_and_limited_for_very_quiet_audio(tone):
+    assert boost_gain(np.zeros(16000, dtype=np.float32)) == 1.0
+    assert boost_gain(tone(0.5)) == 1.0
+    assert boost_gain(tone(0.02)) == pytest.approx(15.0, rel=0.05)
+    assert boost_gain(tone(0.001)) == BOOST_LIMIT
+    assert boost_gain(tone(0.05, rate=48000), 48000) == pytest.approx(6.0, rel=0.05)

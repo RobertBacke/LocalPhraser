@@ -654,8 +654,9 @@ class Settings(GlassDialog):
         if self.automatic_setup:
             self.automatic_setup = False
             self.setup_notice.setText(
-                "Speech model ready. Hold your shortcut to dictate; no Save step is needed "
-                "unless you changed settings."
+                # The model may still be preparing (WARMING) when this is shown.
+                "Speech model installed. Dictation is available when the status shows Ready; "
+                "no Save step is needed unless you changed settings."
                 if success
                 else "First-launch setup paused. Use Download or repair speech model to retry. "
                 "Later launches will not retry automatically."
@@ -824,7 +825,12 @@ class Desktop:
         if success and self.speech_model_present():
             self.prepare_live_preview()
             if self.pipeline.state == State.WARMING:
-                self.notify("Speech model installed. Preparing live preview.")
+                self.notify(
+                    "Speech model installed. Preparing live preview."
+                    if self.config.live_preview
+                    else "Speech model installed. "
+                    "Preparing it now; wait for Ready before dictating."
+                )
             else:
                 self.notify("Speech model ready. Hold your shortcut to dictate.")
 
@@ -1046,6 +1052,7 @@ class Desktop:
                 self.save_vocabulary,
                 lambda: (
                     "Parakeet restores the spelling of these terms when it hears them exactly. "
+                    "Every exact occurrence is rewritten, so avoid ordinary words. "
                     "It does not correct sound-alike words."
                     if self.config.model == PARAKEET_MODEL
                     else "Whisper models use these terms as recognition hints."
@@ -1055,9 +1062,14 @@ class Desktop:
         self.window.show_vocabulary(self.vocabulary_page)
         self.reveal_workspace()
 
-    def save_vocabulary(self, value: str) -> None:
+    def require_idle(self, action: str) -> None:
+        if self.pipeline.state == State.WARMING:
+            raise ValueError(f"Wait for the speech model to finish preparing before {action}.")
         if self.pipeline.state != State.IDLE:
-            raise ValueError("Finish dictation before changing vocabulary.")
+            raise ValueError(f"Finish dictation before {action}.")
+
+    def save_vocabulary(self, value: str) -> None:
+        self.require_idle("changing vocabulary")
         config = replace(self.config, vocabulary=value)
         save_config(config, self.config_path)
         self.config = config
@@ -1084,8 +1096,7 @@ class Desktop:
         self.config = config
 
     def begin_shortcut_capture(self, captured_caps: Callable[[], None]) -> None:
-        if self.pipeline.state != State.IDLE:
-            raise ValueError("Finish dictation before choosing a shortcut.")
+        self.require_idle("choosing a shortcut")
         self.activation.reset()
         self.hotkey.close()
         self.hotkey.capture_release_callback = None
@@ -1115,8 +1126,7 @@ class Desktop:
                 self.notify(str(exc))
 
     def apply(self, config: Config) -> None:
-        if self.pipeline.state != State.IDLE:
-            raise ValueError("Finish dictation before saving settings.")
+        self.require_idle("saving settings")
         config.validate()
         changed_hotkey = config.hotkey != self.config.hotkey or not self.hotkey.registered
         if changed_hotkey:

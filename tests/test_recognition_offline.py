@@ -253,7 +253,7 @@ def test_boosted_copy_survives_lazy_decoding_and_is_zeroed_on_error(tone):
     assert not seen["audio"].any()
 
 
-def test_repetition_loop_segments_are_dropped(tone):
+def test_repetition_loop_segments_are_dropped_from_heavily_boosted_audio(tone):
     recognizer = WhisperRecognizer(Path("unused"))
     segments = [
         SimpleNamespace(text="keep this", compression_ratio=1.4),
@@ -261,7 +261,21 @@ def test_repetition_loop_segments_are_dropped(tone):
         SimpleNamespace(text="and this"),  # no attribute: kept
     ]
     recognizer._model = Mock(transcribe=lambda *a, **k: (iter(segments), None))
-    assert recognizer.transcribe(tone(0.3)) == "keep this and this"
+    assert recognizer.transcribe(tone(0.01)) == "keep this and this"  # boosted 30 times
+
+
+@pytest.mark.parametrize("level", [0.3, 0.1, 0.04])  # no boost, 3x and 7.5x
+def test_repeated_speech_is_kept_when_the_audio_is_not_boosted_ten_times(tone, level):
+    recognizer = WhisperRecognizer(Path("unused"))
+    segments = [
+        SimpleNamespace(
+            text="Testing, testing, testing, testing, testing, testing.", compression_ratio=2.5
+        )
+    ]
+    recognizer._model = Mock(transcribe=lambda *a, **k: (iter(segments), None))
+    assert recognizer.transcribe(tone(level)) == (
+        "Testing, testing, testing, testing, testing, testing."
+    )
 
 
 def test_temperatures_default_to_single_zero(tone):

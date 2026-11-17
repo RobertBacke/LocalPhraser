@@ -270,7 +270,10 @@ def test_missing_model_does_not_capture_and_success_is_ready_without_save(deskto
     publish_fixture_model(desktop)
     desktop.settings.downloader.finished.emit(True, False)
     assert "Speech model required" not in desktop.status.text()
-    assert "Speech model ready" in desktop.settings.setup_notice.text()
+    assert desktop.settings.setup_notice.text() == (
+        "Speech model installed. Dictation is available when the status shows Ready; "
+        "no Save step is needed unless you changed settings."
+    )
     desktop.press()
     desktop.pipeline.press.assert_called_once()
 
@@ -356,13 +359,86 @@ def test_download_warms_preview_and_shortcut_does_not_capture_until_ready(deskto
 
     desktop.pipeline.warm_live_preview.side_effect = warming
     desktop.model_download_finished(True, False)
-    assert "Preparing live preview" in desktop.notify.call_args.args[0]
+    assert desktop.notify.call_args.args[0] == "Speech model installed. Preparing live preview."
     desktop.press()
     desktop.pipeline.press.assert_not_called()
     assert "Wait for Ready" in desktop.notify.call_args.args[0]
     desktop.pipeline.state = State.IDLE
     desktop.press()
     desktop.pipeline.press.assert_called_once()
+
+
+def test_download_warming_without_live_preview_does_not_mention_it(desktop):
+    desktop.config = replace(desktop.config, model=PARAKEET_MODEL, live_preview=False)
+    publish_fixture_model(desktop, PARAKEET_MODEL)
+
+    def warming():
+        desktop.pipeline.state = State.WARMING
+        return True
+
+    desktop.pipeline.warm_live_preview.side_effect = warming
+    desktop.model_download_finished(True, False)
+    assert desktop.notify.call_args.args[0] == (
+        "Speech model installed. Preparing it now; wait for Ready before dictating."
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        (State.WARMING, "Wait for the speech model to finish preparing before saving settings."),
+        (State.RECORDING, "Finish dictation before saving settings."),
+        (State.TRANSCRIBING, "Finish dictation before saving settings."),
+    ],
+)
+def test_saving_settings_while_busy_names_the_reason(desktop, state, message):
+    desktop.pipeline.state = state
+    with pytest.raises(ValueError) as raised:
+        desktop.apply(replace(desktop.config, max_seconds=200))
+    assert str(raised.value) == message
+
+
+@pytest.mark.parametrize(
+    ("state", "vocabulary", "shortcut"),
+    [
+        (
+            State.WARMING,
+            "Wait for the speech model to finish preparing before changing vocabulary.",
+            "Wait for the speech model to finish preparing before choosing a shortcut.",
+        ),
+        (
+            State.RECORDING,
+            "Finish dictation before changing vocabulary.",
+            "Finish dictation before choosing a shortcut.",
+        ),
+    ],
+)
+def test_vocabulary_and_shortcut_while_busy_name_the_reason(desktop, state, vocabulary, shortcut):
+    desktop.pipeline.state = state
+    with pytest.raises(ValueError) as raised:
+        desktop.save_vocabulary("Codex")
+    assert str(raised.value) == vocabulary
+    with pytest.raises(ValueError) as raised:
+        desktop.begin_shortcut_capture(lambda: None)
+    assert str(raised.value) == shortcut
+
+
+@pytest.mark.parametrize(
+    ("model", "note"),
+    [
+        (
+            PARAKEET_MODEL,
+            "Parakeet restores the spelling of these terms when it hears them exactly. Every "
+            "exact occurrence is rewritten, so avoid ordinary words. It does not correct "
+            "sound-alike words.",
+        ),
+        ("base.en", "Whisper models use these terms as recognition hints."),
+    ],
+)
+def test_vocabulary_page_explains_what_the_engine_does_with_terms(desktop, model, note):
+    desktop.config = replace(desktop.config, model=model)
+    desktop.show_vocabulary()
+    assert desktop.vocabulary_page.engine_note.text() == note
 
 
 def test_saving_settings_prepares_new_live_recognizer(desktop):

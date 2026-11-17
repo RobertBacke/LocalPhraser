@@ -128,7 +128,8 @@ def test_parakeet_is_a_first_catalog_model_with_a_hint():
 
     assert PARAKEET_MODEL == "parakeet-tdt-0.6b-v2" and MODELS[0] == PARAKEET_MODEL
     assert MODEL_HINTS[PARAKEET_MODEL] == (
-        "Recommended (~660 MB). Most accurate and fastest in this app's benchmark. English only."
+        "Recommended (~660 MB). Most accurate overall in this app's benchmark, "
+        "at about base.en speed. English only."
     )
     Config(model=PARAKEET_MODEL).validate()
     assert Config().model == "parakeet-tdt-0.6b-v2"

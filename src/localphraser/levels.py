@@ -26,12 +26,19 @@ def speech_level(audio: Audio, sample_rate: int = SAMPLE_RATE) -> float:
     return float(np.partition(peaks, count - _IGNORED_FRAMES - 1)[count - _IGNORED_FRAMES - 1])
 
 
-def boost_quiet(audio: Audio, sample_rate: int = SAMPLE_RATE) -> Audio:
-    """Raise quiet speech towards BOOST_TARGET; the input itself is returned when unchanged."""
+def boost_gain(audio: Audio, sample_rate: int = SAMPLE_RATE) -> float:
+    """The factor boost_quiet applies to this audio; 1.0 when it leaves the audio unchanged."""
     level = speech_level(audio, sample_rate)
     if level <= 0.0 or level >= BOOST_TARGET:
+        return 1.0
+    return min(BOOST_TARGET / level, BOOST_LIMIT)
+
+
+def boost_quiet(audio: Audio, sample_rate: int = SAMPLE_RATE) -> Audio:
+    """Raise quiet speech towards BOOST_TARGET; the input itself is returned when unchanged."""
+    gain = boost_gain(audio, sample_rate)
+    if gain == 1.0:
         return audio
-    gain = min(BOOST_TARGET / level, BOOST_LIMIT)
     boosted = np.multiply(audio, gain, dtype=np.float32)
     np.clip(boosted, -1.0, 1.0, out=boosted)
     return boosted

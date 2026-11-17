@@ -18,7 +18,8 @@ MODELS = (
 )
 MODEL_HINTS = {
     PARAKEET_MODEL: (
-        "Recommended (~660 MB). Most accurate and fastest in this app's benchmark. English only."
+        "Recommended (~660 MB). Most accurate overall in this app's benchmark, "
+        "at about base.en speed. English only."
     ),
     "tiny.en": "Smallest download (~75 MB). Prioritizes speed; less reliable on difficult speech.",
     "base.en": "Compact (~145 MB). A fast starting point for everyday English dictation.",

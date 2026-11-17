@@ -175,7 +175,10 @@ class Dictation:
         except Exception:
             self._state(
                 State.IDLE,
-                "Live preview could not be prepared. Dictation will try after recording.",
+                "Live preview could not be prepared. Dictation will try after recording."
+                if self.live_preview
+                else "Speech model could not be prepared. "
+                "Dictation will try again after recording.",
             )
             return
         self._state(State.IDLE)

@@ -9,9 +9,11 @@ import numpy as np
 
 from localphraser.audio import SAMPLE_RATE, Audio
 from localphraser.config import PARAKEET_MODEL, RECOGNITION_QUALITY, inference_threads
-from localphraser.levels import boost_quiet
+from localphraser.levels import boost_gain, boost_quiet
 
-MAX_COMPRESSION_RATIO = 2.4  # Above this a segment is a repetition loop.
+MAX_COMPRESSION_RATIO = 2.4  # Above this a segment of heavily boosted audio is a repetition loop.
+# Loops were measured only on audio boosted this much; repeated real speech also exceeds 2.4.
+REPEAT_GUARD_GAIN = 10.0
 
 
 class Recognizer(Protocol):
@@ -112,6 +114,7 @@ class WhisperRecognizer:
     def _decode(
         self, audio: Audio, partial: Callable[[str], None] | None = None, *, preview: bool = False
     ) -> str:
+        guard = boost_gain(audio) >= REPEAT_GUARD_GAIN
         boosted = boost_quiet(audio)
         try:
             segments, _ = self._model.transcribe(
@@ -128,7 +131,7 @@ class WhisperRecognizer:
             parts = []
             # The generator is lazy: decoding reads `boosted` while it is consumed.
             for segment in segments:
-                if getattr(segment, "compression_ratio", 0.0) > MAX_COMPRESSION_RATIO:
+                if guard and getattr(segment, "compression_ratio", 0.0) > MAX_COMPRESSION_RATIO:
                     continue
                 text = segment.text.strip()
                 if text:

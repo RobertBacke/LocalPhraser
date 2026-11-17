@@ -29,19 +29,22 @@ def split_long(audio: Audio) -> list[Audio]:
     while audio.size - start > limit:
         # Temporaries cover only the 10 s search region and are zeroed after use.
         region = audio[start + search_start : start + limit]
-        magnitude = np.abs(region)
-        totals = np.zeros(region.size + 1, dtype=np.float64)
-        sums = np.zeros((region.size - SEARCH_WINDOW) // SEARCH_STEP + 1, dtype=np.float64)
+        temporaries: list[np.ndarray] = []
         try:
+            magnitude = np.abs(region)
+            temporaries.append(magnitude)
+            totals = np.zeros(region.size + 1, dtype=np.float64)
+            temporaries.append(totals)
+            sums = np.zeros((region.size - SEARCH_WINDOW) // SEARCH_STEP + 1, dtype=np.float64)
+            temporaries.append(sums)
             np.cumsum(magnitude, out=totals[1:])
             np.subtract(
                 totals[SEARCH_WINDOW::SEARCH_STEP], totals[:-SEARCH_WINDOW:SEARCH_STEP], out=sums
             )
             quietest = int(np.argmin(sums)) * SEARCH_STEP  # argmin keeps the first on a tie
         finally:
-            magnitude.fill(0)
-            totals.fill(0)
-            sums.fill(0)
+            for temporary in temporaries:
+                temporary.fill(0)
         cut = start + search_start + quietest + SEARCH_WINDOW // 2
         pieces.append(audio[start:cut])
         start = cut
@@ -132,7 +135,7 @@ class ParakeetRecognizer:
             piece_text = self._decode(piece)
             if piece_text:
                 parts.append(piece_text)
-            if partial is not None:
+            if partial is not None and parts:
                 partial(restore_spelling(" ".join(parts), self.vocabulary))
         text = restore_spelling(" ".join(parts), self.vocabulary)
         self.preview_ready = self.preview_ready or bool(text)
