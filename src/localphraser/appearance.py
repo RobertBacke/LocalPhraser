@@ -115,9 +115,9 @@ DARK = Theme(
     dark=True,
     backdrop=("#060913", "#0B1024", "#120B2A"),
     glows=(
-        (0.08, 0.04, 0.62, (34, 211, 238), 76),
-        (0.98, 0.30, 0.58, (139, 92, 246), 104),
-        (0.52, 1.08, 0.56, (236, 72, 153), 54),
+        (0.14, 0.0, 0.62, (34, 211, 238), 74),
+        (1.0, 0.34, 0.60, (139, 92, 246), 122),
+        (0.50, 1.10, 0.58, (236, 72, 153), 72),
     ),
     window_alpha=238,
     rim=(255, 255, 255, 44),
@@ -690,7 +690,7 @@ class GlassComboBox(QComboBox):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        color = QColor(current_theme().muted if self.isEnabled() else current_theme().muted)
+        color = QColor(current_theme().muted)
         if not self.isEnabled():
             color.setAlpha(110)
         draw_chevron(painter, QPointF(self.width() - 19, self.height() / 2), False, color)

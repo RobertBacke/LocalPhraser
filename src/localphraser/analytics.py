@@ -88,12 +88,12 @@ class CountBars(QStyledItemDelegate):
             super().paint(painter, option, index)
             return
         tokens = current_theme()
-        cell: QRect = option.rect  # type: ignore[attr-defined]
+        cell: QRect = option.rect
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if index.row() == self.hover_row:
             painter.fillRect(cell, QColor(*tokens.hover))
-        painter.setFont(option.font)  # type: ignore[attr-defined]
+        painter.setFont(option.font)
         painter.setPen(QColor(tokens.text))
         fraction = self.fraction(index)
         text = str(index.data() or "")

@@ -800,3 +800,90 @@ def test_latest_transcript_keeps_its_content_with_segments_and_a_primary_copy(ap
     finally:
         latest.close()
         latest.deleteLater()
+
+
+def test_every_painted_element_falls_back_to_native_drawing_in_high_contrast(
+    app, monkeypatch, capsys
+):
+    from localphraser.pipeline import State
+    from localphraser.ui import Latest
+
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    monkeypatch.setattr(appearance, "high_contrast", lambda: True)
+    history = History(None)
+    history.add("words here", "Words here.", "Inserted.", 2, "Codex")
+    window = AppWindow(history, Mock(), Mock(), Mock(), "CapsLock", latest=Mock())
+    settings = Settings(Config(mode="polished"), Mock())
+    latest, indicator = Latest(), Indicator()
+    try:
+        for dialog in (window, settings, latest):
+            assert not dialog.styleSheet()  # Palette colours and native controls only.
+        window.resize(1040, 740)
+        window.show()
+        window.set_state("Listening", "recording")
+        window.set_level(0.7)
+        app.processEvents()
+        assert not window.grab().isNull()
+        window.show_analytics()
+        app.processEvents()
+        assert not window.grab().isNull()
+        settings.embed(window.pages)
+        window.show_settings(settings)
+        app.processEvents()
+        assert not window.grab().isNull()
+        latest.show()
+        indicator.display(State.RECORDING)
+        indicator.set_level(0.7)
+        indicator.live_preview("plain words")
+        app.processEvents()
+        for widget in (latest, indicator):
+            assert not widget.grab().isNull()
+        # The orb and the hero meter draw in the palette's text colour, not theme colours.
+        ink = window.palette().color(QPalette.ColorRole.WindowText)
+        meter = window.hero_meter.grab().toImage()
+        assert meter.pixelColor(meter.width() - 5, meter.height() // 2) == ink
+        assert "Error calling Python override" not in capsys.readouterr().err
+    finally:
+        for widget in (indicator, latest, settings, window):
+            widget.close()
+            widget.deleteLater()
+        history.close()
+
+
+def test_painted_panels_and_icons_follow_a_theme_change_without_a_rebuild(app):
+    original = QPalette(app.palette())
+    history = History(None)
+    window = AppWindow(history, Mock(), Mock(), Mock(), "CapsLock")
+    window.resize(1040, 740)
+    window.show()
+    try:
+        seen = {}
+        for name, colour in (("light", "#f4f8f8"), ("dark", "#0b1024"), ("again", "#f4f8f8")):
+            palette = QPalette(original)
+            palette.setColor(QPalette.ColorRole.Window, QColor(colour))
+            app.setPalette(palette)
+            app.processEvents()
+            image = window.grab().toImage()
+            hero = window.hero.mapTo(window, QPoint(window.hero.width() // 2, 6))
+            icon = window.home_button.glyph_rect().toRect()
+            origin = window.home_button.mapTo(window, icon.topLeft())
+            strokes = [
+                image.pixelColor(origin.x() + x, origin.y() + y)
+                for x in range(icon.width())
+                for y in range(icon.height())
+            ]
+            glow = QColor(appearance.theme(name == "dark").glow)
+            closest = min(
+                abs(p.red() - glow.red())
+                + abs(p.green() - glow.green())
+                + abs(p.blue() - glow.blue())
+                for p in strokes
+            )
+            assert closest < 60, name  # The current page's icon is in this theme's glow colour.
+            seen[name] = image.pixelColor(hero).lightness()
+        assert seen["light"] > 190 and seen["dark"] < 90 and seen["again"] > 190
+    finally:
+        app.setPalette(original)
+        window.close()
+        window.deleteLater()
+        history.close()
