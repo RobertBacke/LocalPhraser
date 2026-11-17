@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QSystemTrayIcon,
     QTabWidget,
     QTextEdit,
@@ -34,7 +33,7 @@ from PySide6.QtWidgets import (
 from localphraser import startup
 from localphraser.activation import ShortcutActivation
 from localphraser.analytics import application_name
-from localphraser.appearance import GlassComboBox, GlassDialog, GlassLabel
+from localphraser.appearance import GlassComboBox, GlassDialog, GlassLabel, GlassSpinBox
 from localphraser.audio import Recorder, microphones
 from localphraser.branding import app_icon
 from localphraser.config import (
@@ -363,12 +362,12 @@ class Settings(GlassDialog):
         paths.addWidget(self.root)
         paths.addWidget(folder)
         form.addRow("Model directory", paths)
-        self.threads = QSpinBox()
+        self.threads = GlassSpinBox()
         self.threads.setRange(0, thread_limit())
         self.threads.setSpecialValueText("Automatic")
         self.threads.setValue(min(config.cpu_threads, thread_limit()))
         form.addRow("CPU inference threads", self.threads)
-        self.duration = QSpinBox()
+        self.duration = GlassSpinBox()
         self.duration.setRange(1, 300)
         self.duration.setSuffix(" seconds")
         self.duration.setValue(config.max_seconds)
@@ -383,7 +382,7 @@ class Settings(GlassDialog):
             "No audio is captured while idle. Turn off to close the device after each recording."
         )
         form.addRow(self.keep_ready)
-        self.live_preview = QCheckBox("Live speech preview (experimental)")
+        self.live_preview = QCheckBox("Show words while speaking (live preview)")
         self.live_preview.setChecked(config.live_preview)
         self.live_preview.setToolTip(
             "Shows recent words in the floating indicator while recording. "
@@ -418,7 +417,7 @@ class Settings(GlassDialog):
         self.refinement_model.addItems(REFINEMENT_MODELS)
         self.refinement_model.setCurrentText(config.refinement_model)
         polishing_form.addRow("Q4 CPU model", self.refinement_model)
-        self.refinement_timeout = QSpinBox()
+        self.refinement_timeout = GlassSpinBox()
         self.refinement_timeout.setRange(2, 60)
         self.refinement_timeout.setSuffix(" seconds")
         self.refinement_timeout.setValue(config.refinement_timeout)
@@ -740,6 +739,7 @@ class Desktop:
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self.activated)
         self.insertion = TargetWorker()
+        self.insertion.warm()
         self.pipeline = self.make_pipeline(config)
         self.activation = ShortcutActivation(
             self.press,

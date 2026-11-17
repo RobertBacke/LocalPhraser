@@ -26,6 +26,21 @@ class TargetWorker:
 
         comtypes.CoInitializeEx(0)  # UI Automation runs on this MTA thread, never the Qt thread.
 
+    def warm(self) -> None:
+        """Start the worker thread and its accessibility client before the first capture."""
+
+        def work() -> None:
+            try:
+                self.native.warm()
+            except Exception:
+                pass  # The first capture creates the client instead and reports any failure.
+
+        if not self.closed:
+            try:
+                self.executor.submit(work)
+            except RuntimeError:
+                pass  # Interpreter or worker shutdown.
+
     def snapshot(self) -> WindowSnapshot:
         return self.native.snapshot()  # Fast Win32 call only; no COM objects leave the worker.
 

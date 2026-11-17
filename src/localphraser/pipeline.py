@@ -24,6 +24,15 @@ QUIET_MESSAGE = (
 )
 
 
+def target_failure(error: BaseException) -> str:
+    """Say why insertion was refused. Only this app's own fixed reasons are repeated."""
+    reason = str(error).strip() if isinstance(error, (ValueError, TimeoutError)) else ""
+    reason = reason[:120] or type(error).__name__
+    if not reason.endswith((".", "!", "?")):
+        reason += "."
+    return f"Target could not be verified. {reason} Open Latest transcript to copy."
+
+
 class State(StrEnum):
     IDLE = "Ready"
     WARMING = "Preparing speech model"
@@ -194,8 +203,8 @@ class Dictation:
         if self.auto_insert or self.recording_started is not None:
             try:
                 snapshot = self.insertion.snapshot()
-            except Exception:
-                self.target_error = "Target could not be verified. Open Latest transcript to copy."
+            except Exception as exc:
+                self.target_error = target_failure(exc)
         try:
             self.recorder.start()
             self.preview_after = perf_counter() + 2 if self.live_preview else 0
@@ -220,8 +229,8 @@ class Dictation:
                     target.add_done_callback(lambda f: self._target_completed(f, generation))
                 elif self.state == State.RECORDING:
                     self.target = target
-            except Exception:
-                self.target_error = "Target could not be verified. Open Latest transcript to copy."
+            except Exception as exc:
+                self.target_error = target_failure(exc)
 
     def request_live_preview(self) -> None:
         if (
@@ -316,8 +325,8 @@ class Dictation:
         self.target_future = None
         try:
             self.target = future.result()
-        except Exception:
-            self.target_error = "Target could not be verified. Open Latest transcript to copy."
+        except Exception as exc:
+            self.target_error = target_failure(exc)
         if self.pending_transcription is not None:
             pending = self.pending_transcription
             self.pending_transcription = None

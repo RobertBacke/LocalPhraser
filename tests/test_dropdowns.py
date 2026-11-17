@@ -1,11 +1,11 @@
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QGroupBox, QListView, QWidget
 
-from localphraser.appearance import GlassComboBox
+from localphraser.appearance import GlassComboBox, GlassSpinBox
 from localphraser.config import MODELS, PARAKEET_MODEL, Config
 from localphraser.ui import Settings
 
@@ -138,3 +138,58 @@ def test_settings_credit_line_attributes_parakeet(app, monkeypatch):
     finally:
         settings.close()
         settings.deleteLater()
+
+
+def wheel_over(widget, delta):
+    """A real (spontaneous) wheel turn at the widget's centre, as a mouse would send it."""
+    window = widget.window().windowHandle()
+    centre = widget.mapTo(widget.window(), widget.rect().center())
+    QTest.wheelEvent(window, QPointF(centre), QPoint(0, delta))
+
+
+def test_wheel_over_a_setting_scrolls_the_page_and_changes_nothing(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    settings = Settings(Config(model="small.en", mode="polished", cpu_threads=1), Mock())
+    try:
+        settings.resize(560, 420)
+        settings.show()
+        app.processEvents()
+        bar = settings.scroll_area.verticalScrollBar()
+        assert bar.maximum() > 0
+        before = settings.values()
+        for control in (
+            settings.theme,
+            settings.activation_mode,
+            settings.model,
+            settings.recognition_quality,
+            settings.mode,
+            settings.refinement_model,
+            settings.threads,
+            settings.duration,
+            settings.refinement_timeout,
+        ):
+            settings.scroll_area.ensureWidgetVisible(control)
+            app.processEvents()
+            control.setFocus()  # Focus must not turn the wheel into a value change.
+            position = bar.value()
+            down = position < bar.maximum()
+            wheel_over(control, -120 if down else 120)
+            app.processEvents()
+            assert (bar.value() > position) if down else (bar.value() < position), control
+            wheel_over(control, 120 if down else -120)
+            app.processEvents()
+        assert settings.values() == before
+    finally:
+        settings.hide()
+        settings.deleteLater()
+
+
+def test_keyboard_still_changes_a_focused_list_and_number(app):
+    combo = GlassComboBox()
+    combo.addItems(["one", "two", "three"])
+    QTest.keyClick(combo, Qt.Key.Key_Down)
+    assert combo.currentIndex() == 1
+    spin = GlassSpinBox()
+    spin.setRange(0, 10)
+    QTest.keyClick(spin, Qt.Key.Key_Up)
+    assert spin.value() == 1

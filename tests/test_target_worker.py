@@ -133,3 +133,23 @@ def test_async_delivery_dispatches_complete_final_text_once(backend):
     worker.insert_async(token, text).result(timeout=2)
     assert native.delivered == [text]
     native.insert_gradually.assert_not_called()
+
+
+def test_warm_prepares_accessibility_on_the_worker_thread_before_any_capture(backend):
+    worker, native = backend
+    warmed = []
+    native.warm = lambda: warmed.append(threading.get_ident())
+    worker.warm()
+    barrier(worker)
+    worker.capture(123).result(timeout=2)
+    assert warmed == [native.threads[0]] and warmed[0] != threading.get_ident()
+
+
+def test_failed_or_late_warm_never_blocks_capture(backend):
+    worker, native = backend
+    native.warm = Mock(side_effect=OSError("accessibility unavailable"))
+    worker.warm()
+    assert isinstance(worker.capture(123).result(timeout=2), int)
+    worker.close()
+    worker.warm()  # After close: no error, nothing queued.
+    native.warm.assert_called_once()

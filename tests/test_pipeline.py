@@ -1218,3 +1218,43 @@ def test_quiet_input_is_measured_after_the_tail(tail_setup):
     scheduled[0][1]()
     finish(pipeline.callbacks)
     assert pipeline.results[-1] == ("Hello, world.", f"Inserted. {QUIET_MESSAGE}")
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (
+            ValueError("Selection must be a single empty caret."),
+            "Selection must be a single empty caret.",
+        ),
+        (TimeoutError("Target verification timed out."), "Target verification timed out."),
+        (ValueError("no full stop"), "no full stop."),
+        (TimeoutError(), "TimeoutError."),
+        (KeyError("private words"), "KeyError."),
+    ],
+)
+def test_target_failure_notice_says_why_without_foreign_text(setup, error, reason):
+    pipeline, _, _, insertion, callbacks, _, results = setup
+    target = Future()
+    insertion.capture = lambda expected: target
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    target.set_exception(error)
+    finish(callbacks)
+    assert results[0] == (
+        "Hello, world.",
+        f"Target could not be verified. {reason} Open Latest transcript to copy.",
+    )
+    assert "private words" not in results[0][1]
+
+
+def test_immediate_target_failure_notice_says_why(setup):
+    pipeline, _, _, insertion, callbacks, _, results = setup
+    insertion.capture_error = True
+    pipeline.press()
+    pipeline.release()
+    finish(callbacks)
+    assert results[0][1] == (
+        "Target could not be verified. selected text. Open Latest transcript to copy."
+    )

@@ -229,6 +229,9 @@ def test_live_preview_setting_and_non_focusing_draft_indicator(app, monkeypatch)
 
     monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
     settings = Settings(Config(), Mock())
+    assert settings.values().live_preview  # On unless the user turns it off.
+    settings.close()
+    settings = Settings(Config(live_preview=False), Mock())
     assert not settings.values().live_preview
     settings.live_preview.setChecked(True)
     assert settings.values().live_preview

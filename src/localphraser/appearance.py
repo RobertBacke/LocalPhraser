@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListView,
     QPushButton,
+    QSpinBox,
     QToolButton,
     QWidget,
 )
@@ -190,6 +191,11 @@ class GlassComboBox(QComboBox):
         self.setMaxVisibleItems(8)
         self.setMinimumHeight(38)
 
+    def wheelEvent(self, event: Any) -> None:
+        # Scrolling a page must not change the setting under the pointer. Ignoring the
+        # event hands it to the enclosing scroll area; the open list scrolls on its own.
+        event.ignore()
+
     def showPopup(self) -> None:
         # Native roll-open animation uses the screen-sized geometry before we constrain it.
         animated = QApplication.isEffectEnabled(Qt.UIEffect.UI_AnimateCombo)
@@ -230,6 +236,13 @@ class GlassComboBox(QComboBox):
         x, y = self.width() - 18, self.height() / 2
         painter.drawLine(QPointF(x - 4, y - 2), QPointF(x, y + 2))
         painter.drawLine(QPointF(x, y + 2), QPointF(x + 4, y - 2))
+
+
+class GlassSpinBox(QSpinBox):
+    """A number field changed by typing, arrow keys or its buttons, never by scrolling."""
+
+    def wheelEvent(self, event: Any) -> None:
+        event.ignore()
 
 
 class GlassDialog(QDialog):

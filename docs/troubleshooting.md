@@ -25,7 +25,7 @@ the target worker rather than blocking Qt. Completed text now uses one checked d
 which avoids the pauses reported with artificially paced typing. Application rendering can
 still vary; recognition and optional polishing must complete before final delivery.
 Final typing starts after recognition and optional polishing finish. To see recent words
-while speaking, enable Live speech preview (experimental) in Settings and Save. The model prepares at launch, after download and after settings save. Wait for Ready;
+while speaking, keep Show words while speaking (live preview) ticked in Settings (it is on by default). The model prepares at launch, after download and after settings save. Wait for Ready;
 drafts can then appear during the first recording. Pressing the shortcut during
 preparation shows a notice and does not begin recording. They update roughly every two seconds when CPU processing keeps
 up, may revise wording, and do not alter the target app. A draft failure pauses preview for
@@ -189,8 +189,15 @@ unverified field. If verification fails, recover the text from Latest transcript
 
 If a Microsoft editor still fails, note the app/version, the notification and whether the
 transcript appears in history. A valid transcript plus “Target could not be verified” means
-recognition completed but insertion was blocked. Selected text, changed focus, unsupported
-accessibility providers and elevated target apps can still prevent safe insertion.
+recognition completed but insertion was blocked. The notice now names the reason, for example
+“Selection must be a single empty caret.”, “Text-field accessibility is not ready.” or
+“Target verification timed out.”; quote it when reporting a failure. Selected text, changed
+focus, unsupported accessibility providers and elevated target apps can still prevent safe
+insertion. The accessibility client is created when the app starts, so the first dictation
+after launch no longer pays that cost inside its two-second verification limit.
+
+Scrolling over a list or number field in Settings scrolls the page and never changes the
+setting; use a click, the arrow keys or typing to change it.
 
 ## Model download progress
 

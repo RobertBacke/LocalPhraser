@@ -153,6 +153,13 @@ class WindowsInsertion:
         self.automation = automation
         self.api = user32()
 
+    def warm(self) -> None:
+        """Create the accessibility client now, so the first dictation does not pay for it.
+
+        Asks only for the desktop root; no window, field or text is read.
+        """
+        self.automation.GetRootControl()
+
     def _native_target(self, hwnd: int) -> NativeTarget | None:
         pid = wt.DWORD()
         thread = self.api.GetWindowThreadProcessId(hwnd, ct.byref(pid))

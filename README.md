@@ -68,7 +68,7 @@ This avoids artificial typing pauses between accessibility-provider checks. Focu
 selection, caret and modifiers are verified before dispatch; partial delivery is never
 retried. Check Latest transcript before manually copying after an insertion warning.
 The default preview shows completed phrases after recording
-ends. **Live speech preview (experimental)** can be enabled in Settings and saved. The speech model prepares at launch, after its download, and after saving settings.
+ends. **Show words while speaking (live preview)** is on by default and can be turned off in Settings. The speech model prepares at launch, after its download, and after saving settings.
 Wait for **Ready** before dictating; recent words can then appear on the first recording,
 roughly every two seconds when processing keeps up, under a simple **Listening** heading.
 Drafts may change and stay out of the target app; stopping still transcribes the complete

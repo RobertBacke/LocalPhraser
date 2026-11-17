@@ -94,7 +94,7 @@ class Config:
     refinement_prompt: str = DEFAULT_PROMPT
     refinement_timeout: int = 15
     start_at_login: bool = False
-    live_preview: bool = False
+    live_preview: bool = True
     theme: str = "system"
     keep_history: bool = True
     recognition_quality: str = "balanced"

@@ -443,6 +443,7 @@ def test_vocabulary_page_explains_what_the_engine_does_with_terms(desktop, model
 
 def test_saving_settings_prepares_new_live_recognizer(desktop):
     publish_fixture_model(desktop)
+    desktop.config = replace(desktop.config, live_preview=False)
     desktop.pipeline.warm_live_preview.reset_mock()
     desktop.apply(replace(desktop.config, live_preview=True))
     desktop.pipeline.shutdown.assert_called_once()

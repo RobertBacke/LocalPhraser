@@ -85,7 +85,7 @@ def test_older_settings_preserve_model_and_default_to_no_hints(tmp_path):
     assert config.vocabulary == ""
     assert config.mode == "raw"
     assert config.start_at_login is False
-    assert config.live_preview is False
+    assert config.live_preview is True  # Words appear while speaking unless turned off.
     assert config.model == "small.en"
     assert config.hotkey == "F9"
 
@@ -142,3 +142,10 @@ def test_default_model_is_parakeet_and_saved_whisper_choice_is_kept(tmp_path):
     path = tmp_path / "config.json"
     save_config(Config(model="base.en"), path)
     assert load_config(path).model == "base.en"
+
+
+def test_live_preview_is_on_for_new_profiles_and_a_saved_choice_is_kept(tmp_path):
+    assert Config().live_preview is True
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"live_preview": False}))
+    assert load_config(path).live_preview is False

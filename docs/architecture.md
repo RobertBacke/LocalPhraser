@@ -97,9 +97,9 @@ dependent. Selected text and uncertain targets are refused; privileged input is 
 Do not represent this as universal compatibility or a formal security boundary.
 
 
-## Experimental live speech preview
+## Live speech preview
 
-`live_preview` defaults to false. When it is enabled, or when Parakeet is the selected model
+`live_preview` defaults to true (since 2026-11-17; saved profiles keep their own value). When it is enabled, or when Parakeet is the selected model
 (its loading takes several seconds), launch, successful speech-model download and settings
 save request asynchronous preparation on the serial ASR executor. The
 Preparing speech model state blocks recording until completion. One second of generated
