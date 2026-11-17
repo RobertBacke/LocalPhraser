@@ -61,3 +61,39 @@ def test_missing_model_does_not_download(tmp_path, monkeypatch):
     monkeypatch.setattr(socket, "socket", forbidden)
     with pytest.raises(ValueError):
         verify_model(tmp_path)
+
+
+def test_parakeet_catalog_entry_installs_through_the_verified_installer(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    from localphraser.config import PARAKEET_MODEL
+    from localphraser.models import install_model, model_files, staging_path
+
+    files = (
+        "config.json",
+        "vocab.txt",
+        "nemo128.onnx",
+        "decoder_joint-model.int8.onnx",
+        "encoder-model.int8.onnx",
+    )
+    assert model_files(PARAKEET_MODEL) == files
+    install = Mock(return_value=tmp_path / PARAKEET_MODEL)
+    monkeypatch.setattr("localphraser.models.install_artifacts", install)
+    assert install_model(PARAKEET_MODEL, tmp_path) == tmp_path / PARAKEET_MODEL
+    install.assert_called_once_with(
+        PARAKEET_MODEL, tmp_path, "istupakov/parakeet-tdt-0.6b-v2-onnx", files, job_id=None
+    )
+    assert staging_path(PARAKEET_MODEL, tmp_path, "a" * 32).parent == tmp_path.resolve()
+
+    folder = tmp_path / PARAKEET_MODEL
+    folder.mkdir()
+    hashes = {}
+    for filename in files:
+        (folder / filename).write_bytes(b"parakeet fixture")
+        hashes[filename] = digest(folder / filename)
+    (folder / "localphraser-manifest.json").write_text(json.dumps({"sha256": hashes}))
+    verify_model(folder)
+    (folder / "encoder-model.int8.onnx").unlink()
+    (folder / "model.bin").write_bytes(b"parakeet fixture")
+    with pytest.raises(ValueError):
+        verify_model(folder)

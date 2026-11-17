@@ -10,13 +10,24 @@ from pathlib import Path
 
 from filelock import FileLock
 
-from localphraser.config import MODELS, REFINEMENT_MODELS
+from localphraser.config import MODELS, PARAKEET_MODEL, REFINEMENT_MODELS
 from localphraser.install_progress import TransferProgress, report
 
 FILES = ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt")
+PARAKEET_REPOSITORY = "istupakov/parakeet-tdt-0.6b-v2-onnx"
+# The int8 set only; the repository also holds full-precision files that must not be downloaded.
+PARAKEET_FILES = (
+    "config.json",
+    "vocab.txt",
+    "nemo128.onnx",
+    "decoder_joint-model.int8.onnx",
+    "encoder-model.int8.onnx",
+)
 
 
 def model_files(name: str) -> tuple[str, ...]:
+    if name == PARAKEET_MODEL:
+        return PARAKEET_FILES
     return (*FILES[:-1], "vocabulary.json") if name.startswith("distil-") else FILES
 
 
@@ -55,11 +66,12 @@ def install_model(name: str, root: Path, *, job_id: str | None = None) -> Path:
     """
     if name not in MODELS:
         raise ValueError("Unsupported model.")
-    repo = (
-        f"Systran/faster-distil-whisper-{name.removeprefix('distil-')}"
-        if name.startswith("distil-")
-        else f"Systran/faster-whisper-{name}"
-    )
+    if name == PARAKEET_MODEL:
+        repo = PARAKEET_REPOSITORY
+    elif name.startswith("distil-"):
+        repo = f"Systran/faster-distil-whisper-{name.removeprefix('distil-')}"
+    else:
+        repo = f"Systran/faster-whisper-{name}"
     return install_artifacts(name, root, repo, model_files(name), job_id=job_id)
 
 

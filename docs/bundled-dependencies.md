@@ -44,6 +44,13 @@ are provided alongside PortAudio and Silero VAD terms. The collector also recogn
 tqdm's LICENCE spelling; a version-tagged supplemental copy is included. Files and hashes are recorded in
 `packaging/licenses/SOURCES.json`. These are supplemental terms, not matched source archives.
 
+## Speech recognition additions
+
+| Component | Upstream / declared terms |
+| --- | --- |
+| onnx-asr | [MIT](https://github.com/istupakov/onnx-asr); bundled through `collect_all("onnx_asr")` |
+| Parakeet TDT 0.6b v2 | [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2), NVIDIA; ONNX conversion by istupakov at <https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx>; downloaded by the user and not bundled |
+
 ## FFmpeg observations requiring further review
 
 The installed PyAV 19.0.2 Windows wheel bundles FFmpeg. The measured avcodec, avformat and

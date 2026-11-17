@@ -10,6 +10,8 @@ branding or weights are committed here.
 | faster-whisper | [MIT](https://github.com/SYSTRAN/faster-whisper/blob/master/LICENSE) |
 | CTranslate2 | [MIT](https://github.com/OpenNMT/CTranslate2/blob/master/LICENSE) |
 | Whisper models | [MIT](https://github.com/openai/whisper/blob/main/LICENSE); Systran conversion [model card](https://huggingface.co/Systran/faster-whisper-base.en) |
+| onnx-asr | [MIT](https://github.com/istupakov/onnx-asr) |
+| Parakeet TDT 0.6b v2 | [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2), NVIDIA; ONNX conversion by istupakov at [istupakov/parakeet-tdt-0.6b-v2-onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx); downloaded by the user, not bundled |
 | Silero VAD | [MIT](https://github.com/snakers4/silero-vad/blob/master/LICENSE); ONNX asset supplied by faster-whisper |
 | NumPy | [BSD](https://numpy.org/doc/stable/license.html); bundled BLAS terms also apply |
 | sounddevice / PortAudio | [MIT](https://github.com/spatialaudio/python-sounddevice/blob/master/LICENSE) / [PortAudio license](https://www.portaudio.com/license.html) |

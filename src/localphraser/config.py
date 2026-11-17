@@ -5,8 +5,20 @@ import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-MODELS = ("tiny.en", "base.en", "small.en", "distil-small.en", "distil-medium.en", "medium.en")
+PARAKEET_MODEL = "parakeet-tdt-0.6b-v2"
+MODELS = (
+    PARAKEET_MODEL,
+    "tiny.en",
+    "base.en",
+    "small.en",
+    "distil-small.en",
+    "distil-medium.en",
+    "medium.en",
+)
 MODEL_HINTS = {
+    PARAKEET_MODEL: (
+        "Recommended (~660 MB). Most accurate and fastest in this app's benchmark. English only."
+    ),
     "tiny.en": "Smallest download (~75 MB). Prioritizes speed; less reliable on difficult speech.",
     "base.en": "Compact (~145 MB). A fast starting point for everyday English dictation.",
     "small.en": "Balanced (~485 MB). More demanding than Base, with stronger recognition.",

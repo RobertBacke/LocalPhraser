@@ -18,7 +18,7 @@ os.environ["PATH"] = os.pathsep.join([
 project = Path(SPECPATH).parent
 
 datas, binaries, hiddenimports = [], [], []
-for package in ("faster_whisper", "ctranslate2", "uiautomation"):
+for package in ("faster_whisper", "ctranslate2", "onnx_asr", "uiautomation"):
     package_datas, package_binaries, package_imports = collect_all(package)
     datas += package_datas
     binaries += package_binaries

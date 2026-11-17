@@ -121,3 +121,14 @@ def test_zero_and_sixteen_threads_are_valid_and_zero_is_default():
     assert Config().cpu_threads == 0
     Config(cpu_threads=0).validate()
     Config(cpu_threads=16).validate()
+
+
+def test_parakeet_is_a_first_catalog_model_with_a_hint():
+    from localphraser.config import MODEL_HINTS, MODELS, PARAKEET_MODEL
+
+    assert PARAKEET_MODEL == "parakeet-tdt-0.6b-v2" and MODELS[0] == PARAKEET_MODEL
+    assert MODEL_HINTS[PARAKEET_MODEL] == (
+        "Recommended (~660 MB). Most accurate and fastest in this app's benchmark. English only."
+    )
+    Config(model=PARAKEET_MODEL).validate()
+    assert Config().model == "base.en"
