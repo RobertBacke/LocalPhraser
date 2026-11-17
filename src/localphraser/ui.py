@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
     QFileDialog,
-    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -26,7 +25,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSpacerItem,
     QSystemTrayIcon,
-    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -40,8 +38,10 @@ from localphraser.appearance import (
     GlassCheckBox,
     GlassComboBox,
     GlassDialog,
+    GlassPanel,
     GlassSpinBox,
     NoteLabel,
+    SegmentedTabs,
 )
 from localphraser.audio import Recorder, microphones
 from localphraser.branding import app_icon
@@ -190,7 +190,7 @@ class Latest(GlassDialog):
         self.raw = QTextEdit()
         self.raw.setReadOnly(True)
         self.raw.setAcceptRichText(False)
-        self.tabs = QTabWidget()
+        self.tabs = SegmentedTabs()
         self.tabs.addTab(self.text, "Result")
         self.tabs.addTab(self.raw, "Raw transcription")
         layout.addWidget(self.tabs)
@@ -321,6 +321,7 @@ class Settings(GlassDialog):
         self.pending_save: Config | None = None
         self.embedded = False
         self.grids: list[FieldGrid] = []
+        self.section_boxes: list[QVBoxLayout] = []
         self.setWindowTitle("LocalPhraser · Settings")
         self.setMinimumWidth(540)
         outer = QVBoxLayout(self)
@@ -343,7 +344,7 @@ class Settings(GlassDialog):
         outer.addWidget(scroll)
         layout = QVBoxLayout(body)
         self.body_layout = layout
-        layout.setContentsMargins(0, 0, 14, 8)
+        layout.setContentsMargins(0, 0, 8, 8)
         layout.setSpacing(14)
         title = QLabel("Settings")
         title.setObjectName("pageTitle")
@@ -618,12 +619,12 @@ class Settings(GlassDialog):
         self.resize(620, max(360, height))
 
     def section(self, layout: QVBoxLayout, title: str) -> "FieldGrid":
-        frame = QFrame()
-        frame.setObjectName("settingsSection")
+        frame = GlassPanel("settingsSection")
         frame.setAccessibleName(title)
         box = QVBoxLayout(frame)
-        box.setContentsMargins(18, 14, 18, 18)
+        box.setContentsMargins(18, 16, 18, 18)
         box.setSpacing(12)
+        self.section_boxes.append(box)
         heading = QLabel(title)
         heading.setProperty("sectionTitle", True)
         box.addWidget(heading)
@@ -639,6 +640,8 @@ class Settings(GlassDialog):
             stacked = event.size().width() < 520
             for grid in self.grids:
                 grid.set_stacked(stacked)
+            for box in self.section_boxes:  # Narrow cards keep more room for their rows.
+                box.setContentsMargins(*((12, 14, 12, 14) if stacked else (18, 16, 18, 18)))
         return super().eventFilter(watched, event)
 
     def update_mode(self) -> None:

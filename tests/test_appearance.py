@@ -1,8 +1,8 @@
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QEvent, QRect, Qt
-from PySide6.QtGui import QColor, QFontInfo, QPalette
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt
+from PySide6.QtGui import QColor, QFontInfo, QImage, QPainter, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QToolButton
 
 from localphraser import appearance
@@ -134,7 +134,10 @@ def test_existing_windows_follow_application_palette_changes(app, capsys):
             app.processEvents()
             assert dialog.surface_mode[0] is dark
             assert indicator.surface_mode[0] is dark
-            assert ("#edf8f7" if dark else "#163c42") in indicator.styleSheet()
+            assert appearance.theme(dark).text in dialog.styleSheet()
+            assert appearance.theme(not dark).text not in dialog.styleSheet()
+            # The capsule floats over other apps: one dark, legible look in both themes.
+            assert appearance.theme(True).text in indicator.styleSheet()
         assert "Error calling Python override" not in capsys.readouterr().err
     finally:
         app.setPalette(original)
@@ -244,9 +247,31 @@ def lightness(image, rect):
     return sum(values) / len(values)
 
 
-def test_check_box_shows_an_empty_box_a_ticked_box_and_a_focus_ring(app):
-    from PySide6.QtWidgets import QPushButton, QVBoxLayout
+def colour_gap(image, first, second, other=None):
+    """Mean colour distance between two regions (of one image, or of two images)."""
 
+    def mean(source, rect):
+        totals = [0, 0, 0]
+        count = 0
+        for x in range(rect.left(), rect.right() + 1):
+            for y in range(rect.top(), rect.bottom() + 1):
+                pixel = source.pixelColor(x, y)
+                totals[0] += pixel.red()
+                totals[1] += pixel.green()
+                totals[2] += pixel.blue()
+                count += 1
+        return [total / count for total in totals]
+
+    a, b = mean(image, first), mean(other or image, second)
+    return sum((x - y) ** 2 for x, y in zip(a, b, strict=True)) ** 0.5
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_switch_shows_off_on_and_focus_states(app, monkeypatch, dark):
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QCheckBox, QPushButton, QVBoxLayout
+
+    monkeypatch.setattr(appearance, "dark_surface", lambda: dark)
     dialog = appearance.GlassDialog()
     layout = QVBoxLayout(dialog)
     other = QPushButton("Elsewhere")
@@ -259,30 +284,53 @@ def test_check_box_shows_an_empty_box_a_ticked_box_and_a_focus_ring(app):
     try:
         other.setFocus()
         app.processEvents()
+        assert isinstance(box, QCheckBox)  # Same role and keyboard handling as a check box.
 
         def capture():
             app.processEvents()
             return dialog.grab().toImage()
 
         frame = box.indicator_rect().translated(box.mapTo(dialog, box.rect().topLeft()))
-        inside = frame.adjusted(4, 4, -4, -4)
-        edge = QRect(frame.left() + 5, frame.top() + 1, frame.width() - 10, 1)  # Top border.
-        outside = frame.translated(-frame.width() - 6, 0)
-        ring = QRect(frame.left(), frame.top() - 2, frame.width(), 2)  # Just above the box.
+        assert frame.width() >= frame.height() * 1.6  # A track, not a square box.
+        inset = frame.height() // 2 - 3
+        centre = frame.center().y()
+        left = QRect(frame.left() + inset, centre - 2, 5, 5)  # The thumb when off.
+        right = QRect(frame.right() - inset - 4, centre - 2, 5, 5)  # The thumb when on.
+        ring = QRect(frame.left() + 8, frame.top() - 2, frame.width() - 16, 2)  # Above it.
         box.setChecked(False)
         off = capture()
-        # An unticked box is still drawn: its border stands out from the surface around it.
-        assert abs(lightness(off, edge) - lightness(off, outside)) > 25
+        # Off is still drawn: a thumb resting at the left end of a visible track.
+        assert colour_gap(off, left, right) > 40
+        assert lightness(off, left) > lightness(off, right)
         box.setChecked(True)
         on = capture()
-        assert abs(lightness(on, inside) - lightness(off, inside)) > 60
+        # On moves the thumb to the right (position, not only colour) and fills the track.
+        assert colour_gap(on, left, right) > 60
+        assert lightness(on, right) > lightness(on, left)
+        assert colour_gap(off, left, left, on) > 60
         unfocused_ring = lightness(on, ring)
         box.setFocus(Qt.FocusReason.TabFocusReason)
         assert box.hasFocus()
         focused = capture()
         assert abs(lightness(focused, ring) - unfocused_ring) > 15
+        QTest.keyClick(box, Qt.Key.Key_Space)
+        assert not box.isChecked()  # Space still toggles it.
     finally:
         dialog.close()
+        dialog.deleteLater()
+
+
+def test_switch_is_a_native_check_box_in_high_contrast(app, monkeypatch):
+    monkeypatch.setattr(appearance, "high_contrast", lambda: True)
+    dialog = appearance.GlassDialog()
+    box = appearance.GlassCheckBox("Keep transcript history on this device")
+    box.setParent(dialog)
+    try:
+        assert not dialog.styleSheet()
+        frame = box.indicator_rect()
+        assert frame.width() < frame.height() * 1.6  # The system's own square indicator.
+        assert not box.grab().isNull()
+    finally:
         dialog.deleteLater()
 
 
@@ -295,6 +343,102 @@ def contrast(first, second):
 
     high, low = sorted((luminance(first), luminance(second)), reverse=True)
     return (high + 0.05) / (low + 0.05)
+
+
+def test_theme_tokens_are_frozen_and_carry_the_design_colours():
+    from dataclasses import FrozenInstanceError
+
+    dark, light = appearance.theme(True), appearance.theme(False)
+    assert (dark.text, dark.muted, dark.glow, dark.focus) == (
+        "#F3F6FF",
+        "#A7B3D1",
+        "#22D3EE",
+        "#22D3EE",
+    )
+    assert (light.text, light.muted, light.glow, light.focus) == (
+        "#0B1433",
+        "#46527A",
+        "#0891B2",
+        "#4F46E5",
+    )
+    assert dark.accent == light.accent == ("#4F46E5", "#7C3AED", "#C026D3")
+    assert dark.backdrop == ("#060913", "#0B1024", "#120B2A")
+    assert light.backdrop == ("#F4F7FF", "#E9EEFF", "#F3E9FF")
+    assert appearance.theme(True) is dark and dark.dark and not light.dark
+    with pytest.raises(FrozenInstanceError):
+        dark.text = "#000000"
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_white_text_reaches_aa_on_every_primary_gradient_stop(dark):
+    tokens = appearance.theme(dark)
+    for stop in (*tokens.accent, *tokens.accent_pressed):
+        assert contrast(QColor("white"), QColor(stop)) >= 4.5, stop
+
+
+@pytest.mark.parametrize("size", [(1040, 740), (600, 480), (1920, 1040)])
+@pytest.mark.parametrize("dark", [False, True])
+def test_text_muted_and_danger_reach_aa_on_every_painted_surface(app, dark, size):
+    tokens = appearance.theme(dark)
+    area = QRectF(0, 0, *size)
+    stacks = {
+        "backdrop": (),
+        "panel": ({},),
+        "nested card": ({}, {"nested": True}),
+        "selected card": ({"selected": True},),
+    }
+    for name, layers in stacks.items():
+        image = QImage(*size, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        appearance.paint_backdrop(painter, area, tokens, False, 22)
+        for layer in layers:
+            appearance.paint_panel(painter, area, tokens, 18, **layer)
+        painter.end()
+        # Every part of the surface, including the brightest and darkest aurora light.
+        pixels = [
+            image.pixelColor(x, y)
+            for x in range(24, size[0] - 24, 9)
+            for y in range(24, size[1] - 24, 9)
+        ]
+        for role in ("text", "muted", "danger"):
+            colour = QColor(getattr(tokens, role))
+            worst = min(pixels, key=lambda pixel: contrast(colour, pixel))
+            assert contrast(colour, worst) >= 4.5, (name, role, worst.name())
+
+
+def test_segmented_control_fills_the_selected_segment_and_keeps_tab_keys(app):
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QTabBar, QTabWidget, QTextEdit, QVBoxLayout
+
+    dialog = appearance.GlassDialog()
+    layout = QVBoxLayout(dialog)
+    tabs = appearance.SegmentedTabs()
+    tabs.addTab(QTextEdit(), "Result")
+    tabs.addTab(QTextEdit(), "Original")
+    layout.addWidget(tabs)
+    dialog.resize(420, 240)
+    dialog.show()
+    try:
+        bar = tabs.tabBar()
+        assert isinstance(tabs, QTabWidget) and isinstance(bar, QTabBar)
+        assert [bar.tabText(index) for index in range(bar.count())] == ["Result", "Original"]
+
+        def fill(index):
+            app.processEvents()
+            rect = bar.tabRect(index)
+            point = bar.mapTo(dialog, QPoint(rect.left() + 8, rect.center().y()))
+            return dialog.grab().toImage().pixelColor(point)
+
+        accent = QColor(appearance.theme(False).accent[0])
+        assert contrast(fill(0), accent) < 1.6 < contrast(fill(1), accent)
+        bar.setFocus()
+        QTest.keyClick(bar, Qt.Key.Key_Right)  # Still a tab bar: arrow keys change the tab.
+        assert tabs.currentIndex() == 1
+        assert contrast(fill(1), accent) < 1.6 < contrast(fill(0), accent)
+    finally:
+        dialog.close()
+        dialog.deleteLater()
 
 
 @pytest.mark.parametrize("dark", [False, True])
@@ -311,12 +455,16 @@ def test_hint_text_is_muted_smaller_and_readable_on_the_glass(app, monkeypatch, 
         label_color = label.palette().color(QPalette.ColorRole.WindowText)
         assert hint_color != label_color
         assert hint.font().pointSizeF() < label.font().pointSizeF()
-        surfaces = (
-            (QColor(21, 27, 49), QColor(36, 42, 65), QColor(52, 60, 88))
-            if dark
-            else (QColor(245, 249, 255), QColor(225, 237, 249), QColor(214, 226, 246))
-        )
-        for surface in surfaces:
+        assert hint_color == QColor(appearance.theme(dark).muted)
+        assert label_color == QColor(appearance.theme(dark).text)
+        # Readable on what is actually painted around the hint, not on an assumed colour.
+        settings.scroll_area.ensureWidgetVisible(hint)
+        app.processEvents()
+        image = settings.grab().toImage()
+        for offset in (QPoint(-3, hint.height() // 2), QPoint(hint.width() + 2, 2)):
+            point = hint.mapTo(settings, offset)
+            assert image.rect().contains(point)
+            surface = image.pixelColor(point)
             assert contrast(hint_color, surface) >= 4.5, surface.name()
     finally:
         settings.close()

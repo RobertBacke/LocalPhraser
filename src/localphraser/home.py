@@ -9,7 +9,6 @@ from PySide6.QtCore import QEvent, QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStackedWidget,
-    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -29,7 +27,9 @@ from localphraser.appearance import (
     CaptionButton,
     DragHandle,
     GlassDialog,
+    GlassPanel,
     NoteLabel,
+    SegmentedTabs,
     StatusDot,
     dark_surface,
 )
@@ -70,9 +70,8 @@ class AppWindow(GlassDialog):
         self.shell_layout = outer
         outer.setContentsMargins(18, 18, 18, 18)
         outer.setSpacing(24)
-        sidebar = QFrame()
+        sidebar = GlassPanel("sidebar")
         self.sidebar = sidebar
-        sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(178)
         nav = QVBoxLayout(sidebar)
         nav.setSpacing(6)
@@ -143,6 +142,7 @@ class AppWindow(GlassDialog):
         chrome = QHBoxLayout()
         chrome.setSpacing(6)
         drag = DragHandle("Your words. On your device.")
+        drag.setObjectName("tagline")
         chrome.addWidget(drag, 1)
         for kind, label, callback in (
             ("minimize", "Minimize window", self.showMinimized),
@@ -171,8 +171,7 @@ class AppWindow(GlassDialog):
         metrics = QHBoxLayout()
         self.metric_labels = []
         for caption in ("Saved words", "Dictations", "Speaking pace"):
-            panel = QFrame()
-            panel.setObjectName("metric")
+            panel = GlassPanel("metric")
             stack = QVBoxLayout(panel)
             number = QLabel("—")
             number.setObjectName("metricNumber")
@@ -186,6 +185,7 @@ class AppWindow(GlassDialog):
         recent_title.setProperty("sectionTitle", True)
         recent.addWidget(recent_title, 1)
         self.clear_button = QPushButton("Clear history")
+        self.clear_button.setProperty("danger", True)
         self.clear_button.clicked.connect(self.clear_history)
         recent.addWidget(self.clear_button)
         layout.addLayout(recent)
@@ -202,8 +202,7 @@ class AppWindow(GlassDialog):
         self.entries.setAccessibleName("Recent transcriptions")
         self.entries.currentItemChanged.connect(self.select_entry)
         split.addWidget(self.entries)
-        detail = QWidget()
-        detail.setObjectName("transcriptPanel")
+        detail = GlassPanel("transcriptPanel")
         detail_layout = QVBoxLayout(detail)
         detail_layout.setContentsMargins(16, 16, 16, 16)
         self.entry_info = QLabel("Your next dictation will appear here.")
@@ -217,7 +216,7 @@ class AppWindow(GlassDialog):
         for editor in (self.result_text, self.raw):
             editor.setReadOnly(True)
             editor.setAcceptRichText(False)
-        self.tabs = QTabWidget()
+        self.tabs = SegmentedTabs()
         self.tabs.addTab(self.result_text, "Result")
         self.tabs.addTab(self.raw, "Original")
         detail_layout.addWidget(self.tabs)
@@ -225,6 +224,7 @@ class AppWindow(GlassDialog):
         self.copy_button = QPushButton("Copy text")
         self.copy_button.clicked.connect(self.copy_text)
         self.delete_button = QPushButton("Delete entry")
+        self.delete_button.setProperty("danger", True)
         self.delete_button.clicked.connect(self.delete_entry)
         actions.addWidget(self.copy_button)
         actions.addWidget(self.delete_button)
@@ -232,8 +232,7 @@ class AppWindow(GlassDialog):
         split.addWidget(detail)
         split.setSizes([260, 420])
         self.history_split = split
-        self.empty_history = QFrame()
-        self.empty_history.setObjectName("emptyHistory")
+        self.empty_history = GlassPanel("emptyHistory")
         empty_layout = QVBoxLayout(self.empty_history)
         empty_layout.setContentsMargins(32, 28, 32, 28)
         empty_layout.setSpacing(8)

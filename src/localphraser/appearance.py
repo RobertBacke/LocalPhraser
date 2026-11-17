@@ -1,12 +1,13 @@
-"""Lightweight glass surfaces using Qt paint and optional Windows 11 composition."""
+"""Aurora glass: one theme, the stylesheet built from it, and the painted glass widgets."""
 
 import ctypes
 import random
 import sys
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -14,6 +15,7 @@ from PySide6.QtGui import (
     QImage,
     QLinearGradient,
     QPainter,
+    QPainterPath,
     QPalette,
     QPen,
     QRadialGradient,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -33,12 +36,185 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyleOptionButton,
     QStyleOptionSpinBox,
+    QTabBar,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from localphraser.typography import interface_family
+
+Rgba = tuple[int, int, int, int]
+Glow = tuple[float, float, float, tuple[int, int, int], int]
+
+
+@dataclass(frozen=True)
+class Theme:
+    """Every colour of one appearance. The stylesheet and all painters read from here."""
+
+    dark: bool
+    backdrop: tuple[str, str, str]  # Diagonal window gradient.
+    glows: tuple[Glow, ...]  # Aurora light: x, y, radius (fractions of the size), rgb, alpha.
+    window_alpha: int  # Painted opacity over desktop acrylic.
+    rim: Rgba  # Window edge.
+    rim_inner: Rgba
+    text: str
+    muted: str
+    panel_tint: Rgba  # Laid under a panel so its contrast never depends on the aurora.
+    panel: tuple[Rgba, Rgba]  # Diagonal glass fill.
+    panel_border: Rgba
+    panel_highlight: Rgba  # Top edge.
+    hairline: Rgba  # Outer definition line (light theme).
+    card: tuple[Rgba, Rgba]  # A panel nested in a panel: one step brighter.
+    card_border: Rgba
+    selected: tuple[Rgba, Rgba]  # Fill of the selected card.
+    field: Rgba
+    field_border: Rgba
+    focus: str
+    accent: tuple[str, str, str]  # Primary gradient, 135 degrees, white text.
+    accent_pressed: tuple[str, str, str]
+    glow: str  # Indicator colour: meters, markers, numbers, progress.
+    violet: str  # Where glow-coloured gradients end.
+    brand: tuple[str, str, str]  # Logo tint.
+    button: Rgba
+    button_hover: Rgba
+    button_pressed: Rgba
+    button_border: Rgba
+    hover: Rgba  # Quiet hover fill for rows and glyph buttons.
+    nav_selected: Rgba
+    danger: str
+    danger_border: Rgba
+    danger_hover: Rgba
+    close_hover: str
+    menu: str  # Opaque popup surface.
+    menu_border: Rgba
+    scroll: Rgba
+    scroll_hover: Rgba
+    switch_off: Rgba
+    switch_border: Rgba
+    thumb: str
+    chip: Rgba
+    chip_border: Rgba
+    progress: tuple[Rgba, Rgba]
+    hud: tuple[Rgba, Rgba]  # The floating capsule: the same dark pill in both themes.
+    hud_rim: tuple[str, str]
+
+
+ACCENT = ("#4F46E5", "#7C3AED", "#C026D3")
+ACCENT_PRESSED = ("#4338CA", "#6D28D9", "#A21CAF")
+HUD: tuple[Rgba, Rgba] = ((16, 19, 44, 250), (7, 8, 22, 250))
+HUD_RIM = ("#22D3EE", "#8B5CF6")
+
+DARK = Theme(
+    dark=True,
+    backdrop=("#060913", "#0B1024", "#120B2A"),
+    glows=(
+        (0.08, 0.04, 0.62, (34, 211, 238), 76),
+        (0.98, 0.30, 0.58, (139, 92, 246), 104),
+        (0.52, 1.08, 0.56, (236, 72, 153), 54),
+    ),
+    window_alpha=238,
+    rim=(255, 255, 255, 44),
+    rim_inner=(0, 0, 0, 0),
+    text="#F3F6FF",
+    muted="#A7B3D1",
+    panel_tint=(9, 13, 30, 158),
+    panel=((255, 255, 255, 23), (255, 255, 255, 10)),
+    panel_border=(255, 255, 255, 36),
+    panel_highlight=(255, 255, 255, 71),
+    hairline=(0, 0, 0, 0),
+    card=((255, 255, 255, 18), (255, 255, 255, 8)),
+    card_border=(255, 255, 255, 32),
+    selected=((255, 255, 255, 40), (190, 180, 255, 22)),
+    field=(8, 12, 28, 140),
+    field_border=(255, 255, 255, 31),
+    focus="#22D3EE",
+    accent=ACCENT,
+    accent_pressed=ACCENT_PRESSED,
+    glow="#22D3EE",
+    violet="#8B5CF6",
+    brand=("#22D3EE", "#8B5CF6", "#EC4899"),
+    button=(255, 255, 255, 20),
+    button_hover=(255, 255, 255, 38),
+    button_pressed=(255, 255, 255, 12),
+    button_border=(255, 255, 255, 40),
+    hover=(255, 255, 255, 18),
+    nav_selected=(255, 255, 255, 30),
+    danger="#FF9CAB",
+    danger_border=(255, 156, 171, 90),
+    danger_hover=(255, 107, 129, 36),
+    close_hover="#E5484D",
+    menu="#12172E",
+    menu_border=(255, 255, 255, 40),
+    scroll=(255, 255, 255, 56),
+    scroll_hover=(255, 255, 255, 110),
+    switch_off=(255, 255, 255, 34),
+    switch_border=(255, 255, 255, 60),
+    thumb="#F3F6FF",
+    chip=(255, 255, 255, 20),
+    chip_border=(255, 255, 255, 34),
+    progress=((34, 211, 238, 115), (139, 92, 246, 140)),
+    hud=HUD,
+    hud_rim=HUD_RIM,
+)
+
+LIGHT = Theme(
+    dark=False,
+    backdrop=("#F4F7FF", "#E9EEFF", "#F3E9FF"),
+    glows=(
+        (0.06, 0.02, 0.62, (56, 189, 248), 120),
+        (0.98, 0.26, 0.56, (139, 92, 246), 66),
+        (0.50, 1.08, 0.58, (244, 114, 182), 80),
+    ),
+    window_alpha=236,
+    rim=(30, 41, 90, 46),
+    rim_inner=(255, 255, 255, 200),
+    text="#0B1433",
+    muted="#46527A",
+    panel_tint=(0, 0, 0, 0),
+    panel=((255, 255, 255, 184), (255, 255, 255, 133)),
+    panel_border=(255, 255, 255, 235),
+    panel_highlight=(255, 255, 255, 255),
+    hairline=(30, 41, 90, 26),
+    card=((255, 255, 255, 150), (255, 255, 255, 96)),
+    card_border=(255, 255, 255, 240),
+    selected=((255, 255, 255, 240), (240, 238, 255, 215)),
+    field=(255, 255, 255, 217),
+    field_border=(30, 41, 90, 41),
+    focus="#4F46E5",
+    accent=ACCENT,
+    accent_pressed=ACCENT_PRESSED,
+    glow="#0891B2",
+    violet="#7C3AED",
+    brand=ACCENT,
+    button=(255, 255, 255, 166),
+    button_hover=(255, 255, 255, 240),
+    button_pressed=(228, 232, 255, 240),
+    button_border=(30, 41, 90, 40),
+    hover=(79, 70, 229, 22),
+    nav_selected=(255, 255, 255, 210),
+    danger="#A1112B",
+    danger_border=(161, 17, 43, 90),
+    danger_hover=(220, 38, 62, 26),
+    close_hover="#E5484D",
+    menu="#FBFCFF",
+    menu_border=(30, 41, 90, 46),
+    scroll=(30, 41, 90, 70),
+    scroll_hover=(30, 41, 90, 130),
+    switch_off=(30, 41, 90, 84),
+    switch_border=(30, 41, 90, 30),
+    thumb="#FFFFFF",
+    chip=(79, 70, 229, 20),
+    chip_border=(79, 70, 229, 48),
+    progress=((8, 145, 178, 90), (124, 58, 237, 90)),
+    hud=HUD,
+    hud_rim=HUD_RIM,
+)
+
+
+def theme(dark: bool) -> Theme:
+    return DARK if dark else LIGHT
 
 
 def high_contrast() -> bool:
@@ -53,26 +229,30 @@ def dark_surface() -> bool:
     return QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
 
 
-def ink(dark: bool) -> tuple[str, str]:
-    """Body text and muted (hint) text; both stay above WCAG AA on the glass."""
-    return ("#edf8f7", "#c0cce1") if dark else ("#163c42", "#435974")
+def current_theme() -> Theme:
+    return theme(dark_surface())
 
 
-# State colours shared by the listening capsule and the sidebar status (light, dark).
+def rgba(value: Rgba) -> str:
+    return f"rgba({value[0]},{value[1]},{value[2]},{value[3]})"
+
+
+# State colours shared by the capsule, the sidebar status and the Home hero (light, dark).
 TONES = {
-    "recording": ((206, 52, 64), (255, 118, 124)),
-    "busy": ((196, 124, 8), (247, 189, 82)),
-    "ready": ((32, 140, 104), (86, 212, 164)),
+    "recording": ((214, 40, 66), (255, 107, 129)),
+    "busy": ((176, 98, 0), (251, 191, 36)),
+    "ready": ((4, 135, 95), (52, 211, 153)),
 }
 
 
-def tone_color(tone: str) -> QColor:
+def tone_color(tone: str, dark: bool | None = None) -> QColor:
     if high_contrast():
         return QApplication.palette().color(QPalette.ColorRole.WindowText)
-    dark = dark_surface()
+    if dark is None:
+        dark = dark_surface()
     if tone in TONES:
         return QColor(*TONES[tone][dark])
-    return QColor(ink(dark)[1])
+    return QColor(theme(dark).muted)
 
 
 @lru_cache(maxsize=1)
@@ -115,46 +295,111 @@ def enable_backdrop(widget: QWidget) -> bool:
         return False
 
 
-def paint_surface(
-    widget: QWidget, translucent: bool, radius: float, rim: bool = True, opacity: int = 216
-) -> None:
-    painter = QPainter(widget)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    area = QRectF(widget.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-    if high_contrast():
-        painter.fillRect(widget.rect(), widget.palette().window())
-        return
-    dark = dark_surface()
-    alpha = opacity if translucent else 255
+def rounded(area: QRectF, radius: float) -> QPainterPath:
+    shape = QPainterPath()
+    shape.addRoundedRect(area, radius, radius)
+    return shape
+
+
+def diagonal(area: QRectF, first: QColor, last: QColor, middle: QColor | None = None) -> QBrush:
     gradient = QLinearGradient(area.topLeft(), area.bottomRight())
-    gradient.setColorAt(0, QColor(21, 27, 49, alpha) if dark else QColor(245, 249, 255, alpha))
-    gradient.setColorAt(1, QColor(36, 42, 65, alpha) if dark else QColor(225, 237, 249, alpha))
-    painter.setBrush(gradient)
-    painter.setPen(
-        QPen(QColor(255, 255, 255, 70 if dark else 190), 1) if rim else Qt.PenStyle.NoPen
-    )
-    painter.drawRoundedRect(area, radius, radius)
-    if rim:
-        # Diffused light behind the translucent panels also works without desktop acrylic.
-        for x, y, scale, rgb in (
-            (0.12, 0.08, 0.72, (74, 159, 231)),
-            (0.90, 0.18, 0.65, (153, 118, 222)),
-            (0.62, 1.05, 0.65, (58, 183, 199)),
-        ):
-            glow = QRadialGradient(
-                QPointF(widget.width() * x, widget.height() * y), widget.width() * scale
-            )
-            glow.setColorAt(0, QColor(*rgb, 95 if dark else 82))
-            glow.setColorAt(0.55, QColor(*rgb, 35 if dark else 24))
-            glow.setColorAt(1, QColor(*rgb, 0))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(glow)
-            painter.drawRoundedRect(area, radius, radius)
-        painter.setBrush(QBrush(frost_texture()))
-        painter.drawRoundedRect(area, radius, radius)
-    if rim:
-        painter.setPen(QPen(QColor(255, 255, 255, 95 if dark else 210), 1))
-        painter.drawLine(QPointF(radius, 1.5), QPointF(widget.width() - radius, 1.5))
+    gradient.setColorAt(0, first)
+    if middle is not None:
+        gradient.setColorAt(0.5, middle)
+    gradient.setColorAt(1, last)
+    return QBrush(gradient)
+
+
+def accent_brush(area: QRectF, tokens: Theme, pressed: bool = False) -> QBrush:
+    first, middle, last = tokens.accent_pressed if pressed else tokens.accent
+    return diagonal(area, QColor(first), QColor(last), QColor(middle))
+
+
+def paint_backdrop(
+    painter: QPainter, area: QRectF, tokens: Theme, translucent: bool, radius: float
+) -> None:
+    """The window surface: a deep or luminous gradient lit by soft aurora glows."""
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    shape = rounded(area.adjusted(0.5, 0.5, -0.5, -0.5), radius)
+    alpha = tokens.window_alpha if translucent else 255
+    first, middle, last = (QColor(colour) for colour in tokens.backdrop)
+    for colour in (first, middle, last):
+        colour.setAlpha(alpha)
+    painter.fillPath(shape, diagonal(area, first, last, middle))
+    for x, y, scale, rgb, strength in tokens.glows:
+        centre = QPointF(area.left() + area.width() * x, area.top() + area.height() * y)
+        glow = QRadialGradient(centre, max(area.width(), area.height() * 1.2) * scale)
+        glow.setColorAt(0, QColor(*rgb, strength))
+        glow.setColorAt(0.5, QColor(*rgb, round(strength * 0.42)))
+        glow.setColorAt(1, QColor(*rgb, 0))
+        painter.fillPath(shape, glow)
+    painter.fillPath(shape, QBrush(frost_texture()))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setPen(QPen(QColor(*tokens.rim), 1))
+    painter.drawPath(shape)
+    if tokens.rim_inner[3]:
+        painter.setPen(QPen(QColor(*tokens.rim_inner), 1))
+        painter.drawPath(rounded(area.adjusted(1.5, 1.5, -1.5, -1.5), radius - 1))
+    painter.restore()
+
+
+def paint_panel(
+    painter: QPainter,
+    area: QRectF,
+    tokens: Theme,
+    radius: float,
+    *,
+    nested: bool = False,
+    selected: bool = False,
+) -> None:
+    """A glass panel: translucent fill, bright rim and a top highlight."""
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    outline = area.adjusted(0.5, 0.5, -0.5, -0.5)
+    shape = rounded(outline, radius)
+    if not nested and tokens.panel_tint[3]:
+        painter.fillPath(shape, QColor(*tokens.panel_tint))
+    top, bottom = tokens.selected if selected else tokens.card if nested else tokens.panel
+    painter.fillPath(shape, diagonal(area, QColor(*top), QColor(*bottom)))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    if selected:
+        painter.setPen(QPen(accent_brush(area, tokens), 1.6))
+        painter.drawPath(rounded(outline.adjusted(0.3, 0.3, -0.3, -0.3), radius))
+        painter.restore()
+        return
+    border = QColor(*(tokens.card_border if nested else tokens.panel_border))
+    faded = QColor(border)
+    faded.setAlpha(round(border.alpha() * 0.55))
+    edge = QLinearGradient(outline.topLeft(), outline.bottomLeft())
+    edge.setColorAt(0, QColor(*tokens.panel_highlight))
+    edge.setColorAt(min(0.5, (radius + 6) / max(1.0, outline.height())), border)
+    edge.setColorAt(1, border if tokens.hairline[3] else faded)
+    painter.setPen(QPen(QBrush(edge), 1))
+    if tokens.hairline[3]:
+        # A bright inner rim inside a faint dark line keeps light panels defined.
+        painter.drawPath(rounded(outline.adjusted(1, 1, -1, -1), max(0.0, radius - 1)))
+        painter.setPen(QPen(QColor(*tokens.hairline), 1))
+    painter.drawPath(shape)
+    painter.restore()
+
+
+class GlassPanel(QFrame):
+    """A painted glass panel; ``nested`` is the brighter card used inside another panel."""
+
+    def __init__(self, name: str = "", *, nested: bool = False, radius: float | None = None):
+        super().__init__()
+        self.nested = nested
+        self.radius = radius if radius is not None else (14.0 if nested else 18.0)
+        if name:
+            self.setObjectName(name)
+
+    def paintEvent(self, event: Any) -> None:
+        if high_contrast():
+            super().paintEvent(event)
+            return
+        painter = QPainter(self)
+        paint_panel(painter, QRectF(self.rect()), current_theme(), self.radius, nested=self.nested)
 
 
 class DragHandle(QLabel):
@@ -172,23 +417,36 @@ class DragHandle(QLabel):
             super().mousePressEvent(event)
 
 
+def glyph_pen(color: QColor, width: float = 1.4) -> QPen:
+    pen = QPen(color, width)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    return pen
+
+
+def glyph_color(button: QWidget, close: bool) -> QColor:
+    """Caption glyphs follow the text; the close glyph turns white on its red hover."""
+    if close and button.underMouse() and button.isEnabled() and not high_contrast():
+        return QColor("white")
+    return button.palette().color(QPalette.ColorRole.ButtonText)
+
+
 class CaptionButton(QPushButton):
-    """Caption symbols drawn at logical-pixel sizes, independent of font glyph metrics."""
+    """Borderless caption glyphs drawn at logical-pixel sizes, with a hover fill."""
 
     def __init__(self, kind: str):
         super().__init__("")
         self.kind = kind
         self.setObjectName("captionButton")
-        self.setFixedSize(46, 36)
+        self.setProperty("closes", kind == "close")
+        self.setFixedSize(42, 32)
 
     def paintEvent(self, event: Any) -> None:
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(self.palette().color(QPalette.ColorRole.ButtonText), 1.4)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        painter.setPen(pen)
-        box = QRectF((self.width() - 12) / 2, (self.height() - 12) / 2, 12, 12)
+        painter.setPen(glyph_pen(glyph_color(self, self.kind == "close")))
+        box = QRectF((self.width() - 11) / 2, (self.height() - 11) / 2, 11, 11)
         if self.kind == "minimize":
             painter.drawLine(
                 QPointF(box.left(), box.center().y()), QPointF(box.right(), box.center().y())
@@ -198,13 +456,31 @@ class CaptionButton(QPushButton):
             painter.drawLine(box.topRight(), box.bottomLeft())
         elif self.window().isMaximized() or self.window().isFullScreen():
             x, y = box.left(), box.top()
-            painter.drawLine(QPointF(x + 3, y + 3), QPointF(x + 3, y))
-            painter.drawLine(QPointF(x + 3, y), QPointF(x + 12, y))
-            painter.drawLine(QPointF(x + 12, y), QPointF(x + 12, y + 9))
-            painter.drawLine(QPointF(x + 12, y + 9), QPointF(x + 9, y + 9))
-            painter.drawRect(QRectF(x, y + 3, 9, 9))
+            back = [(3, 3), (3, 0), (11, 0), (11, 8), (8, 8)]
+            painter.drawPolyline([QPointF(x + dx, y + dy) for dx, dy in back])
+            painter.drawRoundedRect(QRectF(x, y + 3, 8, 8), 1.5, 1.5)
         else:
-            painter.drawRect(box)
+            painter.drawRoundedRect(box, 2, 2)
+
+
+class CloseGlyph(QToolButton):
+    """The borderless close cross of the smaller glass windows."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("closeGlyph")
+        self.setAccessibleName("Close window")
+        self.setToolTip("Close window")
+        self.setFixedSize(36, 30)
+
+    def paintEvent(self, event: Any) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(glyph_pen(glyph_color(self, True)))
+        box = QRectF((self.width() - 11) / 2, (self.height() - 11) / 2, 11, 11)
+        painter.drawLine(box.topLeft(), box.bottomRight())
+        painter.drawLine(box.topRight(), box.bottomLeft())
 
 
 class GlassComboBox(QComboBox):
@@ -271,17 +547,14 @@ class GlassComboBox(QComboBox):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(self.palette().color(QPalette.ColorRole.Text), 1.6))
-        x, y = self.width() - 18, self.height() / 2
-        painter.drawLine(QPointF(x - 4, y - 2), QPointF(x, y + 2))
-        painter.drawLine(QPointF(x, y + 2), QPointF(x + 4, y - 2))
+        color = QColor(current_theme().muted if self.isEnabled() else current_theme().muted)
+        if not self.isEnabled():
+            color.setAlpha(110)
+        draw_chevron(painter, QPointF(self.width() - 19, self.height() / 2), False, color)
 
 
 def draw_chevron(painter: QPainter, centre: QPointF, up: bool, color: QColor) -> None:
-    pen = QPen(color, 1.6)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    painter.setPen(pen)
+    painter.setPen(glyph_pen(color, 1.6))
     rise = -2.0 if up else 2.0
     x, y = centre.x(), centre.y()
     painter.drawLine(QPointF(x - 4, y - rise), QPointF(x, y + rise))
@@ -293,10 +566,11 @@ class GlassSpinBox(QSpinBox):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setMinimumHeight(38)
         # Style sheets do not pad a spin box's text; line it up with the other fields.
         line = self.lineEdit()
         if line is not None:
-            line.setTextMargins(6, 0, 0, 0)
+            line.setTextMargins(10, 0, 0, 0)
 
     def wheelEvent(self, event: Any) -> None:
         event.ignore()
@@ -309,7 +583,7 @@ class GlassSpinBox(QSpinBox):
         self.initStyleOption(option)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        text = self.palette().color(QPalette.ColorRole.Text)
+        text = QColor(current_theme().muted)
         steps = self.stepEnabled()
         for control, up, flag in (
             (QStyle.SubControl.SC_SpinBoxUp, True, QSpinBox.StepEnabledFlag.StepUpEnabled),
@@ -326,7 +600,7 @@ class GlassSpinBox(QSpinBox):
 
 
 class GlassCheckBox(QCheckBox):
-    """A check box that always shows its box: empty when off, filled and ticked when on."""
+    """A check box painted as a switch: the thumb rests left when off, right when on."""
 
     def indicator_rect(self) -> QRect:
         option = QStyleOptionButton()
@@ -337,55 +611,102 @@ class GlassCheckBox(QCheckBox):
         super().paintEvent(event)
         if high_contrast():
             return  # The native indicator is drawn by the system style.
-        dark = dark_surface()
+        tokens = current_theme()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if not self.isEnabled():
             painter.setOpacity(0.45)
-        box = QRectF(self.indicator_rect()).adjusted(1.5, 1.5, -1.5, -1.5)
+        track = QRectF(self.indicator_rect()).adjusted(1, 1, -1, -1)
+        radius = track.height() / 2
         if self.hasFocus():
-            painter.setPen(QPen(QColor("#9fd9ff" if dark else "#365f95"), 2))
+            painter.setPen(QPen(QColor(tokens.focus), 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(box.adjusted(-3, -3, 3, 3), 7, 7)
+            painter.drawRoundedRect(track.adjusted(-3, -3, 3, 3), radius + 3, radius + 3)
         if self.isChecked():
-            fill = QLinearGradient(box.topLeft(), box.bottomRight())
-            fill.setColorAt(0, QColor(52, 92, 150))
-            fill.setColorAt(1, QColor(75, 72, 137))
-            painter.setBrush(fill)
-            painter.setPen(QPen(QColor(219, 236, 255, 150 if dark else 90), 1))
-            painter.drawRoundedRect(box, 5, 5)
-            tick = QPen(QColor("white"), 2)
-            tick.setCapStyle(Qt.PenCapStyle.RoundCap)
-            tick.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-            painter.setPen(tick)
-            w, h, x, y = box.width(), box.height(), box.left(), box.top()
-            painter.drawPolyline(
-                [
-                    QPointF(x + w * 0.24, y + h * 0.52),
-                    QPointF(x + w * 0.43, y + h * 0.70),
-                    QPointF(x + w * 0.77, y + h * 0.32),
-                ]
-            )
+            painter.setPen(QPen(QColor(255, 255, 255, 70), 1))
+            painter.setBrush(accent_brush(track, tokens))
         else:
-            painter.setBrush(QColor(16, 25, 48, 140) if dark else QColor(255, 255, 255, 215))
-            border = (
-                QColor("#8cbddd")
-                if self.underMouse()
-                else QColor(200, 220, 255, 150)
-                if dark
-                else QColor(54, 95, 149, 165)
-            )
-            painter.setPen(QPen(border, 1.4))
-            painter.drawRoundedRect(box, 5, 5)
+            off = QColor(*tokens.switch_off)
+            if self.underMouse():
+                off.setAlpha(min(255, off.alpha() + 30))
+            painter.setPen(QPen(QColor(*tokens.switch_border), 1))
+            painter.setBrush(off)
+        painter.drawRoundedRect(track, radius, radius)
+        size = track.height() - 6
+        x = track.right() - size - 3 if self.isChecked() else track.left() + 3
+        painter.setPen(QPen(QColor(11, 20, 51, 40), 1))
+        painter.setBrush(QColor(tokens.thumb))
+        painter.drawEllipse(QRectF(x, track.top() + 3, size, size))
+
+
+class SegmentedBar(QTabBar):
+    """A tab bar painted as one pill track with the selected segment filled."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setExpanding(False)
+        self.setDrawBase(False)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def tabSizeHint(self, index: int) -> QSize:
+        if high_contrast():
+            return super().tabSizeHint(index)
+        return QSize(self.fontMetrics().horizontalAdvance(self.tabText(index)) + 34, 36)
+
+    def minimumTabSizeHint(self, index: int) -> QSize:
+        return self.tabSizeHint(index)
+
+    def paintEvent(self, event: Any) -> None:
+        if high_contrast():
+            super().paintEvent(event)
+            return
+        tokens = current_theme()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        track = QRectF()
+        for index in range(self.count()):
+            track = track.united(QRectF(self.tabRect(index)))
+        track = track.adjusted(0.5, 0.5, -0.5, -0.5)
+        painter.setPen(QPen(QColor(*tokens.field_border), 1))
+        painter.setBrush(QColor(*tokens.field))
+        painter.drawRoundedRect(track, 12, 12)
+        for index in range(self.count()):
+            area = QRectF(self.tabRect(index)).adjusted(4, 4, -4, -4)
+            current = index == self.currentIndex()
+            font = self.font()
+            if current:
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(accent_brush(area, tokens))
+                painter.drawRoundedRect(area, 8.5, 8.5)
+                if self.hasFocus():
+                    painter.setPen(QPen(QColor(tokens.focus), 2))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawRoundedRect(area.adjusted(-2, -2, 2, 2), 10.5, 10.5)
+                font.setWeight(QFont.Weight.DemiBold)
+                painter.setPen(QColor("white"))
+            else:
+                painter.setPen(QColor(tokens.text if self.isEnabled() else tokens.muted))
+            painter.setFont(font)
+            painter.drawText(area, Qt.AlignmentFlag.AlignCenter, self.tabText(index))
+
+
+class SegmentedTabs(QTabWidget):
+    """A tab widget whose tabs are a segmented control; keys and roles are unchanged."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setTabBar(SegmentedBar())
+        self.setDocumentMode(True)
 
 
 class StatusDot(QWidget):
     """A small painted state dot; the state is always also given as text beside it."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *, dark: bool | None = None) -> None:
         super().__init__(parent)
         self.tone = "muted"
-        self.setFixedSize(10, 10)
+        self.dark = dark  # Fixed for the capsule, which is dark in both themes.
+        self.setFixedSize(12, 12)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def set_tone(self, tone: str) -> None:
@@ -397,8 +718,15 @@ class StatusDot(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(tone_color(self.tone))
-        painter.drawEllipse(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5))
+        color = tone_color(self.tone, self.dark)
+        area = QRectF(self.rect())
+        if not high_contrast():
+            halo = QColor(color)
+            halo.setAlpha(60)
+            painter.setBrush(halo)
+            painter.drawEllipse(area)
+        painter.setBrush(color)
+        painter.drawEllipse(area.adjusted(2, 2, -2, -2))
 
 
 class NoteLabel(QLabel):
@@ -428,6 +756,155 @@ class NoteLabel(QLabel):
         self.setText("")
 
 
+def gradient_css(stops: tuple[str, ...], horizontal: bool = False) -> str:
+    last = len(stops) - 1
+    points = ",".join(f"stop:{index / last:g} {stop}" for index, stop in enumerate(stops))
+    return f"qlineargradient(x1:0,y1:0,x2:1,y2:{0 if horizontal else 1},{points})"
+
+
+def stylesheet(tokens: Theme) -> str:
+    """The one stylesheet, built from the theme. Panels and switches paint themselves."""
+    text, muted, focus = tokens.text, tokens.muted, tokens.focus
+    field, field_border = rgba(tokens.field), rgba(tokens.field_border)
+    accent = gradient_css(tokens.accent)
+    pressed = gradient_css(tokens.accent_pressed)
+    hover = rgba(tokens.hover)
+    return (
+        f"* {{ font-family: '{interface_family()}'; font-size: 10pt; }}"
+        f"QDialog#glassDialog {{ color: {text}; }}"
+        f"QLabel, QCheckBox, QGroupBox {{ color: {text}; background: transparent; }}"
+        "QLabel#windowTitle { font-size: 13px; font-weight: 600; padding: 2px; }"
+        f"QLabel#tagline {{ color: {muted}; font-size: 12px; }}"
+        "QLabel#brand { font-size: 17px; font-weight: 700; }"
+        "QLabel#pageTitle { font-size: 26px; font-weight: 700; }"
+        f"QLabel#metricNumber {{ color: {tokens.glow}; font-size: 22px; font-weight: 700; }}"
+        "QLabel[sectionTitle=true] { font-size: 15px; font-weight: 600; }"
+        "QLabel#emptyTitle { font-size: 17px; font-weight: 600; }"
+        f"QLabel[muted=true] {{ color: {muted}; }}"
+        f"QLabel[hint=true] {{ color: {muted}; font-size: 9pt; }}"
+        f"QLabel:disabled {{ color: {muted}; }}"
+        "QWidget#glassBody, QScrollArea, QStackedWidget { background: transparent;"
+        " border: none; }"
+        "QSplitter::handle { background: transparent; }"
+        # Lists and tables.
+        f"QListWidget {{ color: {text}; background: {field}; border: 1px solid {field_border};"
+        " border-radius: 12px; padding: 6px; outline: 0; }"
+        "QListWidget#historyCards { background: transparent; border: none; padding: 0; }"
+        # A transparent border keeps selected rows the same height as the others.
+        "QListWidget::item { padding: 9px 10px; border-radius: 8px;"
+        " border: 1px solid transparent; }"
+        f"QListWidget::item:hover {{ background: {hover}; }}"
+        f"QListWidget::item:selected {{ background: {rgba(tokens.nav_selected)};"
+        f" color: {text}; border: 1px solid {tokens.focus}; }}"
+        f"QTableWidget {{ color: {text}; background: transparent; border: none; outline: 0;"
+        " selection-background-color: transparent; }"
+        f"QHeaderView {{ background: transparent; }}"
+        f"QHeaderView::section {{ color: {muted}; background: transparent; border: none;"
+        f" border-bottom: 1px solid {field_border}; padding: 10px 12px; font-size: 9pt;"
+        " font-weight: 600; }"
+        "QTableCornerButton::section { background: transparent; border: none; }"
+        # Fields.
+        f"QLineEdit, QTextEdit, QComboBox, QSpinBox {{ color: {text}; background: {field};"
+        f" border: 1px solid {field_border}; border-radius: 12px; padding: 7px 10px;"
+        f" selection-background-color: {tokens.accent[0]}; selection-color: white; }}"
+        "QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus {"
+        f" border: 2px solid {focus}; padding: 6px 9px; }}"
+        "QComboBox, QComboBox:focus { padding-right: 34px; }"
+        "QComboBox::drop-down { width: 30px; border: none; }"
+        "QComboBox::down-arrow { image: none; }"
+        "QSpinBox, QSpinBox:focus { padding-right: 34px; }"
+        "QSpinBox::up-button, QSpinBox::down-button { subcontrol-origin: border;"
+        " width: 26px; border: none; background: transparent; border-radius: 6px; }"
+        "QSpinBox::up-button { subcontrol-position: top right; margin: 4px 4px 0 0; }"
+        "QSpinBox::down-button { subcontrol-position: bottom right; margin: 0 4px 4px 0; }"
+        f"QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {hover}; }}"
+        "QSpinBox::up-arrow, QSpinBox::down-arrow { image: none; width: 0; height: 0; }"
+        "QComboBox:disabled, QSpinBox:disabled, QLineEdit:disabled {"
+        f" color: {muted}; background: transparent; }}"
+        f"QComboBox QAbstractItemView {{ color: {text}; background: {tokens.menu};"
+        f" border: 1px solid {rgba(tokens.menu_border)}; border-radius: 12px; padding: 6px;"
+        f" outline: 0; selection-background-color: {tokens.accent[0]};"
+        " selection-color: white; }"
+        "QComboBox QAbstractItemView::item { min-height: 30px; padding: 4px 10px;"
+        " border-radius: 8px; }"
+        f"QComboBox QAbstractItemView::item:selected {{ background: {accent}; color: white; }}"
+        # Switches paint themselves over a transparent indicator.
+        "QCheckBox { spacing: 10px; outline: none; padding: 4px; }"
+        "QCheckBox::indicator { width: 36px; height: 20px; border: none;"
+        " background: transparent; image: none; }"
+        # Scroll bars.
+        "QScrollBar:vertical { background: transparent; width: 12px; margin: 4px 2px;"
+        " border: none; }"
+        "QScrollBar:horizontal { background: transparent; height: 12px; margin: 2px 4px;"
+        " border: none; }"
+        f"QScrollBar::handle {{ background: {rgba(tokens.scroll)}; border-radius: 4px; }}"
+        "QScrollBar::handle:hover, QScrollBar::handle:pressed {"
+        f" background: {rgba(tokens.scroll_hover)}; }}"
+        "QScrollBar::handle:vertical { min-height: 36px; }"
+        "QScrollBar::handle:horizontal { min-width: 36px; }"
+        "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; border: none;"
+        " background: none; }"
+        "QScrollBar::add-page, QScrollBar::sub-page { background: none; }"
+        f"QProgressBar {{ color: {text}; background: {field}; border: 1px solid {field_border};"
+        " border-radius: 9px; min-height: 22px; text-align: center; }"
+        "QProgressBar::chunk { border-radius: 8px; background: "
+        f"{gradient_css(tuple(rgba(stop) for stop in tokens.progress), horizontal=True)}; }}"
+        f"QToolTip {{ color: {text}; background: {tokens.menu};"
+        f" border: 1px solid {rgba(tokens.menu_border)}; padding: 6px 8px; }}"
+        # Buttons: glass by default, the accent gradient for the one primary action.
+        f"QPushButton, QToolButton {{ color: {text}; background: {rgba(tokens.button)};"
+        f" border: 1px solid {rgba(tokens.button_border)}; border-radius: 12px;"
+        " padding: 8px 14px; }"
+        f"QPushButton:hover, QToolButton:hover {{ background: {rgba(tokens.button_hover)}; }}"
+        f"QPushButton:pressed, QToolButton:pressed {{ background: {rgba(tokens.button_pressed)}; }}"
+        f"QPushButton:focus, QToolButton:focus {{ border: 2px solid {focus};"
+        " padding: 7px 13px; }"
+        f"QPushButton:disabled {{ color: {muted}; background: transparent; }}"
+        "QPushButton[primary=true], QPushButton:checked {"
+        f" background: {accent}; color: white; border: 1px solid rgba(255,255,255,70);"
+        " font-weight: 600; }"
+        "QPushButton[primary=true]:hover, QPushButton:checked:hover {"
+        f" background: {accent}; border: 1px solid rgba(255,255,255,190); }}"
+        f"QPushButton[primary=true]:pressed {{ background: {pressed}; }}"
+        f"QPushButton[primary=true]:focus, QPushButton:checked:focus {{"
+        f" border: 2px solid {focus}; }}"
+        f"QPushButton[primary=true]:disabled {{ color: {muted};"
+        f" background: {rgba(tokens.button)}; border: 1px solid {rgba(tokens.button_border)}; }}"
+        # Destructive actions stay quiet: red text and border, never a filled red.
+        f"QPushButton[danger=true] {{ color: {tokens.danger}; background: transparent;"
+        f" border: 1px solid {rgba(tokens.danger_border)}; }}"
+        f"QPushButton[danger=true]:hover {{ background: {rgba(tokens.danger_hover)}; }}"
+        f"QPushButton[danger=true]:focus {{ border: 2px solid {focus}; }}"
+        f"QPushButton[danger=true]:disabled {{ color: {muted};"
+        f" border: 1px solid {rgba(tokens.button_border)}; }}"
+        # Sidebar navigation reads as a list of places, not as buttons.
+        f"QPushButton[nav=true] {{ color: {muted}; background: transparent;"
+        " border: 1px solid transparent; text-align: left; padding: 9px 12px; }"
+        f"QPushButton[nav=true]:hover {{ color: {text}; background: {hover}; }}"
+        f"QPushButton[nav=true]:checked {{ color: {text};"
+        f" background: {rgba(tokens.nav_selected)};"
+        f" border: 1px solid {rgba(tokens.button_border)}; font-weight: 600; }}"
+        f"QPushButton[nav=true]:focus {{ border: 2px solid {focus}; padding: 8px 11px; }}"
+        # Caption glyphs: no box, a hover fill, red for close.
+        "QPushButton#captionButton, QToolButton#closeGlyph { background: transparent;"
+        " border: none; border-radius: 8px; padding: 0; }"
+        f"QPushButton#captionButton:hover, QToolButton#closeGlyph:hover {{ background: {hover}; }}"
+        "QPushButton#captionButton[closes=true]:hover, QToolButton#closeGlyph:hover {"
+        f" background: {tokens.close_hover}; }}"
+        f"QPushButton#captionButton:focus, QToolButton#closeGlyph:focus {{"
+        f" border: 2px solid {focus}; padding: 0; }}"
+        # A group box is a nested card with its title inside.
+        f"QGroupBox {{ background: {rgba(tokens.card[1])};"
+        f" border: 1px solid {rgba(tokens.card_border)}; border-radius: 14px;"
+        " margin-top: 0; padding: 42px 14px 14px 14px; }"
+        "QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left;"
+        " left: 14px; top: 13px; padding: 0; }"
+        "QTabWidget::pane { border: none; }"
+        "QTabWidget::tab-bar { left: 0; }"
+        f"QMessageBox, QFileDialog {{ background: {tokens.menu}; }}"
+    )
+
+
 class GlassDialog(QDialog):
     def __init__(self) -> None:
         super().__init__()
@@ -445,13 +922,10 @@ class GlassDialog(QDialog):
         handle = DragHandle(title)
         handle.setObjectName(style)
         handle.setToolTip("Drag to move this window")
-        close = QToolButton()
-        close.setText("×")
-        close.setAccessibleName("Close window")
-        close.setToolTip("Close window")
+        close = CloseGlyph()
         close.clicked.connect(self.reject)
         row.addWidget(handle, 1)
-        row.addWidget(close)
+        row.addWidget(close, 0, Qt.AlignmentFlag.AlignTop)
         return row
 
     def refresh_surface(self) -> None:
@@ -459,120 +933,7 @@ class GlassDialog(QDialog):
         if self.surface_mode == mode:
             return  # Stylesheet palette notifications must not reapply the same sheet.
         self.surface_mode = mode
-        if mode[1]:
-            self.setStyleSheet("")
-        else:
-            dark = mode[0]
-            text, muted = ink(dark)
-            field = "rgba(16, 25, 48, 125)" if dark else "rgba(255, 255, 255, 155)"
-            border = "rgba(227, 239, 255, 50)" if dark else "rgba(255, 255, 255, 220)"
-            selected = "rgba(17,35,66,175)" if dark else "rgba(109,164,229,55)"
-            focus = "#9fd9ff" if dark else "#365f95"
-            glass = (
-                "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,255,255,35),"
-                "stop:0.45 rgba(228,238,255,16),stop:1 rgba(167,201,245,25))"
-                if dark
-                else "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,255,255,175),"
-                "stop:0.45 rgba(255,255,255,90),stop:1 rgba(238,245,255,135))"
-            )
-            menu = "#1b2a40" if dark else "#f5faff"
-            hover = "rgba(255,255,255,22)" if dark else "rgba(255,255,255,135)"
-            handle = "rgba(220,235,255,70)" if dark else "rgba(54,95,149,85)"
-            handle_hover = "rgba(220,235,255,125)" if dark else "rgba(54,95,149,145)"
-            self.setStyleSheet(
-                f"* {{ font-family: '{interface_family()}'; font-size: 10pt; }}"
-                f"QDialog#glassDialog {{ color: {text}; }}"
-                f"QLabel, QCheckBox, QGroupBox {{ color: {text}; background: transparent; }}"
-                "QLabel#windowTitle { font-size: 13px; font-weight: 600; padding: 2px; }"
-                "QLabel#brand { font-size: 17px; font-weight: 600; padding: 10px 0; }"
-                "QLabel#pageTitle { font-size: 28px; font-weight: 600; }"
-                "QLabel#metricNumber { font-size: 28px; font-weight: 600; }"
-                f"QFrame#metric, QFrame#sidebar, QWidget#transcriptPanel, QFrame#emptyHistory"
-                f" {{ background: {glass}; border: 1px solid {border}; border-radius: 20px; }}"
-                f"QFrame#settingsSection {{ background: {glass}; border: 1px solid {border};"
-                " border-radius: 18px; }"
-                "QLabel[sectionTitle=true] { font-size: 15px; font-weight: 600; }"
-                "QLabel#emptyTitle { font-size: 17px; font-weight: 600; }"
-                f"QListWidget, QTableWidget {{ color: {text}; background: {glass}; "
-                f"border: 1px solid {border};"
-                " border-radius: 20px; padding: 8px; }"
-                # A transparent border keeps selected rows the same height as the others.
-                "QListWidget::item { padding: 12px 8px; border-radius: 8px;"
-                " border: 1px solid transparent; }"
-                f"QHeaderView::section {{ color: {text}; background: {field}; "
-                "border: none; padding: 10px 6px; }"
-                "QTableWidget::item { padding: 10px 6px; }"
-                f"QListWidget::item:selected {{ background: {selected};"
-                f" color: {text}; border: 1px solid {border}; }}"
-                "QWidget#glassBody, QScrollArea { background: transparent; border: none; }"
-                "QSplitter::handle { background: transparent; }"
-                f"QLineEdit, QTextEdit, QComboBox, QSpinBox {{ color: {text};"
-                f" background: {field}; border: 1px solid {border}; border-radius: 9px;"
-                " padding: 7px; selection-background-color: #287e79; }"
-                "QComboBox { padding-right: 32px; }"
-                "QComboBox::drop-down { width: 28px; border: none; }"
-                "QComboBox::down-arrow { image: none; }"
-                "QSpinBox { padding-right: 34px; }"
-                "QSpinBox::up-button, QSpinBox::down-button { subcontrol-origin: border;"
-                " width: 26px; border: none; background: transparent; border-radius: 6px; }"
-                "QSpinBox::up-button { subcontrol-position: top right; margin: 4px 4px 0 0; }"
-                "QSpinBox::down-button { subcontrol-position: bottom right; margin: 0 4px 4px 0; }"
-                f"QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {hover}; }}"
-                "QSpinBox::up-arrow, QSpinBox::down-arrow { image: none; width: 0; height: 0; }"
-                "QCheckBox { spacing: 10px; outline: none; padding: 4px; }"
-                "QCheckBox::indicator { width: 20px; height: 20px; border: none;"
-                " background: transparent; image: none; }"
-                "QScrollBar:vertical { background: transparent; width: 12px; margin: 4px 2px;"
-                " border: none; }"
-                "QScrollBar:horizontal { background: transparent; height: 12px; margin: 2px 4px;"
-                " border: none; }"
-                f"QScrollBar::handle {{ background: {handle}; border-radius: 4px; }}"
-                "QScrollBar::handle:hover, QScrollBar::handle:pressed {"
-                f" background: {handle_hover}; }}"
-                "QScrollBar::handle:vertical { min-height: 36px; }"
-                "QScrollBar::handle:horizontal { min-width: 36px; }"
-                "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; border: none;"
-                " background: none; }"
-                "QScrollBar::add-page, QScrollBar::sub-page { background: none; }"
-                f"QProgressBar {{ color: {text}; background: {field}; border: 1px solid {border};"
-                " border-radius: 7px; min-height: 22px; text-align: center; }"
-                "QProgressBar::chunk { background: rgba(71,151,164,160); border-radius: 6px; }"
-                f"QComboBox QAbstractItemView {{ color: {text}; background: {menu};"
-                f" border: 1px solid {border}; border-radius: 10px; padding: 6px;"
-                " outline: 0; selection-background-color: #315aa3; selection-color: white; }"
-                "QComboBox QAbstractItemView::item { min-height: 30px; padding: 4px 10px;"
-                " border-radius: 6px; }"
-                "QComboBox QAbstractItemView::item:selected { background: #315aa3; color: white; }"
-                f"QPushButton, QToolButton {{ color: {text}; background: {field};"
-                f" border: 1px solid {border}; border-radius: 10px; padding: 8px 12px; }}"
-                "QPushButton:hover, QToolButton:hover { border-color: #8cbddd; }"
-                "QPushButton#captionButton { padding: 0; }"
-                "QPushButton:focus, QToolButton:focus, QLineEdit:focus, QTextEdit:focus,"
-                f" QComboBox:focus, QSpinBox:focus {{ border: 2px solid {focus}; }}"
-                "QPushButton[primary=true], QPushButton:checked {"
-                " background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-                " stop:0 rgba(52,92,150,245),stop:1 rgba(75,72,137,245)); color: white;"
-                " border-color: rgba(219,236,255,110); font-weight: 600; }"
-                f"QPushButton:disabled, QLabel:disabled {{ color: {muted}; }}"
-                "QComboBox:disabled, QSpinBox:disabled, QLineEdit:disabled {"
-                f" color: {muted}; background: transparent; }}"
-                f"QLabel[hint=true] {{ color: {muted}; font-size: 9pt; }}"
-                # Sidebar navigation reads as a list of places, not as buttons.
-                "QPushButton[nav=true] { background: transparent; border: 1px solid transparent;"
-                " text-align: left; padding: 9px 14px; }"
-                f"QPushButton[nav=true]:hover {{ background: {hover}; border-color: {border}; }}"
-                "QPushButton[nav=true]:checked { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-                " stop:0 rgba(52,92,150,245),stop:1 rgba(75,72,137,245)); color: white;"
-                " border-color: rgba(219,236,255,110); font-weight: 600; }"
-                f"QPushButton[nav=true]:focus {{ border: 2px solid {focus}; }}"
-                f"QGroupBox {{ border: 1px solid {border}; border-radius: 14px;"
-                " margin-top: 12px; padding: 18px 12px 12px; }"
-                "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }"
-                f"QTabWidget::pane {{ border: 1px solid {border}; border-radius: 9px; }}"
-                f"QTabBar::tab {{ color: {text}; padding: 8px 14px; background: transparent;"
-                " border: 1px solid transparent; border-radius: 8px; margin-right: 4px; }"
-                f"QTabBar::tab:selected {{ background: {field}; border: 1px solid {border}; }}"
-            )
+        self.setStyleSheet("" if mode[1] else stylesheet(theme(mode[0])))
         if self.isVisible():
             self.native_glass = enable_backdrop(self)
         self.update()
@@ -588,12 +949,17 @@ class GlassDialog(QDialog):
             self.refresh_surface()
 
     def paintEvent(self, event: Any) -> None:
-        if self.isWindow():
-            paint_surface(self, self.native_glass, 22, opacity=160 if dark_surface() else 185)
+        if not self.isWindow():
+            return
+        painter = QPainter(self)
+        if high_contrast():
+            painter.fillRect(self.rect(), self.palette().window())
+            return
+        paint_backdrop(painter, QRectF(self.rect()), current_theme(), self.native_glass, 22)
 
 
 class GlassCapsule(QWidget):
-    """A frosted, plain-text capsule: a painted state dot, a short status and the words."""
+    """A dark, plain-text HUD pill: a painted state dot, a short status and the words."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -608,7 +974,7 @@ class GlassCapsule(QWidget):
         layout.setSpacing(6)
         row = QHBoxLayout()
         row.setSpacing(9)
-        self.dot = StatusDot()
+        self.dot = StatusDot(dark=True)
         self.status = QLabel()
         self.status.setObjectName("capsuleStatus")
         self.words = QLabel()
@@ -636,7 +1002,7 @@ class GlassCapsule(QWidget):
         if mode[1]:
             color = muted = QApplication.palette().color(QPalette.ColorRole.WindowText).name()
         else:
-            color, muted = ink(mode[0])
+            color, muted = DARK.text, DARK.muted  # The capsule is dark in both themes.
         self.setStyleSheet(
             f"* {{ background: transparent; font-family: '{interface_family()}'; }}"
             f"QLabel#capsuleStatus {{ color: {muted}; font-size: 12px; font-weight: 600;"
@@ -676,4 +1042,31 @@ class GlassCapsule(QWidget):
         self.native_glass = False  # Keep native rectangular frames out of the capsule.
 
     def paintEvent(self, event: Any) -> None:
-        paint_surface(self, True, min(24, self.height() / 2), rim=False, opacity=250)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        area = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        radius = min(24.0, area.height() / 2)
+        if high_contrast():
+            painter.setPen(QPen(self.palette().color(QPalette.ColorRole.WindowText), 1))
+            painter.setBrush(self.palette().window())
+            painter.drawRoundedRect(area, radius, radius)
+            return
+        top, bottom = DARK.hud
+        fill = QLinearGradient(area.topLeft(), area.bottomLeft())
+        fill.setColorAt(0, QColor(*top))
+        fill.setColorAt(1, QColor(*bottom))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(fill)
+        painter.drawRoundedRect(area, radius, radius)
+        # A faint inner top highlight under a cyan-to-violet rim.
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        shine = QLinearGradient(area.topLeft(), area.bottomLeft())
+        shine.setColorAt(0, QColor(255, 255, 255, 46))
+        shine.setColorAt(0.5, QColor(255, 255, 255, 0))
+        painter.setPen(QPen(QBrush(shine), 1))
+        painter.drawRoundedRect(area.adjusted(1, 1, -1, -1), radius - 1, radius - 1)
+        rim = QLinearGradient(area.topLeft(), area.topRight())
+        rim.setColorAt(0, QColor(DARK.hud_rim[0]))
+        rim.setColorAt(1, QColor(DARK.hud_rim[1]))
+        painter.setPen(QPen(QBrush(rim), 1))
+        painter.drawRoundedRect(area, radius, radius)

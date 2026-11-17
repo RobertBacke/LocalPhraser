@@ -187,6 +187,7 @@ class VocabularyPage(QScrollArea):
             "Clear saved corrections and dismissed terms. Approved words remain. "
             "Recurring terms may reappear from saved dictations."
         )
+        self.forget_button.setProperty("danger", True)
         self.forget_button.clicked.connect(self.forget_suggestions)
         layout.addWidget(self.forget_button)
         layout.addStretch()
