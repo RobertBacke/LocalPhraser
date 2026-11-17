@@ -117,3 +117,47 @@ def test_engine_note_is_shown_and_follows_the_engine_after_refresh(app, tmp_path
         assert page.engine_note.text() == note[0]
     finally:
         page.deleteLater()
+
+
+def test_vocabulary_is_three_cards_with_icon_buttons_and_a_quiet_forget(app):
+    from PySide6.QtWidgets import QLabel
+
+    from localphraser.appearance import GlassPanel, Glyph
+
+    history = History(None)
+    page = VocabularyPage(history, lambda: "Codex, PySide", lambda value: None, lambda: "note")
+    try:
+        page.refresh()
+        cards = page.findChildren(GlassPanel, "vocabularyCard")
+        titles = [
+            next(
+                label.text()
+                for label in card.findChildren(QLabel)
+                if label.property("sectionTitle")
+            )
+            for card in cards
+        ]
+        assert titles == ["Add a word", "Approved words", "Suggestions to review"]
+        assert all(card.findChild(Glyph) is not None for card in cards)
+        add, approved, review = cards
+        for widget in (page.entry, page.add_button, page.correct_button, page.notice):
+            assert add.isAncestorOf(widget)
+        for widget in (page.budget, page.words, page.remove_button):
+            assert approved.isAncestorOf(widget)
+        for widget in (
+            page.pending,
+            page.empty_suggestions,
+            page.accept_button,
+            page.dismiss_button,
+            page.forget_button,
+        ):
+            assert review.isAncestorOf(widget)
+        assert (page.add_button.role, page.add_button.glyph) == ("primary", "plus")
+        assert (page.forget_button.role, page.forget_button.glyph) == ("danger", "trash")
+        assert page.accept_button.glyph == "check" and page.dismiss_button.glyph == "close"
+        assert page.remove_button.glyph == "trash" and page.remove_button.role != "danger"
+        assert page.findChild(QLabel, "pageTitle").text() == "Your vocabulary"
+        assert [page.words.item(row).text() for row in range(2)] == ["Codex", "PySide"]
+    finally:
+        page.deleteLater()
+        history.close()

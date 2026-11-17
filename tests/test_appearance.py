@@ -685,3 +685,118 @@ def test_glass_close_button_preserves_active_download_guard(app, monkeypatch):
     close.click()
     assert not settings.isVisible()
     settings.deleteLater()
+
+
+def test_settings_sections_have_icons_and_save_is_the_primary_action(app, monkeypatch):
+    from PySide6.QtWidgets import QDialogButtonBox, QFrame
+
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    settings = Settings(Config(mode="polished"), Mock())
+    try:
+        glyphs = {
+            frame.accessibleName(): frame.findChild(appearance.Glyph).name
+            for frame in settings.findChildren(QFrame, "settingsSection")
+        }
+        assert glyphs == {
+            "General": "grid",
+            "Shortcut": "keyboard",
+            "Microphone": "microphone",
+            "Speech recognition": "waveform",
+            "Text output": "text",
+            "Privacy and credits": "shield",
+        }
+        for frame in settings.findChildren(QFrame, "settingsSection"):
+            title = next(
+                label for label in frame.findChildren(QLabel) if label.property("sectionTitle")
+            )
+            assert title.text() == frame.accessibleName()  # The icon never replaces the title.
+        buttons = settings.findChild(QDialogButtonBox)
+        save = buttons.button(QDialogButtonBox.StandardButton.Save)
+        cancel = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        assert save.text() == "Save" and save.property("primary") is True
+        assert not save.icon().isNull()
+        assert cancel.property("primary") is not True
+        for button, glyph in (
+            (settings.install, "download"),
+            (settings.install_refinement, "download"),
+        ):
+            assert button.glyph == glyph and button.text().startswith("Download or repair")
+        for box in (
+            settings.start_at_login,
+            settings.keep_history,
+            settings.keep_ready,
+            settings.live_preview,
+            settings.insert,
+        ):
+            assert isinstance(box, appearance.GlassCheckBox)  # Every option is a switch.
+    finally:
+        settings.close()
+        settings.deleteLater()
+
+
+def test_local_polishing_title_sits_inside_its_card_clear_of_the_border(app, monkeypatch):
+    from PySide6.QtWidgets import QStyle, QStyleOptionGroupBox
+
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    settings = Settings(Config(mode="polished"), Mock())
+    try:
+        settings.resize(720, 900)
+        settings.show()
+        settings.scroll_area.ensureWidgetVisible(settings.polishing)
+        app.processEvents()
+        box = settings.polishing
+        assert box.title() == "Local polishing" and box.isVisible()
+        option = QStyleOptionGroupBox()
+        box.initStyleOption(option)
+        style = box.style()
+        title = style.subControlRect(
+            QStyle.ComplexControl.CC_GroupBox, option, QStyle.SubControl.SC_GroupBoxLabel, box
+        )
+        frame = style.subControlRect(
+            QStyle.ComplexControl.CC_GroupBox, option, QStyle.SubControl.SC_GroupBoxFrame, box
+        )
+        # Wholly inside the card: below its top border and above the first field.
+        assert title.top() >= frame.top() + 6 and title.left() >= frame.left() + 6
+        assert title.bottom() < settings.refinement_model.geometry().top()
+        assert title.right() < frame.right()
+    finally:
+        settings.close()
+        settings.deleteLater()
+
+
+def test_latest_transcript_keeps_its_content_with_segments_and_a_primary_copy(app):
+    from PySide6.QtWidgets import QPushButton
+
+    from localphraser.ui import Latest
+
+    latest = Latest()
+    try:
+        assert isinstance(latest.tabs, appearance.SegmentedTabs)
+        bar = latest.tabs.tabBar()
+        assert [bar.tabText(index) for index in range(bar.count())] == [
+            "Result",
+            "Raw transcription",
+        ]
+        buttons = {button.text(): button for button in latest.findChildren(QPushButton)}
+        assert set(buttons) == {"Copy to clipboard", "Clear"}
+        copy = buttons["Copy to clipboard"]
+        assert (copy.role, copy.glyph) == ("primary", "copy")
+        assert buttons["Clear"].property("primary") is not True
+        close = latest.findChild(QToolButton)
+        assert isinstance(close, appearance.CloseGlyph)
+        assert close.accessibleName() == "Close window" and not close.text()
+        latest.set_transcript("Result words.", "Inserted.")
+        latest.raw.setPlainText("raw words")
+        copy.click()
+        assert app.clipboard().text() == "Result words."
+        latest.tabs.setCurrentIndex(1)
+        copy.click()
+        assert app.clipboard().text() == "raw words"
+        latest.record_error("Microphone disconnected.")
+        assert latest.last_error.text() == "Last error: Microphone disconnected."
+        assert latest.last_error.property("error") is True
+        for editor in (latest.text, latest.raw):
+            assert not editor.acceptRichText() and editor.isReadOnly()
+    finally:
+        latest.close()
+        latest.deleteLater()

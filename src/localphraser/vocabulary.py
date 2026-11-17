@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from localphraser.appearance import NoteLabel
+from localphraser.appearance import GlassPanel, Glyph, IconButton, NoteLabel
 
 if TYPE_CHECKING:
     from localphraser.history import History
@@ -108,8 +108,8 @@ class VocabularyPage(QScrollArea):
         body.setObjectName("glassBody")
         self.setWidget(body)
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(0, 14, 14, 8)  # Title lines up with the other pages.
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 6, 8, 8)  # Title lines up with the other pages.
+        layout.setSpacing(12)
         heading = QLabel("Your vocabulary")
         heading.setObjectName("pageTitle")
         layout.addWidget(heading)
@@ -121,44 +121,39 @@ class VocabularyPage(QScrollArea):
         )
         self.engine_note = NoteLabel()
         layout.addWidget(self.engine_note)
-        layout.addSpacing(6)
+
+        add = self.card(layout, "Add a word", "plus")
         self.entry = QLineEdit()
         self.entry.setMaxLength(64)
         self.entry.setPlaceholderText("A name or corrected spelling, e.g. Codex")
         self.entry.setAccessibleName("Vocabulary word or phrase")
-        layout.addWidget(self.entry)
+        add.addWidget(self.entry)
         actions = QHBoxLayout()
-        self.add_button = QPushButton("Add word")
-        self.add_button.setProperty("primary", True)
+        actions.setSpacing(10)
+        self.add_button = IconButton("Add word", "plus", "primary")
         self.add_button.clicked.connect(self.add_word)
         self.entry.returnPressed.connect(self.add_word)
         self.correct_button = QPushButton("Suggest corrected spelling")
         self.correct_button.clicked.connect(self.suggest_correction)
         actions.addWidget(self.add_button)
         actions.addWidget(self.correct_button)
-        layout.addLayout(actions)
-        self.notice = QLabel()
-        self.notice.setTextFormat(Qt.TextFormat.PlainText)
-        self.notice.setWordWrap(True)
-        layout.addWidget(self.notice)
-        layout.addSpacing(6)
-        words_title = QLabel("Approved words")
-        words_title.setProperty("sectionTitle", True)
-        layout.addWidget(words_title)
+        add.addLayout(actions)
+        self.notice = NoteLabel(hint=False, collapse_when_empty=True)
+        add.addWidget(self.notice)
+
+        approved = self.card(layout, "Approved words", "check")
         self.budget = NoteLabel()
-        layout.addWidget(self.budget)
+        approved.addWidget(self.budget)
         self.words = QListWidget()
         self.words.setAccessibleName("Approved vocabulary")
         self.words.setMaximumHeight(180)
-        layout.addWidget(self.words)
-        self.remove_button = QPushButton("Remove selected word")
+        approved.addWidget(self.words)
+        self.remove_button = IconButton("Remove selected word", "trash")
         self.remove_button.clicked.connect(self.remove_word)
-        layout.addWidget(self.remove_button)
-        layout.addSpacing(6)
-        review_title = QLabel("Suggestions to review")
-        review_title.setProperty("sectionTitle", True)
-        layout.addWidget(review_title)
-        layout.addWidget(
+        approved.addWidget(self.remove_button)
+
+        review_card = self.card(layout, "Suggestions to review", "sparkle")
+        review_card.addWidget(
             NoteLabel(
                 "Recurring names and technical terms from the latest 200 saved dictations, plus "
                 "spellings you submit above. Pattern-based suggestions can be wrong; approve "
@@ -169,32 +164,48 @@ class VocabularyPage(QScrollArea):
             "No suggestions yet. Recurring terms will appear here for review."
         )
         self.empty_suggestions.setWordWrap(True)
-        layout.addWidget(self.empty_suggestions)
+        review_card.addWidget(self.empty_suggestions)
         self.pending = QListWidget()
         self.pending.setAccessibleName("Vocabulary suggestions")
-        self.pending.setMinimumHeight(110)
-        layout.addWidget(self.pending)
+        review_card.addWidget(self.pending)
         review = QHBoxLayout()
-        self.accept_button = QPushButton("Approve word")
+        review.setSpacing(10)
+        self.accept_button = IconButton("Approve word", "check")
         self.accept_button.clicked.connect(self.approve)
-        self.dismiss_button = QPushButton("Dismiss")
+        self.dismiss_button = IconButton("Dismiss", "close")
         self.dismiss_button.clicked.connect(self.dismiss)
         review.addWidget(self.accept_button)
         review.addWidget(self.dismiss_button)
-        layout.addLayout(review)
-        self.forget_button = QPushButton("Forget suggestion history")
+        review_card.addLayout(review)
+        self.forget_button = IconButton("Forget suggestion history", "trash", "danger")
         self.forget_button.setToolTip(
             "Clear saved corrections and dismissed terms. Approved words remain. "
             "Recurring terms may reappear from saved dictations."
         )
-        self.forget_button.setProperty("danger", True)
         self.forget_button.clicked.connect(self.forget_suggestions)
-        layout.addWidget(self.forget_button)
+        review_card.addWidget(self.forget_button)
         layout.addStretch()
         self.words.currentRowChanged.connect(
             lambda: self.remove_button.setEnabled(self.words.currentRow() >= 0)
         )
         self.pending.currentRowChanged.connect(self.update_review)
+
+    def card(self, layout: QVBoxLayout, title: str, glyph: str) -> QVBoxLayout:
+        """A titled glass card with an icon beside its title; returns its content layout."""
+        frame = GlassPanel("vocabularyCard")
+        frame.setAccessibleName(title)
+        box = QVBoxLayout(frame)
+        box.setContentsMargins(18, 16, 18, 18)
+        box.setSpacing(10)
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        header.addWidget(Glyph(glyph, "glow", 30, badge=True))
+        heading = QLabel(title)
+        heading.setProperty("sectionTitle", True)
+        header.addWidget(heading, 1)
+        box.addLayout(header)
+        layout.addWidget(frame)
+        return box
 
     def update_review(self) -> None:
         selected = self.pending.currentItem() is not None
@@ -206,7 +217,7 @@ class VocabularyPage(QScrollArea):
         self.engine_note.setText(self.note_for_engine())
         self.words.clear()
         self.words.addItems(terms(self.current()))
-        self.words.setFixedHeight(max(70, min(180, self.words.count() * 44 + 20)))
+        self.words.setFixedHeight(max(58, min(180, self.words.count() * 40 + 16)))
         self.budget.setText(
             f"Recognition hints: {len(self.current())}/300 characters. Keep the list focused."
         )
@@ -229,7 +240,7 @@ class VocabularyPage(QScrollArea):
         except Exception:
             self.notice.setText("Suggestions could not be read. Reopen Vocabulary to retry.")
         self.remove_button.setEnabled(False)
-        self.pending.setFixedHeight(max(90, min(200, self.pending.count() * 44 + 20)))
+        self.pending.setFixedHeight(max(58, min(200, self.pending.count() * 40 + 16)))
         self.pending.setVisible(self.pending.count() > 0)
         self.empty_suggestions.setVisible(self.pending.count() == 0)
         self.update_review()

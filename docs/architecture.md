@@ -15,7 +15,8 @@ Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone
 - `config.py`: validated immutable settings, atomic JSON saves.
 - `hotkey.py`: Caps Lock-specific suppression on a dedicated Windows message thread,
   with queued UI signals; registered modifier shortcuts use 15 ms release polling while held.
-- `audio.py`: bounded preallocated RAM, PortAudio cleanup, overflow/disconnect handling.
+- `audio.py`: bounded preallocated RAM, PortAudio cleanup, overflow/disconnect handling,
+  and the peak of the latest input block as one float for the level meters.
 - `shortcut.py`: focused key/chord recorder with cancellation and validation.
 - `target_worker.py`: single COM owner thread, opaque target tokens, verification deadlines.
 - `pipeline.py`: explicit Idle/Recording/Transcribing/Inserting/Error lifecycle; backend protocols.
@@ -29,7 +30,11 @@ Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone
   in pieces cut at the quietest 200 ms between 20 s and 30 s. Approved vocabulary terms
   restore spelling after recognition. There is no VAD and no level correction.
 - `levels.py`: click-tolerant speech level (fourth-loudest 20 ms frame peak) shared by the
-  quiet-input notice and Whisper's level correction.
+  quiet-input notice and Whisper's level correction, and the decibel scale of the level
+  meters (−54 dBFS → 0, −6 dBFS → 1).
+- `appearance.py` / `icons.py`: the two themes, the stylesheet built from them, painted
+  glass widgets (panels, switches, segmented tabs, level meter, status orb, capsule) and
+  the painted vector icons. See [design](design.md).
 - `config.inference_threads`: Automatic threads (physical cores, at most eight) for Whisper,
   Parakeet and polishing. A larger saved value is capped when used.
 - `refinement.py`: optional warm CPU llama.cpp process, bounded pipe requests, network-denied
@@ -53,8 +58,9 @@ Final recognition and polishing follow capture; repeat events are ignored. Optio
 live-preview inference can overlap capture on the same serial executor. Errors return to idle,
 with sanitized messages. Polished mode adds a Polishing state. Text stays available on insertion failures. No automatic retry
 is allowed after input delivery because partial insertion cannot be rolled back safely.
-Microphone callback only copies into bounded memory; a UI watchdog handles duration and
-disconnection. Audio starts before accessibility calls, which execute on a dedicated MTA
+Microphone callback only copies into bounded memory and records that block's peak as one
+float; a UI watchdog handles duration and disconnection, and a 33 ms UI timer that runs
+only while recording feeds the peak to the level meters. Audio starts before accessibility calls, which execute on a dedicated MTA
 worker. The UI retains only opaque target tokens; COM ranges never cross threads. Target
 verification times out to manual recovery after two seconds, and late targets are discarded.
 The final insertion stage runs asynchronously on the target worker and uses one checked
@@ -126,8 +132,10 @@ Smoke launches suppress preparation even with live preview enabled. Drafts are n
 
 ## Desktop workspace and local history
 
-`home.py` owns a normal unowned Qt Window with a taskbar button, Home/Settings navigation,
-minimize/maximize/close controls and manual-copy recording. Settings is embedded in the
+`home.py` owns a normal unowned Qt Window with a taskbar button, an icon sidebar for
+Home/Settings/Vocabulary/Analytics navigation, minimize/maximize/close controls and, on
+Home, a status hero with the manual-copy record button and a live level meter above the
+statistics and the history cards. Settings is embedded in the
 workspace; Save remains visible. Appearance previews immediately and auto-saves only that
 preference, preserving other unsaved controls and the warm pipeline. History preference
 changes also preserve the pipeline. Closing hides the workspace while Quit performs shutdown.
@@ -145,6 +153,8 @@ path hash, to restore the existing window after a second launch. It does not car
 commands or paths. The existing profile lock still prevents a second recorder. Quiet
 background launches stay quiet when an instance is already running.
 
-The floating capsule uses a single Qt-painted translucent shape without a DWM frame or
-outline, avoiding the competing rectangular/rounded borders reported by the user. Larger
-windows retain an optional Windows backdrop and a softer layered surface.
+The floating capsule uses a single Qt-painted shape without a DWM frame, avoiding the
+competing rectangular/rounded borders reported by the user: a dark pill in both themes
+with a painted gradient rim, the live level meter while recording and the state dot in
+other states. Larger windows retain an optional Windows backdrop under a painted aurora
+surface.

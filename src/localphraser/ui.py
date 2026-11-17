@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QColor, QCursor
 from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from localphraser import startup
+from localphraser import icons, startup
 from localphraser.activation import ShortcutActivation
 from localphraser.analytics import application_name
 from localphraser.appearance import (
@@ -40,6 +40,8 @@ from localphraser.appearance import (
     GlassDialog,
     GlassPanel,
     GlassSpinBox,
+    Glyph,
+    IconButton,
     NoteLabel,
     SegmentedTabs,
 )
@@ -186,6 +188,7 @@ class Latest(GlassDialog):
         self.timing = NoteLabel(collapse_when_empty=True)
         layout.addWidget(self.timing)
         self.last_error = NoteLabel(hint=False, collapse_when_empty=True)
+        self.last_error.setProperty("error", True)
         layout.addWidget(self.last_error)
         self.text = QTextEdit()
         self.text.setReadOnly(True)
@@ -198,7 +201,7 @@ class Latest(GlassDialog):
         self.tabs.addTab(self.raw, "Raw transcription")
         layout.addWidget(self.tabs)
         row = QHBoxLayout()
-        copy = QPushButton("Copy to clipboard")
+        copy = IconButton("Copy to clipboard", "copy", "primary")
         copy.clicked.connect(
             lambda: QApplication.clipboard().setText(
                 (self.raw if self.tabs.currentIndex() == 1 else self.text).toPlainText()
@@ -206,8 +209,9 @@ class Latest(GlassDialog):
         )
         clear = QPushButton("Clear")
         clear.clicked.connect(self.clear)
-        row.addWidget(copy)
-        row.addWidget(clear)
+        row.setSpacing(10)
+        row.addWidget(copy, 1)
+        row.addWidget(clear, 1)
         layout.addLayout(row)
 
     def clear(self) -> None:
@@ -305,6 +309,16 @@ class FieldGrid:
                 under(widget, wide)
             for note in notes:
                 under(note, False)
+
+
+SECTION_ICONS = {
+    "General": "grid",
+    "Shortcut": "keyboard",
+    "Microphone": "microphone",
+    "Speech recognition": "waveform",
+    "Text output": "text",
+    "Privacy and credits": "shield",
+}
 
 
 class Settings(GlassDialog):
@@ -495,7 +509,7 @@ class Settings(GlassDialog):
         self.root = QLineEdit(config.model_root)
         self.root.setCursorPosition(0)  # Show the start of a long path.
         self.root.setAccessibleName("Model directory")
-        folder = QPushButton("Browse…")
+        folder = IconButton("Browse…", "folder")
         folder.clicked.connect(self.browse)
         paths_row = QWidget()
         paths = QHBoxLayout(paths_row)
@@ -505,7 +519,7 @@ class Settings(GlassDialog):
         paths.addWidget(folder)
         speech.field("Model directory", paths_row).setBuddy(self.root)
         # The internet requirement is stated in the note under the model list and here.
-        self.install = QPushButton("Download or repair speech model")
+        self.install = IconButton("Download or repair speech model", "download")
         self.install.setToolTip(
             "Requires internet. Checks installed files. Damaged models are replaced only after "
             "a new download is verified; previous files are kept in a .damaged folder in the "
@@ -561,7 +575,7 @@ class Settings(GlassDialog):
         self.refinement_prompt = QTextEdit()
         self.refinement_prompt.setAcceptRichText(False)
         self.refinement_prompt.setPlainText(config.refinement_prompt)
-        self.refinement_prompt.setMaximumHeight(100)
+        self.refinement_prompt.setMaximumHeight(124)
         self.refinement_prompt.setAccessibleName("Polishing instructions")
         self.refinement_prompt.setToolTip(
             "Formatting instructions do not override word preservation. "
@@ -571,7 +585,7 @@ class Settings(GlassDialog):
         reset_prompt = QPushButton("Restore default instructions")
         reset_prompt.clicked.connect(lambda: self.refinement_prompt.setPlainText(DEFAULT_PROMPT))
         polishing.wide(reset_prompt)
-        self.install_refinement = QPushButton("Download or repair polishing model")
+        self.install_refinement = IconButton("Download or repair polishing model", "download")
         self.install_refinement.setToolTip("Requires internet. Checks installed files.")
         self.install_refinement.clicked.connect(lambda: self.download(True))
         polishing.wide(self.install_refinement, gap=False)
@@ -613,7 +627,11 @@ class Settings(GlassDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.button(QDialogButtonBox.StandardButton.Save).setProperty("primary", True)
+        save = buttons.button(QDialogButtonBox.StandardButton.Save)
+        save.setProperty("primary", True)
+        save.setIcon(icons.icon("check", QColor("white")))  # White on the accent, both themes.
+        save.setMinimumWidth(104)
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setMinimumWidth(96)
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -628,9 +646,13 @@ class Settings(GlassDialog):
         box.setContentsMargins(18, 16, 18, 18)
         box.setSpacing(12)
         self.section_boxes.append(box)
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        header.addWidget(Glyph(SECTION_ICONS[title], "glow", 30, badge=True))
         heading = QLabel(title)
         heading.setProperty("sectionTitle", True)
-        box.addWidget(heading)
+        header.addWidget(heading, 1)
+        box.addLayout(header)
         grid = QGridLayout()
         box.addLayout(grid)
         layout.addWidget(frame)

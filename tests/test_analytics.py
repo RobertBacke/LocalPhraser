@@ -91,3 +91,89 @@ def test_app_identity_uses_process_name_only(monkeypatch, name, expected):
 def test_dead_or_inaccessible_app_has_unknown_identity(monkeypatch):
     monkeypatch.setattr(psutil, "Process", Mock(side_effect=psutil.AccessDenied(123)))
     assert application_name(123) == "Unknown app"
+
+
+def test_counts_are_right_aligned_text_with_bars_proportional_to_the_column(app):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor
+
+    from localphraser import appearance
+    from localphraser.analytics import CountBars
+    from localphraser.home import AppWindow
+
+    history = History(None)
+    for name, count in (("Codex", 4), ("Google Chrome", 2), ("Notepad", 1)):
+        for _ in range(count):
+            history.add("test words", "Test words.", "Inserted.", 1, name)
+    window = AppWindow(history, Mock(), Mock(), Mock(), "CapsLock")
+    window.resize(1040, 740)
+    window.show()
+    window.show_analytics()
+    for _ in range(3):
+        app.processEvents()
+    try:
+        table = window.analytics.table
+        delegate = table.itemDelegate()
+        assert isinstance(delegate, CountBars)
+        # The numbers stay ordinary text for assistive technology, right-aligned.
+        assert [table.item(row, 0).text() for row in range(3)] == [
+            "Codex",
+            "Google Chrome",
+            "Notepad",
+        ]
+        for column in (1, 2, 3):
+            assert [table.item(row, column).text() for row in range(3)] == ["4", "2", "1"]
+            for row in range(3):
+                assert table.item(row, column).textAlignment() & Qt.AlignmentFlag.AlignRight
+        fractions = [delegate.fraction(table.model().index(row, 3)) for row in range(3)]
+        assert fractions == [1.0, 0.5, 0.25]
+        assert delegate.fraction(table.model().index(0, 0)) is None  # Names have no bar.
+        view = table.viewport().grab().toImage()
+
+        def bar_pixels(row):
+            # The accent bar is the only saturated, mid-light paint in a count cell.
+            rect = table.visualItemRect(table.item(row, 3))
+            return sum(
+                view.pixelColor(x, y).saturation() > 120 and view.pixelColor(x, y).lightness() > 60
+                for x in range(rect.left(), rect.right() + 1)
+                for y in range(rect.top(), rect.bottom() + 1)
+            )
+
+        assert bar_pixels(0) > bar_pixels(1) > bar_pixels(2) > 0
+        widths = [
+            delegate.bar_rect(table.visualItemRect(table.item(row, 3)), fractions[row]).width()
+            for row in range(3)
+        ]
+        assert widths[0] == pytest.approx(2 * widths[1])
+        assert widths[0] == pytest.approx(4 * widths[2])
+        end = QColor(appearance.current_theme().glow)
+        right = table.visualItemRect(table.item(0, 3))
+        tip = view.pixelColor(right.right() - delegate.PAD - 2, right.bottom() - 7)
+        assert abs(tip.hue() - end.hue()) <= 12  # The bar ends in the glow colour.
+        # A quiet header: the same surface as the rows, not an opaque band.
+        page = window.analytics.grab().toImage()
+        header = table.horizontalHeader()
+        band = page.pixelColor(header.mapTo(window.analytics, header.rect().center()))
+        body = page.pixelColor(
+            table.viewport().mapTo(window.analytics, table.viewport().rect().bottomRight())
+        )
+        assert abs(band.lightness() - body.lightness()) <= 12
+    finally:
+        window.hide()
+        window.deleteLater()
+        history.close()
+
+
+def test_empty_analytics_says_so_and_draws_no_bars(app):
+    from localphraser.analytics import CountBars
+
+    history = History(None)
+    page = AnalyticsPage(history)
+    try:
+        page.refresh()
+        assert page.table.rowCount() == 0
+        assert page.notice.text() == "Your next saved dictations will appear here."
+        assert isinstance(page.table.itemDelegate(), CountBars)
+    finally:
+        page.deleteLater()
+        history.close()

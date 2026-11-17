@@ -476,9 +476,9 @@ class IconButton(QPushButton):
         return QSize(size.width() + extra, max(size.height(), 38))
 
     def minimumSizeHint(self) -> QSize:
-        size = super().minimumSizeHint()
-        extra = self.GLYPH + self.GAP + 6 if self.glyph else 0
-        return QSize(size.width() + extra, max(size.height(), 38))
+        # A long label may elide rather than force a narrow page wider than its window.
+        size = self.sizeHint()
+        return QSize(min(size.width(), 176), size.height())
 
     def left_aligned(self) -> bool:
         return self.role in ("nav", "quiet")
@@ -1148,6 +1148,7 @@ def stylesheet(tokens: Theme) -> str:
         "QLabel[sectionTitle=true] { font-size: 15px; font-weight: 600; }"
         "QLabel#emptyTitle { font-size: 17px; font-weight: 600; }"
         f"QLabel[muted=true] {{ color: {muted}; }}"
+        f"QLabel[error=true] {{ color: {tokens.danger}; }}"
         "QLabel#pageTitle[compact=true] { font-size: 19px; }"
         "QLabel#chips { font-size: 9pt; }"
         "QLabel#chipText { font-size: 9pt; font-weight: 600; }"

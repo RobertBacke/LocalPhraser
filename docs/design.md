@@ -1,65 +1,100 @@
-# Desktop glass appearance
+# Desktop glass appearance ("Aurora glass")
 
 LocalPhraser is a desktop dictation workspace. A taskbar window contains Home, Settings,
-Vocabulary and Analytics,
-with history, speaking statistics and direct recovery access. Pearl/cyan/violet light behind
-frosted panels separates navigation, history and readable inset controls. Thin reflective
-edges, translucent gradients and fine static grain give the panels depth. The floating
-capsule keeps its high opacity, no outline and no competing native frame. No animation timer
-or external background image is used.
+Vocabulary and Analytics, with history, speaking statistics and direct recovery access.
+The look is futuristic glassmorphism: a deep (dark) or luminous (light) backdrop lit by soft
+aurora glows, crisp translucent panels with a bright rim and a top highlight, one neon
+accent family and strong text contrast. Fine static grain breaks gradient banding. No
+external background image, image file or icon font is used.
 
 ## Tokens and layout
 
-| Role | Value |
-| --- | --- |
-| Light glass | Pearl `#f5f9ff` through ice blue `#e1edf9` |
-| Light text | `#163c42` |
-| Dark glass | Midnight `#151b31` through slate `#242a41` |
-| Dark text | `#edf8f7` |
-| Ambient light | Cyan `#4a9fe7`, violet `#9976de`, teal `#3ab7c7` |
-| Primary action | Blue/violet gradient; darker backing maintains white-label contrast |
-| Focus | Light `#365f95`; Dark `#9fd9ff`, visible 2 px border |
-| Typography | Bundled Space Grotesk; 28 px product title, 13–14 px labels and preview |
+Every colour lives in one frozen `Theme` per appearance (`appearance.theme(dark)`); the
+stylesheet and all painters read from it.
 
-The taskbar workspace has a left navigation rail, saved-word/dictation/pace summaries,
-and a history list beside an original/result detail pane. Settings retains a left-aligned
-scrolling form and a fixed Save/Cancel row. Successful Save returns to Home; a missing selected
-speech model downloads before saving, with progress/cancellation and no configuration switch
-on failure. Edits made during a download require a fresh Save. Theme selection applies
-and saves immediately without applying other edited fields. The draggable
-header and accessible Close button replace the native caption. A size grip supports resizing;
+| Role | Dark | Light |
+| --- | --- | --- |
+| Backdrop (diagonal) | `#060913` → `#0B1024` → `#120B2A` | `#F4F7FF` → `#E9EEFF` → `#F3E9FF` |
+| Aurora glows | cyan, violet, faint magenta | sky, violet, pink |
+| Panel | dark tint under white 9% → 4%, white rim, top highlight | white 72% → 52%, white rim inside a faint dark hairline |
+| Text / muted | `#F3F6FF` / `#A7B3D1` | `#0B1433` / `#46527A` |
+| Fields | inset `rgba(8, 12, 28, 0.55)` | white 85% |
+| Focus (2 px) | cyan `#22D3EE` | indigo `#4F46E5` |
+| Glow / indicator | `#22D3EE` | `#0891B2` |
+| Primary action | `#4F46E5` → `#7C3AED` → `#C026D3`, white text | same |
+| States | recording red, busy amber, ready green (`TONES`) | same roles, darker values |
+| Typography | Bundled Space Grotesk; 26 px page titles, 10 pt body, 9 pt hints | same |
+
+Panels have radius 18; a card nested in a panel is one step brighter with radius 14;
+fields and buttons use radius 12. The dark panel lays a dark tint under its glass so text
+contrast does not depend on the aurora behind it. Tests paint the backdrop, panels, nested
+and selected cards and require 4.5:1 for text, muted text and the destructive red on every
+sampled pixel, and for white on each stop of the primary gradient.
+
+The sidebar holds the tinted logo mark, navigation rows with painted icons (the current page
+is a brighter glass pill with a 3 px accent bar), a status chip and a quiet Quit row. Home
+opens with a hero card: a status orb ringed in the state colour, a state chip, a headline
+that states the state in words, the shortcut hint, the primary record button and a live
+microphone level meter. Below it are three stat tiles and the history: a list of separate
+glass cards beside a detail card with chips, a segmented Result/Original control and the
+Copy and Delete actions. In a narrow window the hero drops its meter and chip, the tiles
+tighten and, below 720 px, the list sits above the detail; a short window scrolls instead
+of clipping.
+
+Settings retains a left-aligned scrolling form and a fixed Save/Cancel row; each section card
+has an icon beside its title and options are switches. Successful Save returns to Home; a
+missing selected speech model downloads before saving, with progress/cancellation and no
+configuration switch on failure. Edits made during a download require a fresh Save. Theme
+selection applies and saves immediately without applying other edited fields. The draggable
+header and accessible Close glyph replace the native caption. A size grip supports resizing;
 the existing Escape and keyboard navigation behavior remains. Latest transcript keeps Result
-and Raw tabs. The click-through dictation capsule shows Listening and recent words only.
+and Raw as a segmented control.
 
 ```text
-Settings / Latest                Dictation capsule
-┌ draggable title       Close ┐   ╭───────────────────────╮
-│ primary content            │   │ ● Listening           │
-│ scrollable controls        │   │ recent spoken words   │
-│                            │   ╰───────────────────────╯
-│              Save   Cancel │
-└────────────────────────────┘
+Settings / Latest                Dictation capsule (dark in both themes)
+┌ draggable title       Close ┐   ╭───────────────────────────╮
+│ primary content            │   │ ▂▅▇▅▂  Listening          │
+│ scrollable controls        │   │        recent spoken words │
+│                            │   ╰───────────────────────────╯
+│              Save   Cancel │    level meter while recording,
+└────────────────────────────┘    state dot in other states
 ```
 
 ## Implementation and accessibility
 
-`appearance.py` paints diffused color behind translucent panels, a fine rim and upper
-reflection with Qt. A cached, static 64 px grain texture breaks gradient banding; it does
-not animate or repeatedly sample the desktop. Embedded Settings uses the parent material
-instead of painting another opaque canvas. The transcript pane and list are distinct glass
-layers, with an unpainted splitter gap and clean tabs rather than native boxed edges.
+`appearance.py` holds the themes, builds the one stylesheet from them and paints the glass:
+`paint_backdrop` (gradient, glows, grain, rim) and `paint_panel` (fill, rim, highlight) are
+used by the windows, `GlassPanel`, the history-card delegate and the tests. Check boxes
+remain `QCheckBox` but are painted as switches (thumb left when off, right when on, a focus
+ring); the Result/Original tabs remain a `QTabBar` painted as a segmented control, so roles
+and keyboard handling are unchanged. `icons.py` draws every icon with `QPainter` paths in
+one 20 px, 1.7 px-stroke style; icons are decoration and every control keeps its text and
+accessible name. Icons on our own buttons are painted live in theme colours, so a theme
+change needs no rebuild; `icons.icon` also provides 1x/2x `QIcon`s with separate checked
+and disabled colours. Destructive actions use quiet red text and border, never a filled red.
+
+The level meter is real input level, never an animation: `Recorder.level()` is the peak of
+the latest input block (one float written in the audio callback), `Dictation.input_level()`
+returns it only while recording, and `Desktop` reads it about 30 times a second while
+recording and feeds the capsule and the Home hero through `levels.display_level`
+(−54 dBFS → 0, −6 dBFS → 1). The timer is stopped and the meters are flattened in every
+other state and on shutdown. Nothing is stored or logged. There is no decorative animation.
+
 The main/recovery windows on Windows 11 build 22621+ can accept a DWM desktop acrylic
-backdrop request; older systems,
-offscreen tests and rejected native requests use an opaque painted fallback. Composition
-policy can still reduce effects even when the API accepts a request. High contrast removes
-the custom control sheet and uses the system palette with an opaque surface.
+backdrop request; older systems, offscreen tests and rejected native requests use an opaque
+painted fallback. With acrylic the painted surface stays about 93% opaque so contrast does
+not depend on what is behind the window. Composition policy can still reduce effects even
+when the API accepts a request. High contrast removes the custom control sheet and uses the
+system palette with an opaque surface; every painted element (panels, switches, segments,
+icons, meter, orb, cards, bars) falls back to native drawing or palette colours.
 
 Appearance follows System by default; Light and Dark overrides are saved locally. Changing
 only appearance preserves the loaded pipeline and Latest transcript. Open surfaces follow
 the application palette, including stylesheet-controlled widgets. Palette notifications are
 deduplicated to avoid recursive restyling. The capsule retains its no-focus and click-through
-window flags, and uses plain text rather than interpreting recognized markup. It uses a
-single alpha-painted surface and requests no DWM backdrop or outline, avoiding the native
+window flags, and uses plain text rather than interpreting recognized markup. It floats over
+other apps, so it is the same dark pill in both themes: a deep, nearly opaque fill with a
+1 px cyan-to-violet rim painted by Qt. It requests no DWM backdrop, avoiding the native
 rectangular frame previously visible around the rounded capsule.
 
 The native appearance check saves owned-window screenshots and verifies live theme changes,
@@ -102,10 +137,12 @@ geometry is not animated first. Compact native checks cover all Settings dropdow
 ## Vocabulary, analytics and typography
 
 Vocabulary and Analytics are taskbar-workspace pages using the existing material and sidebar.
-Vocabulary separates approved recognition hints from reviewable suggestions; local pattern
-analysis is labeled explicitly, and correction/dismissal memory has an explicit deletion
-control. Analytics uses a simple application/24-hour/7-day/all-time table, describing the
-counting scope and unknown legacy entries. Both keep text selectable/plain and errors fixed.
+Vocabulary groups adding a word, approved recognition hints and reviewable suggestions into
+three cards; local pattern analysis is labeled explicitly, and correction/dismissal memory
+has an explicit deletion control. Analytics uses an application/24-hour/7-day/all-time table
+with a quiet header, row hover and right-aligned counts; a delegate draws a thin accent bar
+under each count, proportional to the largest in its column, while the numbers stay the
+cells' text. Both keep text plain and errors fixed.
 
 The interface, transcript panes and dictation widget use bundled Space Grotesk, a geometric
 sans-serif with readable text forms. The unmodified variable font and its copyright/OFL
@@ -128,7 +165,8 @@ default, with an actual shown-window Windows probe as well. See
 [Qt stylesheet inheritance](https://doc.qt.io/qt-6/stylesheet-syntax.html#inheritance).
 
 The sidebar retains enough width for complete labels at that font size. Caption controls
-use centered drawn symbols in fixed 46 × 36 logical-pixel buttons instead of font glyphs;
+use centered drawn symbols in borderless 42 × 32 logical-pixel buttons with a hover fill
+(red for Close) instead of font glyphs;
 the maximize symbol changes to Restore when appropriate. Page changes reveal the existing
 window without restoring its size/state. Minimized windows are unminimized while retaining
 their maximized/full-screen state, and normal/snapped geometry is preserved.

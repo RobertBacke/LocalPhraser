@@ -48,8 +48,10 @@ To reuse those settings, launch the EXE with that same absolute `--config` path,
 existing model directory in Settings and Save. Rebuilt EXEs share the normal default profile;
 models do not need downloading for every build. No project-folder scan or silent migration occurs.
 
-Opening the EXE shows a taskbar desktop workspace with Home, Settings and Latest transcript.
-Home shows locally saved transcriptions and speaking statistics. Minimize keeps the taskbar
+Opening the EXE shows a taskbar desktop workspace with Home, Settings, Vocabulary,
+Analytics and Latest transcript in an icon sidebar. Home opens with the current status,
+the record button and a live microphone level, then speaking statistics and locally
+saved transcriptions as cards. Minimize keeps the taskbar
 button; Close keeps dictation in the background. Open the EXE again or use the tray to
 restore the same window. Quit LocalPhraser exits the app. Save returns to Home after applying
 settings. If the selected speech model is missing, Save downloads it first with visible
@@ -80,9 +82,10 @@ Settings include shortcut, microphone, model location/selection, CPU threads (Au
 default: physical cores, at most eight), recording limit,
 and automatic insertion. Appearance can follow the system or use Light or Dark; saving only
 appearance preserves the loaded speech model. Appearance applies immediately and auto-saves;
-other settings use Save. Settings, Latest transcript and the dictation
+other settings use Save. The workspace, Latest transcript and the dictation
 capsule use a [glass appearance](docs/design.md), with a readable fallback when native
-backdrop effects are unavailable. Raw mode is the default. Optional Polished mode adds local
+backdrop effects are unavailable. While listening, the capsule shows the live microphone
+level beside the status and the recent words. Raw mode is the default. Optional Polished mode adds local
 punctuation, capitalization, and hesitation removal. **Start LocalPhraser upon startup** is opt-in:
 enable it in Settings and Save after choosing a permanent application location.
 Microphones use exact device names and audio APIs; ambiguous duplicates are refused.
