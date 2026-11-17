@@ -1,5 +1,6 @@
 """Serial lifecycle independent of Qt, Windows, and the selected ASR backend."""
 
+import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -12,6 +13,9 @@ import numpy as np
 from localphraser.audio import SAMPLE_RATE, Audio, resample_audio
 from localphraser.recognition import Recognizer
 from localphraser.refinement import RefinementRejected, Refiner, preserve_words
+
+# People release push-to-talk while finishing the last word; keep capturing briefly.
+TAIL_SECONDS = 0.25
 
 
 class State(StrEnum):
@@ -69,6 +73,8 @@ class Dictation:
         live_preview: bool = False,
         live_result: Callable[[str], None] | None = None,
         recording_started: Callable[[Any], None] | None = None,
+        tail_seconds: float = 0.0,
+        schedule: Callable[[float, Callable[[], None]], None] | None = None,
     ):
         self.recorder = recorder
         self.recognizer = recognizer
@@ -84,6 +90,10 @@ class Dictation:
         self.live_preview = live_preview
         self.live_result = live_result
         self.recording_started = recording_started
+        self.tail_seconds = tail_seconds
+        self.schedule = schedule if schedule is not None else self._schedule_timer
+        self.tail_pending = False
+        self.tail_timer: threading.Timer | None = None
         self.preview_pending: Future[str] | None = None
         self.warm_pending: Future[Any] | None = None
         self.preview_after = 0.0
@@ -111,6 +121,18 @@ class Dictation:
         except RuntimeError:
             if not self.closed:
                 raise
+
+    def _schedule_timer(self, delay: float, callback: Callable[[], None]) -> None:
+        timer = threading.Timer(delay, self._post, (callback,))
+        timer.daemon = True
+        self.tail_timer = timer
+        timer.start()
+
+    def _end_tail(self) -> None:
+        self.tail_pending = False
+        if self.tail_timer is not None:
+            self.tail_timer.cancel()
+            self.tail_timer = None
 
     def _audio_done(self, future: Future[Any], audio: Audio, callback: Callable[[], None]) -> None:
         # A cancelled queued task never reaches its worker-side finally block.
@@ -299,6 +321,31 @@ class Dictation:
     def release(self) -> None:
         if self.closed or self.state != State.RECORDING:
             return
+        self.released_at = perf_counter()
+        full = getattr(self.recorder, "full", None)
+        if self.tail_seconds <= 0 or (full is not None and full.is_set()):
+            self._capture_stopped()
+            return
+        # Capture continues for the tail; TRANSCRIBING blocks press() and a second release().
+        self.tail_pending = True
+        self._state(State.TRANSCRIBING)
+        generation = self.generation
+        try:
+            self.schedule(self.tail_seconds, lambda: self._tail_elapsed(generation))
+        except Exception:
+            self._end_tail()
+            self._capture_stopped()
+
+    def _tail_elapsed(self, generation: int) -> None:
+        # Stale after cancel(), shutdown(), or for an earlier recording.
+        if self.closed or not self.tail_pending or generation != self.generation:
+            return
+        self.tail_pending = False
+        self.tail_timer = None
+        self._capture_stopped()
+
+    def _capture_stopped(self) -> None:
+        """Stop the recorder and hand the recording to transcription."""
         audio = None
         try:
             audio = self.recorder.stop()
@@ -309,8 +356,8 @@ class Dictation:
                 self._clear_target()
                 self._state(State.IDLE, "No speech captured.")
                 return
-            self._state(State.TRANSCRIBING)
-            self.released_at = perf_counter()
+            if self.state != State.TRANSCRIBING:
+                self._state(State.TRANSCRIBING)
             self.executor.submit(self._prepare_models)
             future = self.executor.submit(self._transcribe, audio, sample_rate)
             captured = audio
@@ -440,13 +487,15 @@ class Dictation:
         self._state(State.IDLE, message)
 
     def cancel(self) -> None:
-        if self.state == State.RECORDING:
+        if self.state == State.RECORDING or self.tail_pending:
+            self._end_tail()
             self.recorder.cancel()
             self._clear_target()
             self._state(State.IDLE, "Recording cancelled.")
 
     def shutdown(self) -> None:
         self.closed = True
+        self._end_tail()
         self.preview_pending = None
         self.recorder.close()
         if self.refiner is not None:

@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from localphraser.pipeline import Dictation, State
+from localphraser.pipeline import TAIL_SECONDS, Dictation, State
 
 
 class FakeRecorder:
@@ -860,3 +860,206 @@ def test_shutdown_zeroes_final_audio_cancelled_during_model_preparation(setup):
         assert not recorder.audio.any() and callbacks.empty() and not results
     finally:
         gate.set()
+
+
+class CountingRecorder(FakeRecorder):
+    def __init__(self):
+        super().__init__()
+        self.stopped = 0
+
+    def stop(self):
+        self.stopped += 1
+        return super().stop()
+
+
+@pytest.fixture
+def tail_setup():
+    recorder, recognizer, insertion = CountingRecorder(), FakeRecognizer(), FakeInsertion()
+    callbacks = queue.Queue()
+    scheduled, changes, results = [], [], []
+    pipeline = Dictation(
+        recorder,
+        recognizer,
+        insertion,
+        callbacks.put,
+        lambda s, m: changes.append((s, m)),
+        lambda t, n: results.append((t, n)),
+        tail_seconds=0.25,
+        schedule=lambda delay, callback: scheduled.append((delay, callback)),
+    )
+    pipeline.callbacks, pipeline.results = callbacks, results
+    yield pipeline, recorder, scheduled, changes
+    pipeline.shutdown()
+    pipeline.executor.shutdown(wait=True)
+
+
+def test_tail_seconds_constant():
+    assert TAIL_SECONDS == 0.25
+
+
+def test_release_keeps_capturing_for_the_tail_then_stops(tail_setup):
+    pipeline, recorder, scheduled, changes = tail_setup
+    pipeline.press()
+    pipeline.release()
+    assert recorder.stopped == 0 and pipeline.state == State.TRANSCRIBING
+    assert [delay for delay, _ in scheduled] == [0.25]
+    scheduled[0][1]()
+    assert recorder.stopped == 1
+    finish(pipeline.callbacks)
+    assert pipeline.results == [("Hello, world.", "Inserted.")]
+    assert pipeline.state == State.IDLE
+    # The tail does not announce TRANSCRIBING a second time when capture stops.
+    assert [state for state, _ in changes].count(State.TRANSCRIBING) == 1
+
+
+def test_released_at_is_the_moment_of_release_not_the_end_of_the_tail(tail_setup):
+    pipeline, _, scheduled, _ = tail_setup
+    pipeline.press()
+    pipeline.release()
+    released_at = pipeline.released_at
+    assert released_at is not None
+    scheduled[0][1]()
+    assert pipeline.released_at == released_at
+
+
+def test_second_release_during_tail_is_ignored(tail_setup):
+    pipeline, recorder, scheduled, _ = tail_setup
+    pipeline.press()
+    pipeline.release()
+    pipeline.release()
+    assert len(scheduled) == 1
+    scheduled[0][1]()
+    scheduled[0][1]()
+    assert recorder.stopped == 1
+
+
+def test_press_during_tail_does_not_start_another_recording(tail_setup):
+    pipeline, recorder, scheduled, _ = tail_setup
+    pipeline.press()
+    pipeline.release()
+    pipeline.press()
+    assert recorder.started == 1 and pipeline.state == State.TRANSCRIBING
+    scheduled[0][1]()
+    assert recorder.stopped == 1
+
+
+def test_cancel_during_tail_stops_capture_and_inserts_nothing(tail_setup):
+    pipeline, recorder, scheduled, changes = tail_setup
+    pipeline.press()
+    pipeline.release()
+    pipeline.cancel()
+    assert recorder.cancelled == 1 and pipeline.state == State.IDLE
+    assert changes[-1] == (State.IDLE, "Recording cancelled.")
+    assert pipeline.target is None
+    scheduled[0][1]()
+    assert recorder.stopped == 0
+    assert pipeline.callbacks.empty() and pipeline.results == []
+
+
+def test_stale_tail_callback_from_an_earlier_recording_does_nothing(tail_setup):
+    pipeline, recorder, scheduled, _ = tail_setup
+    pipeline.press()
+    pipeline.release()
+    pipeline.cancel()
+    pipeline.press()
+    pipeline.release()
+    assert len(scheduled) == 2
+    scheduled[0][1]()
+    assert recorder.stopped == 0 and pipeline.state == State.TRANSCRIBING
+    scheduled[1][1]()
+    assert recorder.stopped == 1
+
+
+def test_shutdown_during_tail_does_not_stop_or_submit(tail_setup):
+    pipeline, recorder, scheduled, _ = tail_setup
+    pipeline.press()
+    pipeline.release()
+    pipeline.shutdown()
+    scheduled[0][1]()
+    assert recorder.stopped == 0
+    assert pipeline.callbacks.empty() and pipeline.results == []
+
+
+def test_full_buffer_skips_the_tail(tail_setup):
+    pipeline, recorder, scheduled, _ = tail_setup
+    recorder.full = threading.Event()
+    recorder.full.set()
+    pipeline.press()
+    pipeline.release()
+    assert scheduled == [] and recorder.stopped == 1
+
+
+def test_silent_recording_after_tail_reports_no_speech(tail_setup):
+    pipeline, recorder, scheduled, changes = tail_setup
+    recorder.audio = np.zeros(16000, dtype=np.float32)
+    pipeline.press()
+    pipeline.release()
+    scheduled[0][1]()
+    assert changes[-1] == (State.IDLE, "No speech captured.")
+
+
+def test_default_schedule_posts_to_the_owner_thread():
+    recorder, recognizer, insertion = CountingRecorder(), FakeRecognizer(), FakeInsertion()
+    callbacks = queue.Queue()
+    pipeline = Dictation(
+        recorder,
+        recognizer,
+        insertion,
+        callbacks.put,
+        lambda s, m: None,
+        lambda t, n: None,
+        tail_seconds=0.01,
+    )
+    owner = threading.get_ident()
+    try:
+        pipeline.press()
+        pipeline.release()
+        assert recorder.stopped == 0
+        callback = callbacks.get(timeout=2)
+        timer = pipeline.tail_timer
+        assert timer is not None and timer.daemon and timer.ident != owner
+        assert recorder.stopped == 0  # Queued for the owner thread, not run on the timer.
+        callback()
+        assert recorder.stopped == 1
+        timer.join(2)
+        assert not timer.is_alive()
+    finally:
+        pipeline.shutdown()
+        pipeline.executor.shutdown(wait=True)
+
+
+def test_shutdown_cancels_the_default_tail_timer():
+    recorder, recognizer, insertion = CountingRecorder(), FakeRecognizer(), FakeInsertion()
+    callbacks = queue.Queue()
+    pipeline = Dictation(
+        recorder,
+        recognizer,
+        insertion,
+        callbacks.put,
+        lambda s, m: None,
+        lambda t, n: None,
+        tail_seconds=30,
+    )
+    pipeline.press()
+    pipeline.release()
+    timer = pipeline.tail_timer
+    assert timer is not None
+    pipeline.shutdown()
+    pipeline.executor.shutdown(wait=True)
+    timer.join(2)
+    assert not timer.is_alive() and callbacks.empty() and recorder.stopped == 0
+
+
+def test_tail_that_cannot_be_scheduled_stops_capture_at_once(tail_setup):
+    pipeline, recorder, _, changes = tail_setup
+
+    def refuse(delay, callback):
+        raise RuntimeError("can't start new thread")
+
+    pipeline.schedule = refuse
+    pipeline.press()
+    pipeline.release()
+    assert recorder.stopped == 1 and not pipeline.tail_pending
+    finish(pipeline.callbacks)
+    assert pipeline.results == [("Hello, world.", "Inserted.")]
+    assert [state for state, _ in changes].count(State.TRANSCRIBING) == 1

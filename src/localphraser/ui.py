@@ -52,7 +52,7 @@ from localphraser.history import History
 from localphraser.home import AppWindow
 from localphraser.hotkey import Hotkey
 from localphraser.models import model_present
-from localphraser.pipeline import Dictation, State
+from localphraser.pipeline import TAIL_SECONDS, Dictation, State
 from localphraser.recognition import WhisperRecognizer
 from localphraser.refinement import LocalRefiner
 from localphraser.shortcut import HINT, ShortcutRecorder
@@ -874,6 +874,7 @@ class Desktop:
             live_preview=config.live_preview,
             live_result=self.indicator.live_preview,
             recording_started=self.recording_started,
+            tail_seconds=TAIL_SECONDS,
         )
 
     def recording_started(self, snapshot) -> None:
