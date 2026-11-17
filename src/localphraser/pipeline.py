@@ -81,6 +81,7 @@ class Dictation:
         recording_started: Callable[[Any], None] | None = None,
         tail_seconds: float = 0.0,
         schedule: Callable[[float, Callable[[], None]], None] | None = None,
+        warm_on_start: bool = False,
     ):
         self.recorder = recorder
         self.recognizer = recognizer
@@ -97,6 +98,7 @@ class Dictation:
         self.live_result = live_result
         self.recording_started = recording_started
         self.tail_seconds = tail_seconds
+        self.warm_on_start = warm_on_start
         self.schedule = schedule if schedule is not None else self._schedule_timer
         self.tail_pending = False
         self.tail_timer: threading.Timer | None = None
@@ -151,7 +153,7 @@ class Dictation:
         warm = getattr(self.recognizer, "warm_preview", None)
         if (
             self.closed
-            or not self.live_preview
+            or not (self.live_preview or self.warm_on_start)
             or self.state != State.IDLE
             or self.warm_pending is not None
             or getattr(self.recognizer, "preview_ready", False) is True

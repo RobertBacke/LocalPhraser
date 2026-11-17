@@ -157,6 +157,35 @@ def test_live_warmup_blocks_capture_and_recovers_without_polishing(setup, outcom
     pipeline.refiner.refine.assert_not_called()
 
 
+def test_start_up_warming_needs_only_warm_on_start_and_leaves_live_preview_off(setup):
+    pipeline, recorder, recognizer, _, callbacks, changes, _ = setup
+    recognizer.preview_ready = False
+
+    def warm():
+        recognizer.preview_ready = True
+
+    recognizer.warm_preview = Mock(side_effect=warm)
+    recognizer.transcribe_preview = Mock(return_value="never")
+    live = Mock()
+    pipeline.live_result = live
+    assert not pipeline.warm_live_preview()  # Neither flag is set.
+    pipeline.warm_on_start = True
+    assert pipeline.warm_live_preview()
+    assert pipeline.state == State.WARMING
+    pipeline.executor.shutdown(wait=True)
+    finish(callbacks)
+    assert pipeline.state == State.IDLE
+    recognizer.warm_preview.assert_called_once()
+    pipeline.press()
+    pipeline.preview_after = 0
+    recorder.preview_audio = lambda: np.full(16000, 0.05, dtype=np.float32)
+    pipeline.request_live_preview()
+    assert pipeline.preview_pending is None
+    recognizer.transcribe_preview.assert_not_called()
+    live.assert_not_called()
+    pipeline.cancel()
+
+
 def test_end_to_end_with_injected_ports(setup):
     pipeline, recorder, _, insertion, callbacks, changes, results = setup
     pipeline.press()

@@ -9,9 +9,10 @@ from PySide6.QtCore import QAbstractNativeEventFilter
 
 from localphraser import main as entry
 from localphraser import ui
-from localphraser.config import Config, load_config, save_config
-from localphraser.models import FILES
+from localphraser.config import DEFAULT_MODEL, PARAKEET_MODEL, Config, load_config, save_config
 from localphraser.pipeline import QUIET_MESSAGE, State
+
+MAKE_PIPELINE = ui.Desktop.make_pipeline
 
 
 @pytest.fixture
@@ -119,10 +120,12 @@ def desktop(app, monkeypatch, tmp_path, request):
     controller.window.deleteLater()
 
 
-def publish_fixture_model(desktop):
-    folder = desktop.config_path.parent / "models/base.en"
+def publish_fixture_model(desktop, model=DEFAULT_MODEL):
+    from localphraser.models import model_files
+
+    folder = desktop.config_path.parent / "models" / model
     folder.mkdir(parents=True)
-    for name in (*FILES, "localphraser-manifest.json"):
+    for name in (*model_files(model), "localphraser-manifest.json"):
         (folder / name).write_bytes(b"presence fixture; not inference")
 
 
@@ -184,7 +187,7 @@ def test_save_downloads_missing_selection_before_switching_and_returns_home(desk
     settings.downloader.start.assert_called_once_with(
         model, Path(desktop.config.model_root), refiner=False
     )
-    assert desktop.config.model == "base.en"
+    assert desktop.config.model == DEFAULT_MODEL
     assert settings.isVisible() and "Downloading" in settings.setup_notice.text()
     folder = Path(desktop.config.model_root) / model
     folder.mkdir(parents=True)
@@ -205,7 +208,7 @@ def test_unsuccessful_model_install_does_not_switch_or_save_settings(desktop, ca
     settings.duration.setValue(200)
     settings.save()
     settings.download_finished(False, cancelled)
-    assert desktop.config.model == "base.en" and desktop.config.max_seconds == 120
+    assert desktop.config.model == DEFAULT_MODEL and desktop.config.max_seconds == 120
     assert desktop.settings is settings and settings.isVisible()
     assert "not saved" in settings.setup_notice.text()
     assert settings.pending_save is None
@@ -224,7 +227,7 @@ def test_edits_during_download_are_preserved_for_explicit_save(desktop):
     for filename in (*model_files("distil-small.en"), "localphraser-manifest.json"):
         (folder / filename).touch()
     settings.download_finished(True, False)
-    assert desktop.config.model == "base.en" and desktop.config.max_seconds == 120
+    assert desktop.config.model == DEFAULT_MODEL and desktop.config.max_seconds == 120
     assert desktop.settings is settings and settings.duration.value() == 200
     assert "press Save" in settings.setup_notice.text()
     settings.save()
@@ -237,12 +240,22 @@ def test_visible_manual_desktop_shows_settings(desktop):
     assert desktop.settings is not None and desktop.settings.isVisible()
 
 
+def test_first_launch_notice_names_the_parakeet_download(desktop):
+    desktop.start_first_launch_setup()
+    assert desktop.settings.setup_notice.text() == (
+        "First launch: downloading the default Parakeet speech model (~660 MB) from Hugging Face. "
+        "Internet is needed for this setup only. You can cancel; retry using Download speech "
+        "model. Dictation becomes available when installation finishes. Already have models? "
+        "Cancel, then choose their directory and Save."
+    )
+
+
 def test_first_setup_downloads_once_and_cancel_does_not_restart(desktop):
     assert "Speech model required" in desktop.status.text()
     desktop.start_first_launch_setup()
     desktop.start_first_launch_setup()
     ui.ModelDownload.start.assert_called_once_with(
-        "base.en", desktop.config_path.parent / "models", refiner=False
+        DEFAULT_MODEL, desktop.config_path.parent / "models", refiner=False
     )
     desktop.settings.downloader.finished.emit(False, True)
     assert "paused" in desktop.settings.setup_notice.text()
@@ -301,12 +314,36 @@ def test_real_polishing_timeout_still_notifies(desktop):
 @pytest.mark.parametrize("blocked", ["disabled", "missing", "smoke", "closing", "none"])
 def test_preview_preparation_requires_opt_in_installed_model_and_normal_launch(desktop, blocked):
     if blocked != "missing":
-        publish_fixture_model(desktop)
-    desktop.config = replace(desktop.config, live_preview=blocked != "disabled")
+        publish_fixture_model(desktop, "base.en")
+    desktop.config = replace(desktop.config, model="base.en", live_preview=blocked != "disabled")
     desktop.allow_live_warmup = blocked != "smoke"
     desktop.closing = blocked == "closing"
     desktop.prepare_live_preview()
     assert desktop.pipeline.warm_live_preview.call_count == (blocked == "none")
+
+
+@pytest.mark.parametrize(
+    ("model", "live_preview", "warms"),
+    [(PARAKEET_MODEL, False, True), ("base.en", False, False), ("base.en", True, True)],
+)
+def test_parakeet_warms_at_start_without_live_preview_and_whisper_does_not(
+    desktop, model, live_preview, warms
+):
+    publish_fixture_model(desktop, model)
+    desktop.config = replace(desktop.config, model=model, live_preview=live_preview)
+    desktop.pipeline.warm_live_preview.reset_mock()
+    desktop.prepare_live_preview()
+    assert desktop.pipeline.warm_live_preview.call_count == warms
+
+
+def test_pipeline_warms_on_start_only_for_parakeet(desktop, monkeypatch):
+    seen = []
+    monkeypatch.setattr(ui, "Dictation", lambda *a, **k: seen.append(k) or Mock())
+    monkeypatch.setattr(ui, "Recorder", Mock())
+    monkeypatch.setattr(ui, "make_recognizer", Mock())
+    for model in (PARAKEET_MODEL, "small.en"):
+        MAKE_PIPELINE(desktop, replace(desktop.config, model=model))
+    assert [k["warm_on_start"] for k in seen] == [True, False]
 
 
 def test_download_warms_preview_and_shortcut_does_not_capture_until_ready(desktop):

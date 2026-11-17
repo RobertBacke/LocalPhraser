@@ -131,4 +131,13 @@ def test_parakeet_is_a_first_catalog_model_with_a_hint():
         "Recommended (~660 MB). Most accurate and fastest in this app's benchmark. English only."
     )
     Config(model=PARAKEET_MODEL).validate()
-    assert Config().model == "base.en"
+    assert Config().model == "parakeet-tdt-0.6b-v2"
+
+
+def test_default_model_is_parakeet_and_saved_whisper_choice_is_kept(tmp_path):
+    from localphraser.config import DEFAULT_MODEL, PARAKEET_MODEL, load_config, save_config
+
+    assert DEFAULT_MODEL == PARAKEET_MODEL
+    path = tmp_path / "config.json"
+    save_config(Config(model="base.en"), path)
+    assert load_config(path).model == "base.en"

@@ -5,7 +5,7 @@ This is a development preview, not a stable release. Keep the entire folder toge
 1. Run the preview installer, or extract the ZIP to a permanent folder.
    Keep the portable folder together; do not run the app from inside the ZIP.
 2. Open LocalPhraser.exe. Windows may identify this unsigned app as unrecognized.
-3. A new profile downloads base.en automatically in Settings. This first setup needs internet.
+3. A new profile downloads the Parakeet speech model (~660 MB) automatically in Settings. This first setup needs internet.
    Wait for "Speech model ready." No account or API key is needed. You can Cancel;
    retry with Download speech model. Later launches do not automatically retry.
    Already have models? Cancel, select their directory in Settings, then Save.

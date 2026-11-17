@@ -22,6 +22,29 @@ def test_explicit_installer_can_run_from_offline_desktop_environment(monkeypatch
     assert observed == ["0"]
 
 
+def test_model_arguments_default_to_the_default_model(monkeypatch, tmp_path):
+    import localphraser.diagnostics
+    import localphraser.models
+    from localphraser.config import DEFAULT_MODEL
+
+    seen = []
+    monkeypatch.setattr(localphraser.models, "install_model", lambda name, *a: seen.append(name))
+    monkeypatch.setattr(localphraser.models, "verify_model", lambda path: seen.append(path.name))
+    monkeypatch.setattr(
+        localphraser.diagnostics,
+        "write_runtime_report",
+        lambda report, root, model, polishing, *rest: seen.append(model) or 0,
+    )
+    for argv in (
+        ["install-model", "--root", str(tmp_path)],
+        ["verify-model", "--root", str(tmp_path)],
+        ["check-runtime", "--root", str(tmp_path), "--report", str(tmp_path / "r.json")],
+    ):
+        monkeypatch.setattr(sys, "argv", ["localphraser", *argv])
+        main()
+    assert seen == [DEFAULT_MODEL] * 3
+
+
 def test_refiner_download_is_explicit_and_restores_online_installer_env(monkeypatch, tmp_path):
     import os
 

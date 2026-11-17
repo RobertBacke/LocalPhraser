@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 PARAKEET_MODEL = "parakeet-tdt-0.6b-v2"
+DEFAULT_MODEL = PARAKEET_MODEL
 MODELS = (
     PARAKEET_MODEL,
     "tiny.en",
@@ -80,7 +81,7 @@ def profile_file(config_path: Path, filename: str) -> Path:
 class Config:
     hotkey: str = "CapsLock"
     microphone: str | None = None
-    model: str = "base.en"
+    model: str = DEFAULT_MODEL
     model_root: str = str(data_dir() / "models")
     auto_insert: bool = True
     max_seconds: int = 120

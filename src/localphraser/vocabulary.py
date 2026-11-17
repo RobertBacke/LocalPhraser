@@ -88,9 +88,16 @@ def suggestions(samples: list[str], feedback: list[dict], approved: str) -> list
 
 
 class VocabularyPage(QScrollArea):
-    def __init__(self, history: "History", current: Callable[[], str], save: Callable[[str], None]):
+    def __init__(
+        self,
+        history: "History",
+        current: Callable[[], str],
+        save: Callable[[str], None],
+        engine_note: Callable[[], str],
+    ):
         super().__init__()
         self.history, self.current, self.save = history, current, save
+        self.note_for_engine = engine_note
         self.setWidgetResizable(True)
         self.setFrameShape(QScrollArea.Shape.NoFrame)
         self.viewport().setAutoFillBackground(False)
@@ -107,6 +114,9 @@ class VocabularyPage(QScrollArea):
         )
         description.setWordWrap(True)
         layout.addWidget(description)
+        self.engine_note = QLabel()
+        self.engine_note.setWordWrap(True)
+        layout.addWidget(self.engine_note)
         self.entry = QLineEdit()
         self.entry.setMaxLength(64)
         self.entry.setPlaceholderText("A name or corrected spelling, e.g. Codex")
@@ -180,6 +190,7 @@ class VocabularyPage(QScrollArea):
 
     def refresh(self, message: str = "") -> None:
         self.notice.setText(message)
+        self.engine_note.setText(self.note_for_engine())
         self.words.clear()
         self.words.addItems(terms(self.current()))
         self.words.setFixedHeight(max(70, min(180, self.words.count() * 44 + 20)))

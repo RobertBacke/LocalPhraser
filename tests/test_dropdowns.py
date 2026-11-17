@@ -6,7 +6,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QGroupBox, QListView, QWidget
 
 from localphraser.appearance import GlassComboBox
-from localphraser.config import MODELS, Config
+from localphraser.config import MODELS, PARAKEET_MODEL, Config
 from localphraser.ui import Settings
 
 
@@ -80,6 +80,7 @@ def test_model_popup_preserves_keyboard_selection_and_catalog_ids(app, monkeypat
     assert isinstance(combo.view(), QListView)
     assert [combo.itemText(i) for i in range(combo.count())] == list(MODELS)
     combo.setCurrentText("small.en")
+    app.processEvents()  # Let the quality row relayout before the popup opens.
     combo.setFocus()
     combo.showPopup()
     app.processEvents()
@@ -92,3 +93,48 @@ def test_model_popup_preserves_keyboard_selection_and_catalog_ids(app, monkeypat
     assert settings.isVisible()
     settings.close()
     settings.deleteLater()
+
+
+def test_parakeet_disables_recognition_quality_and_keeps_the_saved_value(
+    app, monkeypatch, tmp_path
+):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    saved = Mock()
+    from localphraser.models import model_files
+
+    folder = tmp_path / PARAKEET_MODEL
+    folder.mkdir()
+    for name in (*model_files(PARAKEET_MODEL), "localphraser-manifest.json"):
+        (folder / name).touch()
+    config = Config(model="small.en", recognition_quality="accurate", model_root=str(tmp_path))
+    settings = Settings(config, saved)
+    try:
+        quality = settings.recognition_quality
+        tooltip = quality.toolTip()
+        assert quality.isEnabled()
+        settings.model.setCurrentText(PARAKEET_MODEL)
+        assert not quality.isEnabled()
+        assert settings.quality_hint.text() == "Recognition quality applies to Whisper models only."
+        assert quality.currentData() == "accurate"
+        settings.model.setCurrentText("small.en")
+        assert quality.isEnabled() and quality.toolTip() == tooltip
+        assert settings.quality_hint.text() == ""
+        settings.model.setCurrentText(PARAKEET_MODEL)
+        settings.save()
+        assert saved.call_args.args[0].recognition_quality == "accurate"
+    finally:
+        settings.close()
+        settings.deleteLater()
+
+
+def test_settings_credit_line_attributes_parakeet(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    settings = Settings(Config(), Mock())
+    try:
+        text = settings.progress.text()
+        assert "Speech models: Systran" in text
+        assert "NVIDIA Parakeet TDT 0.6b v2 (CC-BY-4.0), ONNX conversion by istupakov" in text
+        assert "Polishing models: Qwen" in text
+    finally:
+        settings.close()
+        settings.deleteLater()

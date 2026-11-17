@@ -33,7 +33,7 @@ def test_vocabulary_page_migrates_existing_hints_and_reviews_corrections(app, tm
     def save(value):
         current[0] = value
 
-    page = VocabularyPage(history, lambda: current[0], save)
+    page = VocabularyPage(history, lambda: current[0], save, lambda: "note")
     try:
         page.refresh()
         assert page.words.item(0).text() == "Codex"
@@ -66,7 +66,7 @@ def test_vocabulary_save_failure_or_budget_does_not_publish_changes(app):
     history = History(None)
     save = Mock(side_effect=OSError("private path"))
     current = [""]
-    page = VocabularyPage(history, lambda: current[0], save)
+    page = VocabularyPage(history, lambda: current[0], save, lambda: "note")
     try:
         page.entry.setText("Codex")
         page.add_word()
@@ -90,7 +90,7 @@ def test_forgetting_suggestions_preserves_approved_words_and_requires_confirmati
     history = History(None)
     history.set_vocabulary_feedback("Codex", "correction")
     save = Mock()
-    page = VocabularyPage(history, lambda: "PySide", save)
+    page = VocabularyPage(history, lambda: "PySide", save, lambda: "note")
     try:
         monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.No)
         page.forget_suggestions()
@@ -103,3 +103,17 @@ def test_forgetting_suggestions_preserves_approved_words_and_requires_confirmati
     finally:
         page.deleteLater()
         history.close()
+
+
+def test_engine_note_is_shown_and_follows_the_engine_after_refresh(app, tmp_path):
+    history = History(tmp_path / "history.sqlite3")
+    note = ["Whisper models use these terms as recognition hints."]
+    page = VocabularyPage(history, lambda: "", lambda value: None, lambda: note[0])
+    try:
+        page.refresh()
+        assert page.engine_note.text() == note[0]
+        note[0] = "Parakeet restores the spelling of these terms."
+        page.refresh()
+        assert page.engine_note.text() == note[0]
+    finally:
+        page.deleteLater()

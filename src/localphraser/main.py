@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from localphraser.config import (
+    DEFAULT_MODEL,
     DEFAULT_REFINEMENT_MODEL,
     MODELS,
     REFINEMENT_MODELS,
@@ -26,11 +27,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="LocalPhraser offline Windows dictation")
     subparsers = parser.add_subparsers(dest="command")
     install = subparsers.add_parser("install-model", help="Explicitly download a speech model")
-    install.add_argument("model", choices=MODELS, nargs="?", default="base.en")
+    install.add_argument("model", choices=MODELS, nargs="?", default=DEFAULT_MODEL)
     install.add_argument("--root", type=Path, default=data_dir() / "models")
     install.add_argument("--job-id", help=argparse.SUPPRESS)
     verify = subparsers.add_parser("verify-model", help="Check model integrity without networking")
-    verify.add_argument("model", choices=MODELS, nargs="?", default="base.en")
+    verify.add_argument("model", choices=MODELS, nargs="?", default=DEFAULT_MODEL)
     verify.add_argument("--root", type=Path, default=data_dir() / "models")
     polish_install = subparsers.add_parser(
         "install-refiner", help="Download a local polishing model"
@@ -58,7 +59,7 @@ def main() -> int:
         "check-runtime", help="Opt-in synthetic speech check; no microphone or downloads"
     )
     runtime.add_argument("--root", type=Path, default=data_dir() / "models")
-    runtime.add_argument("--model", choices=MODELS, default="base.en")
+    runtime.add_argument("--model", choices=MODELS, default=DEFAULT_MODEL)
     runtime.add_argument("--polishing-model", choices=REFINEMENT_MODELS)
     runtime.add_argument(
         "--capture-rate", type=int, choices=(16000, 44100, 48000, 96000), default=16000

@@ -41,6 +41,7 @@ from localphraser.config import (
     DEFAULT_PROMPT,
     MODEL_HINTS,
     MODELS,
+    PARAKEET_MODEL,
     REFINEMENT_MODELS,
     Config,
     profile_file,
@@ -338,6 +339,11 @@ class Settings(GlassDialog):
             "Live preview stays fast. More search can help but does not guarantee correct words."
         )
         form.addRow("Recognition quality", self.recognition_quality)
+        self.quality_hint = QLabel()
+        self.quality_hint.setWordWrap(True)
+        form.addRow(self.quality_hint)
+        self.model.currentTextChanged.connect(self.update_quality_availability)
+        self.update_quality_availability(self.model.currentText())
         install_hint = QLabel(
             "Save downloads the selected speech model if needed, then returns Home. "
             "A new download requires internet and can be cancelled."
@@ -462,7 +468,8 @@ class Settings(GlassDialog):
         self.install.clicked.connect(self.download)
         layout.addWidget(self.install)
         self.progress = QLabel(
-            "Speech models: Systran. Polishing models: Qwen. Downloads use Hugging Face."
+            "Speech models: Systran; NVIDIA Parakeet TDT 0.6b v2 (CC-BY-4.0), ONNX conversion "
+            "by istupakov. Polishing models: Qwen. Downloads use Hugging Face."
         )
         self.progress.setWordWrap(True)
         layout.addWidget(self.progress)
@@ -565,6 +572,15 @@ class Settings(GlassDialog):
         self.setMinimumWidth(0)
         self.setSizeGripEnabled(False)
         self.header_widget.hide()
+
+    def update_quality_availability(self, model: str) -> None:
+        # The saved value stays selected so switching back to Whisper restores it.
+        parakeet = model == PARAKEET_MODEL
+        self.recognition_quality.setEnabled(not parakeet)
+        self.quality_hint.setText(
+            "Recognition quality applies to Whisper models only." if parakeet else ""
+        )
+        self.quality_hint.setVisible(parakeet)
 
     def download(self, refiner: bool = False) -> None:
         if self.downloader.busy:
@@ -772,7 +788,7 @@ class Desktop:
         if (
             self.closing
             or not self.allow_live_warmup
-            or not self.config.live_preview
+            or not (self.config.live_preview or self.config.model == PARAKEET_MODEL)
             or not self.speech_model_present()
         ):
             return False
@@ -791,8 +807,9 @@ class Desktop:
         if self.settings is None:
             return
         self.settings.setup_notice.setText(
-            "First launch: downloading the default base.en speech model from Hugging Face. "
-            "Internet is needed for this setup only. You can cancel; retry using Download "
+            "First launch: downloading the default Parakeet speech model (~660 MB) from "
+            "Hugging Face. Internet is needed for this setup only. You can cancel; retry using "
+            "Download "
             "speech model. Dictation becomes available when installation finishes. "
             "Already have models? Cancel, then choose their directory and Save."
         )
@@ -877,6 +894,7 @@ class Desktop:
             live_result=self.indicator.live_preview,
             recording_started=self.recording_started,
             tail_seconds=TAIL_SECONDS,
+            warm_on_start=config.model == PARAKEET_MODEL,
         )
 
     def recording_started(self, snapshot) -> None:
@@ -1023,7 +1041,15 @@ class Desktop:
     def show_vocabulary(self) -> None:
         if self.vocabulary_page is None:
             self.vocabulary_page = VocabularyPage(
-                self.history, lambda: self.config.vocabulary, self.save_vocabulary
+                self.history,
+                lambda: self.config.vocabulary,
+                self.save_vocabulary,
+                lambda: (
+                    "Parakeet restores the spelling of these terms when it hears them exactly. "
+                    "It does not correct sound-alike words."
+                    if self.config.model == PARAKEET_MODEL
+                    else "Whisper models use these terms as recognition hints."
+                ),
             )
         self.vocabulary_page.refresh()
         self.window.show_vocabulary(self.vocabulary_page)
