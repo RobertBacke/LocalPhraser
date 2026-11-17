@@ -9,8 +9,8 @@ from collections import Counter
 from pathlib import Path
 
 from localphraser import diagnostics
-from localphraser.config import MODELS, RECOGNITION_QUALITY
-from localphraser.recognition import WhisperRecognizer
+from localphraser.config import MODELS, PARAKEET_MODEL, RECOGNITION_QUALITY
+from localphraser.recognition import WhisperRecognizer, make_recognizer
 
 CASES = (
     (
@@ -39,14 +39,19 @@ def check(root: Path, models: list[str], temporary: Path) -> dict:
     try:
         with tempfile.TemporaryDirectory(dir=temporary) as directory:
             for model in models:
-                recognizer = WhisperRecognizer(root / model, quality="fast")
+                recognizer = make_recognizer(root, model, 0, "", "fast")
                 recognizer.prepare()
+                # Recognition quality has no effect on Parakeet: one run per case.
+                qualities: dict[str, int] = (
+                    {"n/a": 0} if model == PARAKEET_MODEL else dict(RECOGNITION_QUALITY)
+                )
                 for name, text, keywords in CASES:
                     diagnostics.SYNTHETIC_TEXT = text
                     audio = diagnostics.synthetic_audio(Path(directory))
                     try:
-                        for quality, beam in RECOGNITION_QUALITY.items():
-                            recognizer.beam_size = beam
+                        for quality, beam in qualities.items():
+                            if isinstance(recognizer, WhisperRecognizer):
+                                recognizer.beam_size = beam
                             started = time.perf_counter()
                             result = recognizer.transcribe(audio)
                             observed = Counter(re.findall(r"\w+", result.casefold()))

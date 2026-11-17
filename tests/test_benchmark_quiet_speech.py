@@ -52,3 +52,20 @@ def test_levels_and_models_option():
     assert bench.LEVELS == (0.25, 0.02, 0.014, 0.011, 0.008)
     args = bench.parse_args(["--root", "r", "--models", "base.en", "small.en", "--temp-dir", "t"])
     assert args.models == ["base.en", "small.en"] and not args.retry and not args.long
+
+
+def test_unknown_model_name_is_rejected(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        bench.parse_args(["--root", "r", "--models", "base.en", "nope", "--temp-dir", "t"])
+    assert exit_info.value.code == 2
+    assert "unknown model: nope" in capsys.readouterr().err
+
+
+def test_parakeet_is_accepted_and_has_no_retry_variant():
+    args = bench.parse_args(["--root", "r", "--models", "parakeet-tdt-0.6b-v2", "--temp-dir", "t"])
+    assert args.models == ["parakeet-tdt-0.6b-v2"]
+    assert bench._variants(["parakeet-tdt-0.6b-v2", "base.en"], retry=True) == [
+        ("parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v2", (0.0,)),
+        ("base.en", "base.en", (0.0,)),
+        ("base.en+retry", "base.en", bench.RETRY_TEMPERATURES),
+    ]

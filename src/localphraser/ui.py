@@ -53,7 +53,7 @@ from localphraser.home import AppWindow
 from localphraser.hotkey import Hotkey
 from localphraser.models import model_present
 from localphraser.pipeline import QUIET_MESSAGE, TAIL_SECONDS, Dictation, State
-from localphraser.recognition import WhisperRecognizer
+from localphraser.recognition import make_recognizer
 from localphraser.refinement import LocalRefiner
 from localphraser.shortcut import HINT, ShortcutRecorder
 from localphraser.target_worker import TargetWorker
@@ -847,8 +847,9 @@ class Desktop:
             self.audio_preparer.submit(self.recorder.prepare)
         return Dictation(
             self.recorder,
-            WhisperRecognizer(
-                Path(config.model_root) / config.model,
+            make_recognizer(
+                Path(config.model_root),
+                config.model,
                 config.cpu_threads,
                 config.vocabulary,
                 config.recognition_quality,

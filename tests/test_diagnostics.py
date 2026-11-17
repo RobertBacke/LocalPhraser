@@ -19,7 +19,7 @@ def runtime(monkeypatch, tmp_path):
     monkeypatch.setattr(diagnostics, "synthetic_audio", lambda directory, rate: audio)
     recognizer = Mock()
     recognizer.transcribe.return_value = "local speech recognition keeps my words on this computer"
-    monkeypatch.setattr(diagnostics, "WhisperRecognizer", Mock(return_value=recognizer))
+    monkeypatch.setattr(diagnostics, "make_recognizer", Mock(return_value=recognizer))
     refiner = Mock()
     refiner.refine.side_effect = lambda text: text.capitalize() + "."
     factory = Mock(return_value=refiner)
@@ -34,6 +34,9 @@ def test_raw_checks_cold_warm_without_loading_refiner_or_saving_transcript(runti
     result = json.loads(report.read_text())
     assert result["status"] == "passed" and len(result["checks"]) == 2
     assert recognizer.transcribe.call_count == 2
+    diagnostics.make_recognizer.assert_called_once_with(
+        root / "models", "base.en", 0, "", "balanced"
+    )
     factory.assert_not_called()
     assert not audio.any()
     assert "my words" not in report.read_text() and str(root) not in report.read_text()

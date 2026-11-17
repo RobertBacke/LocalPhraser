@@ -16,7 +16,7 @@ from localphraser import __version__
 from localphraser.audio import SAMPLE_RATE, Audio, resample_audio
 from localphraser.config import DEFAULT_PROMPT
 from localphraser.models import verify_model
-from localphraser.recognition import WhisperRecognizer
+from localphraser.recognition import make_recognizer
 from localphraser.refinement import LocalRefiner, preserve_words
 
 SYNTHETIC_TEXT = "Local speech recognition keeps my words on this computer."
@@ -102,7 +102,7 @@ def runtime_check(
             captured = synthetic_audio(temporary, capture_rate)
             result["stage"] = "audio_conversion"
             audio = resample_audio(captured, capture_rate)
-            recognizer = WhisperRecognizer(root / model)
+            recognizer = make_recognizer(root, model, 0, "", "balanced")
             for label in ("cold", "warm"):
                 result["stage"] = "recognition"
                 started = time.perf_counter()

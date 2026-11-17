@@ -18,7 +18,12 @@ import numpy as np
 
 from localphraser import diagnostics
 from localphraser.config import MODELS
-from localphraser.recognition import SAMPLE_RATE, WhisperRecognizer
+from localphraser.recognition import (
+    SAMPLE_RATE,
+    Recognizer,
+    WhisperRecognizer,
+    make_recognizer,
+)
 
 SENTENCES = (
     "I think we should move the meeting to Thursday afternoon because several people are away",
@@ -109,9 +114,7 @@ def long_clip(spoken: list[np.ndarray]) -> tuple[np.ndarray, str]:
     return audio, " ".join(reference)
 
 
-def _score(
-    recognizer: WhisperRecognizer, clips: list[tuple[np.ndarray, str]]
-) -> tuple[float, float]:
+def _score(recognizer: Recognizer, clips: list[tuple[np.ndarray, str]]) -> tuple[float, float]:
     """(errors per 100 words, mean seconds per clip); the clips are zeroed afterwards."""
     distance = total = 0
     started = time.perf_counter()
@@ -120,7 +123,6 @@ def _score(
             text = recognizer.transcribe(audio)
             edits, count = word_errors(sentence, text)
             distance, total = distance + edits, total + count
-            text = ""
     finally:
         for audio, _ in clips:
             audio.fill(0)
@@ -169,10 +171,9 @@ def check(
         ten_seconds = _speak(Path(directory), " ".join(SENTENCES[:2]), False)
         try:
             for label, model, temperatures in _variants(models, retry):
-                recognizer = WhisperRecognizer(
-                    root / model, cpu_threads=threads, quality="accurate"
-                )
-                recognizer.temperatures = temperatures
+                recognizer = make_recognizer(root, model, threads, "", "accurate")
+                if isinstance(recognizer, WhisperRecognizer):
+                    recognizer.temperatures = temperatures
                 recognizer.prepare()
                 warm = np.zeros(SAMPLE_RATE, dtype=np.float32)
                 recognizer.transcribe(warm)
@@ -199,7 +200,6 @@ def check(
                     try:
                         text = recognizer.transcribe(clip)
                         invented.append(len(words(text)))
-                        text = ""
                     finally:
                         clip.fill(0)
                 noise_only.append({"model": label, "words_invented": invented})
@@ -221,7 +221,6 @@ def check(
                         text = recognizer.transcribe(audio)
                         seconds = time.perf_counter() - started
                         edits, count = word_errors(reference, text)
-                        text = ""
                         long_rows.append(
                             {
                                 "model": label,
@@ -234,6 +233,8 @@ def check(
                         )
                     finally:
                         audio.fill(0)
+                # Release this model before the next one loads: never two alive at once.
+                del recognizer
         finally:
             for audio in [*spoken.values(), ten_seconds]:
                 audio.fill(0)

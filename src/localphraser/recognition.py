@@ -8,7 +8,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from localphraser.audio import SAMPLE_RATE, Audio
-from localphraser.config import RECOGNITION_QUALITY, inference_threads
+from localphraser.config import PARAKEET_MODEL, RECOGNITION_QUALITY, inference_threads
 from localphraser.levels import boost_quiet
 
 MAX_COMPRESSION_RATIO = 2.4  # Above this a segment is a repetition loop.
@@ -22,6 +22,17 @@ class Recognizer(Protocol):
     def transcribe_stream(
         self, audio: Audio, partial: Callable[[str], None] | None = None
     ) -> str: ...
+
+
+def make_recognizer(
+    root: Path, model: str, cpu_threads: int, vocabulary: str, quality: str
+) -> Recognizer:
+    """Pick the engine from the model name; recognition quality applies to Whisper only."""
+    if model == PARAKEET_MODEL:
+        from localphraser.parakeet import ParakeetRecognizer
+
+        return ParakeetRecognizer(root / model, cpu_threads, vocabulary)
+    return WhisperRecognizer(root / model, cpu_threads, vocabulary, quality)
 
 
 class WhisperRecognizer:
