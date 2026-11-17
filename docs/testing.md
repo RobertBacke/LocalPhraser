@@ -11,7 +11,8 @@ networking and transcribes synthetic silence, without claiming speech accuracy.
 
 ## Manual acceptance (record OS/app/version and model)
 
-1. Launch; verify tray, one-instance guard and settings. Install base.en explicitly.
+1. Launch; verify tray, one-instance guard and settings. Install the default speech model
+   (Parakeet TDT 0.6b v2) explicitly.
 2. Notepad: place empty caret; hold configured chord, speak, release all keys. Confirm exact
    output, return to idle, and repeat at least ten times without restart.
 3. Select existing text and dictate; ensure no text is overwritten and manual recovery works.
@@ -1030,3 +1031,84 @@ reproduced the same error. Publication now retries only Windows permission/shari
 5/32/33 for a bounded 1.55 seconds, including repair/rollback renames. A real temporary-handle
 test verifies eventual publication; persistent failures still raise without changing ACLs.
 The process responsible for the original intermittent handle was not identified.
+
+## Quiet and paused speech benchmark (2026-11-16)
+
+`scripts/benchmark_quiet_speech.py` measures the clips described in the
+[recognition accuracy design](superpowers/specs/2026-11-16-recognition-accuracy-design.md):
+six fixed sentences (88 words) of Windows SAPI synthetic speech, spoken normally and with
+700 ms between words, at five peak levels over white noise of RMS 0.002, with a key click
+near the start and end. Four noise-only clips count invented words. No microphone was used
+and no recognised text was kept. **This is synthetic speech only; human speech is not yet
+verified.** A synthetic voice articulates clearly, so these numbers show the effect of volume
+and pauses, not of words run together. Each cell is 88 words: one word is 1.1 points, and a
+difference of one or two words is not meaningful.
+
+Machine: AMD Ryzen 5 8640HS, 6 physical / 12 logical cores, 15.3 GiB RAM, Windows 11.
+Threads were Automatic, which resolves to 6 here. Other work was running on the machine
+throughout: simple shell commands took over two minutes during the runs. Absolute timings are
+inflated and noisy; compare rows with each other only. Whisper rows use Accurate (beam 5).
+
+```powershell
+.venv\Scripts\python.exe scripts\benchmark_quiet_speech.py --root .cache\models --models base.en small.en parakeet-tdt-0.6b-v2 --temp-dir .cache\quality-bench --retry > .cache\quality-bench\quiet-speech.json
+.venv\Scripts\python.exe scripts\benchmark_quiet_speech.py --root .cache\models --models parakeet-tdt-0.6b-v2 --temp-dir .cache\quality-bench --retry --long > .cache\quality-bench\quiet-speech-long.json
+```
+
+Errors per 100 words, continuous / paused. `+retry` is temperature retry (0, 0.2, 0.4).
+
+| Engine | Peak 0.25 | 0.02 | 0.014 | 0.011 | 0.008 | Noise only: words invented |
+| --- | --- | --- | --- | --- | --- | --- |
+| `base.en` | 0.0 / 2.3 | 3.4 / 2.3 | 3.4 / 10.2 | 10.2 / 52.3 | 33.0 / 100.0 | 0, 0, 0, 0 |
+| `base.en+retry` | 0.0 / 2.3 | 3.4 / 2.3 | 3.4 / 10.2 | 10.2 / 52.3 | 33.0 / 94.3 | 0, 0, 0, 0 |
+| `small.en` | 0.0 / 1.1 | 1.1 / 4.5 | 1.1 / 8.0 | 3.4 / 10.2 | 13.6 / 39.8 | 0, 0, 0, 0 |
+| `small.en+retry` | 0.0 / 1.1 | 1.1 / 4.5 | 1.1 / 8.0 | 3.4 / 10.2 | 13.6 / 39.8 | 0, 0, 0, 0 |
+| Parakeet TDT 0.6b v2 | 0.0 / 0.0 | 1.1 / 2.3 | 1.1 / 5.7 | 2.3 / 14.8 | 15.9 / 22.7 | 0, 0, 0, 0 |
+
+Seconds per clip, continuous / paused, and one 10-second clip at peak 0.25:
+
+| Engine | Peak 0.25 | 0.02 | 0.014 | 0.011 | 0.008 | 10 s clip |
+| --- | --- | --- | --- | --- | --- | --- |
+| `base.en` | 0.57 / 0.63 | 0.55 / 0.59 | 0.55 / 0.64 | 0.60 / 1.16 | 0.59 / 1.07 | 0.66 |
+| `base.en+retry` | 0.86 / 0.95 | 0.94 / 1.03 | 0.93 / 1.01 | 0.98 / 5.27 | 1.12 / 9.90 | 1.26 |
+| `small.en` | 1.57 / 1.59 | 1.55 / 1.59 | 1.56 / 1.80 | 2.17 / 2.30 | 2.40 / 2.12 | 2.07 |
+| `small.en+retry` | 2.89 / 2.95 | 2.95 / 2.88 | 3.05 / 3.02 | 3.01 / 2.42 | 1.88 / 6.35 | 3.60 |
+| Parakeet TDT 0.6b v2 | 0.34 / 1.16 | 0.42 / 1.47 | 0.56 / 1.55 | 0.48 / 1.25 | 0.31 / 0.93 | 0.59 |
+
+The long run, in its own process, repeated Parakeet's level grid with the same error figures
+and no invented words (10 s clip 1.00 s), then decoded one long clip:
+
+| Clip | Errors per 100 words | Seconds | Memory after load | Process peak |
+| --- | --- | --- | --- | --- |
+| 132 s, whole sentences at peak 0.25 | 0.0 | 11.66 | 784 MB | 1246 MB |
+
+The long clip's noise is drawn from `default_rng(3)`, so it differs sample for sample from
+the earlier trial's 132 s clip. The 30 s piece limit met the 1.3 GB (1331 MB) mark, so the
+20 s fallback was not needed.
+
+Against the design's "What counts as done", the benchmark **passed every mark except one**:
+
+- Parakeet at peak 0.02: 1.1 / 2.3, within 5. At peak 0.014 continuous: 1.1, within 5.
+- **Miss:** Parakeet at peak 0.014 with pauses scored **5.7** errors per 100 words (5 of 88
+  words) against the pass mark of 5. The user reviewed the numbers on 2026-11-16 and accepted
+  it as within the noise of an 88-word cell. The mark at 0.014 had been set in the design
+  without an earlier measurement at that level. Parakeet was still the best of the three
+  engines in that cell (`small.en` 8.0, `base.en` 10.2).
+- Normal level: Parakeet 0.0 / 0.0, no worse than `base.en` as shipped in the earlier trial
+  (0.0 / 2.3).
+- No engine or setting invented a word on any noise-only clip, including the `+retry` rows.
+- Long clip: no word errors and a peak of 1246 MB, under 1331 MB.
+
+Parakeet's 0.25, 0.02 and 0.008 cells match the earlier trial's Parakeet row (quoted from the
+design: 0.0 / 0.0, 1.1 / 2.3, 15.9 / 22.7).
+
+**Temperature retry is not shipped.** It had to meet three conditions for `small.en+retry`
+against `small.en`. Errors at peak 0.008, continuous and paused summed, were 53.4 for both,
+so they were not lower. It invented no words (0, 0, 0, 0). Its time per clip was 81–90% higher
+at peaks 0.25 and 0.02 (1.57 → 2.89 and 1.59 → 2.95 at 0.25; 1.55 → 2.95 and 1.59 → 2.88 at
+0.02), against an allowed 10%. `WhisperRecognizer.temperatures` stays `(0.0,)`. On `base.en`,
+retry recovered five words in the worst cell (100.0 → 94.3) and took 9.90 s instead of 1.07 s
+per clip there.
+
+The raw JSON stays in the ignored `.cache/quality-bench` folder. The development build and
+the user's own voice (design verification steps 3 and 4) remain to be checked before any
+switch of the stable installation.

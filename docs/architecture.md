@@ -19,8 +19,18 @@ Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone
 - `shortcut.py`: focused key/chord recorder with cancellation and validation.
 - `target_worker.py`: single COM owner thread, opaque target tokens, verification deadlines.
 - `pipeline.py`: explicit Idle/Recording/Transcribing/Inserting/Error lifecycle; backend protocols.
-- `recognition.py`: lazy CPU INT8 local Whisper model, bundled VAD, optional user-entered
-  vocabulary hints through `hotwords`, no implicit downloads or word-replacement rules.
+- `recognition.py`: the `Recognizer` protocol and `make_recognizer`, which picks the engine
+  from the model name. Lazy CPU INT8 local Whisper model, bundled VAD, optional user-entered
+  vocabulary hints through `hotwords`, quiet-level correction before decoding, segments
+  with a compression ratio above 2.4 (repetition loops) dropped, and no implicit downloads.
+- `parakeet.py`: Parakeet TDT 0.6b v2 int8 ONNX through `onnx-asr` and ONNX Runtime's CPU
+  provider, loaded from a verified local directory only. Recordings over 30 s are decoded
+  in pieces cut at the quietest 200 ms between 20 s and 30 s. Approved vocabulary terms
+  restore spelling after recognition. There is no VAD and no level correction.
+- `levels.py`: click-tolerant speech level (fourth-loudest 20 ms frame peak) shared by the
+  quiet-input notice and Whisper's level correction.
+- `config.inference_threads`: Automatic threads (physical cores, at most eight) for Whisper,
+  Parakeet and polishing. A larger saved value is capped when used.
 - `refinement.py`: optional warm CPU llama.cpp process, bounded pipe requests, network-denied
   Python sockets, lexical preservation check, time limit and raw fallback.
 - `refinement_models.py`: fixed publisher GGUF catalog with explicit download and verification.
@@ -32,6 +42,12 @@ Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone
 - `ui.py`: tray, nonactivating multi-monitor indicator, settings, recovery transcript, UI dispatcher.
 - `main.py`: CLI, one-instance lock, separate online/offline entry paths.
 
+After release, capture continues for 250 ms (`pipeline.TAIL_SECONDS`) so the last word is not
+cut. The indicator shows Transcribing at once, and a key press during the tail is ignored.
+The tail is skipped when the buffer is full. Cancel, shutdown or a new generation during the
+tail stop the recording and insert nothing. When a recording's speech level is below 0.012,
+the result notice asks the user to raise the input level. The tray shows this notice at most
+once per session.
 Final recognition and polishing follow capture; repeat events are ignored. Optional warm
 live-preview inference can overlap capture on the same serial executor. Errors return to idle,
 with sanitized messages. Polished mode adds a Polishing state. Text stays available on insertion failures. No automatic retry
@@ -82,11 +98,13 @@ Do not represent this as universal compatibility or a formal security boundary.
 
 ## Experimental live speech preview
 
-`live_preview` defaults to false. When enabled, launch, successful speech-model download
-and settings save request asynchronous preparation on the serial ASR executor. The
+`live_preview` defaults to false. When it is enabled, or when Parakeet is the selected model
+(its loading takes several seconds), launch, successful speech-model download and settings
+save request asynchronous preparation on the serial ASR executor. The
 Preparing speech model state blocks recording until completion. One second of generated
 silence initializes VAD and a separate one-token decode with VAD disabled initializes the
-speech decoder; any output is discarded. No microphone audio or polishing is used.
+speech decoder. Parakeet instead decodes one second of generated silence. Any output is
+discarded. No microphone audio or polishing is used.
 A failure returns Ready with a sanitized notice and leaves deferred loading available.
 A successful nonempty final ASR pass also enables preview. Cold imports never run during
 capture, avoiding the reproduced first-recording overflow.

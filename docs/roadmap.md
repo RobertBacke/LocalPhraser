@@ -160,3 +160,21 @@ mode; lone quick taps cancel without delivery. The custom window now exposes nat
 caption and maximize hit tests. An owned native UI test verified top-edge maximize, mouse
 maximize/restore and full-height side snapping. Space Grotesk is bundled with its OFL notice.
 Broader voice accuracy, gesture timing, display-policy and clean-machine acceptance remain.
+
+## Recognition accuracy for quiet, paused speech — 2026-11-16
+
+The user reported missed and wrong words, worse when speaking quietly with pauses between
+words. Parakeet TDT 0.6b v2 (int8 ONNX through `onnx-asr`, CC-BY-4.0) is now a second speech
+engine and the default for new profiles. Its first-launch download is ~660 MB, where
+`base.en` was ~145 MB. Existing profiles keep their model. Parakeet loads in the background
+at app start, decodes recordings longer than 30 s in pieces, and restores the spelling of
+approved vocabulary terms instead of taking hints. For Whisper, quiet audio is raised before
+decoding and repetition loops are dropped. Every engine now uses Automatic threads (physical
+cores, at most eight), so a saved 16 is capped. Capture continues for 250 ms after release.
+Very quiet recordings show a notice to raise the input level.
+
+A committed synthetic benchmark passed every mark except one. Parakeet at peak 0.014 with
+pauses scored 5.7 errors per 100 words against a mark of 5, which the user accepted as noise.
+Temperature retry did not meet its conditions and is not shipped. The numbers are in
+testing.md. Human speech is not yet verified: a development build trial with the user's own
+voice comes before any switch of the stable installation.

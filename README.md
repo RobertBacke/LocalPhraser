@@ -20,7 +20,7 @@ The development setup uses [uv](https://docs.astral.sh/uv/).
 ```powershell
 uv venv --python 3.12
 uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
-.venv\Scripts\python.exe -m localphraser install-model base.en
+.venv\Scripts\python.exe -m localphraser install-model parakeet-tdt-0.6b-v2
 .venv\Scripts\python.exe -m localphraser
 ```
 
@@ -34,7 +34,11 @@ size and RAM usage have not yet been benchmarked.
 3. Hold **Caps Lock**, speak, and release it; or double-tap to start hands-free recording
    and double-tap again to finish. Both gestures are enabled by default for the selected
    shortcut. Settings also offers hold-only and double-tap-only modes.
+   Capture continues for 250 ms after release so the last word is not cut; a key press
+   during those 250 ms is ignored.
 4. The indicator shows listening/transcribing. Verified targets receive Unicode input.
+   If the microphone input was very quiet, the result says so and suggests raising the
+   input level in Windows Sound settings.
 5. If the field cannot be verified or focus/caret changes, use tray → Latest transcript → Copy.
 
 Opening the EXE uses `%LOCALAPPDATA%\LocalPhraser\config.json` and its model directory.
@@ -71,7 +75,8 @@ recording, polishes it if enabled, and inserts the final text. Preview uses extr
 can add after-release waiting. It is off by default. Preparation uses discarded local silence, without microphone capture.
 Single-click the tray icon to open or restore Home; right-click it for the menu.
 Tray-started recordings always use manual copy because interacting with the tray changes focus.
-Settings include shortcut, microphone, model location/selection, CPU threads, recording limit,
+Settings include shortcut, microphone, model location/selection, CPU threads (Automatic by
+default: physical cores, at most eight), recording limit,
 and automatic insertion. Appearance can follow the system or use Light or Dark; saving only
 appearance preserves the loaded speech model. Appearance applies immediately and auto-saves;
 other settings use Save. Settings, Latest transcript and the dictation
@@ -100,11 +105,23 @@ its audio cleared. Ordinary silence still supplies frames and does not trigger t
 
 ## Models and offline use
 
-Choose `tiny.en`, `base.en` (default), or `small.en`. They are the MIT-licensed Systran
-CTranslate2 conversions of OpenAI Whisper English models. `base.en` is an initial
-quality/resource compromise, **not a measured winner**. Inference uses CPU INT8, one worker,
-four threads by default, greedy decoding, and bundled Silero voice activity detection.
-With live preview disabled, the speech model loads on the background inference worker
+The default for new profiles is **Parakeet TDT 0.6b v2** (`parakeet-tdt-0.6b-v2`, ~660 MB,
+English only). It is NVIDIA's CC-BY-4.0 model as an int8 ONNX conversion by istupakov, run
+locally through `onnx-asr` and ONNX Runtime. Existing profiles keep their model. Parakeet
+loads in the background at launch; wait for **Ready**. Recordings longer than 30 s are
+decoded in pieces. In this app's synthetic benchmark it had the fewest errors, or tied for
+fewest, in most level and pause conditions. `small.en` did better in two (peak 0.011 with
+pauses: 10.2 against 14.8 errors per 100 words; peak 0.008 continuous: 13.6 against 15.9).
+Parakeet was also the fastest on a 10-second clip (0.59 s, against 0.66 s for
+`base.en`), though slower than `base.en` per clip on speech with long pauses. That benchmark
+uses synthetic speech, and human speech is not yet verified ([testing](docs/testing.md)).
+
+The Whisper models `tiny.en`, `base.en`, `small.en` and the distilled and medium variants
+remain available. They are the MIT-licensed Systran CTranslate2 conversions of OpenAI Whisper
+English models. Whisper inference uses CPU INT8, one worker and bundled Silero voice activity
+detection. Very quiet recordings are raised in level before decoding, and repetition loops
+are dropped. CPU threads default to Automatic for every engine.
+With live preview disabled, a Whisper model loads on the background inference worker
 after recording stops. With live preview enabled, it prepares before recording becomes
 available, including a discarded silence decode to initialize VAD and the speech decoder.
 This keeps cold imports out of microphone capture. It remains warm until settings change
@@ -119,7 +136,7 @@ missing/damaged models. Recognition itself never downloads them. A new profile s
 one visible model setup download; later launches do not retry automatically.
 
 ```powershell
-.venv\Scripts\python.exe -m localphraser verify-model base.en
+.venv\Scripts\python.exe -m localphraser verify-model parakeet-tdt-0.6b-v2
 # Disconnect Wi-Fi/Ethernet, then launch and repeat dictation.
 .venv\Scripts\python.exe -m localphraser
 ```
@@ -137,7 +154,8 @@ remain local. Suggestions never apply automatically and do not retrain a model. 
 suggestion history clears saved corrections/dismissals; approved vocabulary remains.
 
 Recognition quality defaults to **Balanced**; **Fast** and **Accurate** are selectable in
-Settings. More decoding search is a tradeoff, not an accuracy guarantee. Live preview stays
+Settings for Whisper models. It has no effect on Parakeet, and Settings disables it while
+Parakeet is selected. More decoding search is a tradeoff, not an accuracy guarantee. Live preview stays
 fast. See the [polishing review](docs/polishing-review.md) for current behavior and the
 read-only comparison with other open-source dictation projects.
 Home offers individual deletion and Clear history. Turn off **Keep transcript history on
@@ -150,8 +168,13 @@ models remain available. See [troubleshooting](docs/troubleshooting.md) for reco
 Latest transcript also provides an in-memory recovery copy. Home lists the latest 200 saved
 entries; statistics cover all saved entries. History starts with dictations made in this version.
 Settings → Vocabulary hints accepts a short comma-separated list of names or technical
-terms (up to 300 characters), for example `Codex, PySide, NumPy`. These optional hints
-guide the local recognizer; they do not force a spelling or replace recognized words.
+terms (up to 300 characters), for example `Codex, PySide, NumPy`. With Whisper, these
+optional hints guide the local recognizer; they do not force a spelling or replace
+recognized words. Parakeet cannot take hints. Instead, recognised words that match an
+approved term exactly, ignoring case, spaces and hyphens, are replaced by its approved
+spelling ("local phraser" becomes "LocalPhraser"). Sound-alike or partial matches are not
+replaced, and a term that begins or ends with punctuation (for example `.NET`) is not
+restored. The Vocabulary page says which behavior the selected engine uses.
 Hints are saved in local settings, independently of transcripts. Clear the field to disable
 them. Too many or unrelated hints can reduce accuracy; start with a few relevant terms.
 Manual Copy intentionally changes the clipboard and may enter OS clipboard history.

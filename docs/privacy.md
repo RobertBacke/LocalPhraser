@@ -9,11 +9,16 @@ Recorded audio is bounded RAM;
 buffers are zeroed best-effort on success, cancellation and errors. Python/native runtimes,
 memory paging and OS crash dumps prevent a secure-erasure guarantee. No audio temp files.
 
-ASR receives arrays, not file paths; CPU inference and Silero VAD run locally. The runtime
-sets HF_HUB_OFFLINE and uses a verified local model directory with local_files_only=True.
+ASR receives arrays, not file paths. Inference runs locally on the CPU: Whisper models through
+faster-whisper with Silero VAD, and Parakeet through `onnx-asr` and ONNX Runtime. Both set
+HF_HUB_OFFLINE and load only a verified local model directory. Whisper uses
+local_files_only=True. Parakeet is given that directory and never a model name that could start
+a download. For quiet recordings, Whisper decodes a temporary louder copy of the audio, which
+is zeroed after use. The recording's speech level is computed in memory for the quiet-input
+notice and is not saved.
 Optional live preview copies up to six seconds of the active recording into a short-lived
 RAM snapshot. Warm local ASR produces a revisable draft only in the indicator; snapshots
-are cleared after processing and stale UI updates are discarded. No preview capture runs while idle. With live preview enabled, startup, model download
+are cleared after processing and stale UI updates are discarded. No preview capture runs while idle. With live preview enabled, or with Parakeet selected, startup, model download
 and settings save prepare the local speech model using generated silence. That silence
 and any decode output are discarded; no microphone audio is used for preparation. The full recording remains the input for final dictation.
 No dictated content is logged. Exceptions shown to users are sanitized. No external analytics,
@@ -21,7 +26,8 @@ accounts, telemetry, updater, or cloud inference client.
 
 Approved vocabulary hints are explicitly added/reviewed in Vocabulary and saved in local
 `config.json`. Only approved hints reach the local speech recognizer; Remove selected word
-removes one. Opening Vocabulary scans bounded samples (first 3,000 characters of the latest
+removes one. Whisper uses them as recognition hints. With Parakeet, they restore spelling
+locally after recognition and are not sent anywhere. Opening Vocabulary scans bounded samples (first 3,000 characters of the latest
 200 saved raw dictations) for recurring names/technical terms. This local pattern analysis
 does not train a model or call an LLM/network service. It does not inspect external app text.
 Corrected spellings explicitly submitted on the page and dismissed terms are stored in a
@@ -67,15 +73,19 @@ at least 200 ms records until release. Two short taps within 350 ms latch record
 another pair stops it. A lone quick tap is cancelled and its buffer cleared, without
 transcription, insertion or a history entry. Hold-only and double-tap-only modes are offered.
 The existing recording-duration limit and manual cancellation continue to apply.
+After release, capture continues for 250 ms so the last word is not cut. That audio belongs
+to the same recording and is cleared with it. A key press during those 250 ms is ignored.
 
 On the first normal launch of a new configuration profile, the app opens Settings and starts
-one visible download of the default `base.en` speech model if it is absent. Cancel is available.
+one visible download of the default Parakeet TDT 0.6b v2 speech model (~660 MB) if it is
+absent. Cancel is available.
 The configuration is persisted before downloading; failure, cancellation and later launches
 never trigger automatic retries. Existing profiles and `--smoke-test` never start this setup.
 Only that first-launch setup, explicit `install-model` / `install-refiner`, and Settings download
 actions initiate network requests. Download workers use
 Hugging Face Hub HTTPS metadata/download endpoints and their redirected storage/CDN endpoints
-to fetch Systran speech or publisher Qwen GGUF artifacts. Each installation records repository/revision/hashes. No speech is supplied.
+to fetch Systran Whisper or istupakov Parakeet ONNX speech artifacts, or publisher Qwen GGUF
+artifacts. Each installation records repository/revision/hashes. No speech is supplied.
 Installer download metadata may reside under the chosen model directory. Installation occurs
 in a separate process; dictation remains offline. Development package installation also
 contacts package registries, but it is not application runtime traffic.

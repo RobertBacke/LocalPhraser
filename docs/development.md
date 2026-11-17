@@ -28,7 +28,17 @@ failed preparation. No download or synthetic inference is performed during prepa
 This moves cold loading into speaking time; it does not promise a fixed latency reduction.
 Cancelled or silent first recordings may still load weights. Native loading/inference cannot
 be interrupted; shutdown suppresses delivery and skips later polishing preparation, but may
-wait for active loading to finish. Startup remains lazy.
+wait for active loading to finish. Whisper startup remains lazy unless live preview is
+enabled. Parakeet is prepared in the background at launch, after its download and after
+settings save, because loading takes several seconds. Recording waits for Ready while the
+model prepares.
+
+`make_recognizer` in `recognition.py` picks `WhisperRecognizer` or `ParakeetRecognizer`
+from the model name. The app, `diagnostics.py` and the benchmark scripts all use it.
+`cpu_threads` 0 means Automatic: `config.inference_threads` uses physical cores, at most
+eight. A saved value above that limit is still accepted (0–16) and is capped when used.
+Recognition quality applies to Whisper only. `scripts/benchmark_quiet_speech.py` is the
+synthetic quiet and paused speech benchmark; see testing.md for its commands and results.
 
 Use the README's Python 3.12 x64 virtual environment commands. The project is source-layout
 packaged with Hatchling. `requirements-dev.lock` captures the resolved development environment;
@@ -72,8 +82,13 @@ by merely enumerating the list. Broader driver/sample-rate/hot-plug acceptance r
 
 Older configurations also default to empty vocabulary hints. Hints are an explicitly entered,
 single-line string limited to 300 characters. The UI passes them through faster-whisper's
-`hotwords` argument; blank hints become `None`. Recognition output is not post-replaced.
+`hotwords` argument; blank hints become `None`. Whisper output is not post-replaced.
 The engine may truncate hints to its prompt token budget, so concise lists work best.
+Parakeet cannot take hints. With Parakeet, `parakeet.restore_spelling` replaces up to four
+consecutive recognised words with an approved term when they match it exactly, ignoring case,
+spaces and hyphens. Punctuation attached to the words is kept. A sound-alike or partial
+match is not replaced. A term that itself begins or ends with punctuation (for example
+`.NET`) is not restored. Latest transcript shows the text after this step.
 
 Phase 2 has an optional `polish` extra. The tested Windows CPU wheel and its added
 dependencies are pinned in `requirements-polish.lock`, using the upstream documented CPU
@@ -102,7 +117,8 @@ without rechecking the frozen Qt launch on a clean build. No global PATH setting
 First-launch setup is tied to absence of the selected configuration file, not EXE location.
 The main entry point writes the default config before constructing Desktop and passes an
 explicit first_launch flag. Smoke launches neither persist that config nor allow automatic
-setup. A new normal profile downloads base.en once, using the same owned cancellable process
+setup. A new normal profile downloads the default Parakeet model (~660 MB) once, using the
+same owned cancellable process
 and integrity verification as manual setup. Existing models skip downloading. Later launches,
 including after a failure, stay offline until an explicit Download action. Recognition remains
 local-only and verifies hashes before loading. Presence checks used for UI readiness do not

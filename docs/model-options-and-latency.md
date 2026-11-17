@@ -16,7 +16,39 @@ These are CTranslate2 conversions from the existing speech-model publisher, rath
 new inference backends. Distilled models use `vocabulary.json`; original Whisper conversions
 use `vocabulary.txt`. The installer pins a repository revision, verifies upstream LFS hashes,
 and verifies every catalog artifact again locally. No repository Python code is executed.
-Models download only through explicit selection/download; the default model is unchanged.
+Models download only through explicit selection/download. These additions did not change the
+default model; Parakeet later became the default (see below).
+
+## Parakeet TDT 0.6b v2 (default since 2026-11-16)
+
+| Model | Approximate download | Purpose |
+| --- | ---: | --- |
+| `parakeet-tdt-0.6b-v2` | 660 MB | Default for new profiles; fewest errors in most conditions of this app's quiet-speech benchmark |
+
+This is a second engine, not a Whisper conversion. It runs NVIDIA's Parakeet TDT 0.6b v2
+(CC-BY-4.0) as int8 ONNX files converted by istupakov
+([istupakov/parakeet-tdt-0.6b-v2-onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx)),
+through `onnx-asr` 0.12.0 and ONNX Runtime's CPU provider. The installer downloads only the
+int8 encoder and decoder plus the preprocessor, configuration and vocabulary files. It pins and
+verifies them the same way as the other models. It uses no voice activity filter and no level
+correction, because neither improved its results in the trial. Recordings longer than 30 s
+are decoded in pieces of at most 30 s, cut at the quietest 200 ms between 20 s and 30 s of
+each piece. This bounds memory. The model loads in the background at app start, because loading
+takes several seconds. Recognition quality (Fast/Balanced/Accurate) does not apply to it.
+Existing profiles keep their selected model.
+
+On the synthetic quiet-speech benchmark (see testing.md, 2026-11-16), a 10-second clip took
+0.59 s with Parakeet, 0.66 s with `base.en` and 2.07 s with `small.en` (Accurate). That machine
+was busy with other work. A 132 s clip decoded in 11.66 s with no word errors and a process
+peak of 1246 MB. The evidence is synthetic speech; human speech is not yet verified.
+
+## CPU threads
+
+CPU threads default to **Automatic**: the number of physical cores, at most eight. A saved
+value is capped at that limit when used, so a saved 16 on a 6-core CPU runs with 6. The
+configuration file is not rewritten. In the earlier trial, 16 threads on 6 cores made Whisper
+recognition 3 to 10 times slower. The same limit applies to Whisper, Parakeet and polishing.
+The timestamp measurement below used a fixed four threads, the default at that time.
 
 ## Decoding change
 
