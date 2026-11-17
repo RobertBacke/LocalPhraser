@@ -53,6 +53,7 @@ def test_thread_limit_uses_physical_cores_capped_at_eight(monkeypatch):
     monkeypatch.setattr("psutil.cpu_count", lambda logical=True: 24)
     assert config.thread_limit() == 8
 
+
 def test_thread_limit_falls_back_when_physical_count_is_unknown(monkeypatch):
     monkeypatch.setattr("psutil.cpu_count", lambda logical=True: None)
     monkeypatch.setattr("os.cpu_count", lambda: 4)
@@ -60,9 +61,11 @@ def test_thread_limit_falls_back_when_physical_count_is_unknown(monkeypatch):
     monkeypatch.setattr("os.cpu_count", lambda: None)
     assert config.thread_limit() == 1
 
+
 def test_inference_threads_caps_saved_values_and_resolves_automatic(monkeypatch):
     monkeypatch.setattr(config, "thread_limit", lambda: 6)
     assert [config.inference_threads(n) for n in (0, 1, 4, 6, 16)] == [6, 1, 4, 6, 6]
+
 
 def test_zero_and_sixteen_threads_are_valid_and_zero_is_default():
     assert Config().cpu_threads == 0
@@ -96,18 +99,22 @@ def tone(level, seconds=1.0, rate=16000):
     t = np.arange(int(seconds * rate)) / rate
     return (level * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
 
+
 def test_level_ignores_three_loudest_frames():
     audio = tone(0.02)
-    for start in (800, 4000, 9000):          # three clicks, one frame each
+    for start in (800, 4000, 9000):  # three clicks, one frame each
         audio[start : start + 100] = 0.9
     assert speech_level(audio) == pytest.approx(0.02, rel=0.05)
 
+
 def test_level_of_short_or_empty_audio_is_plain_peak():
     assert speech_level(np.empty(0, dtype=np.float32)) == 0.0
-    assert speech_level(tone(0.2, seconds=0.1)) == pytest.approx(0.2, rel=0.05)   # 5 frames
+    assert speech_level(tone(0.2, seconds=0.1)) == pytest.approx(0.2, rel=0.05)  # 5 frames
+
 
 def test_level_uses_capture_rate_for_frame_length():
     assert speech_level(tone(0.05, rate=48000), 48000) == pytest.approx(0.05, rel=0.05)
+
 
 def test_boost_raises_quiet_audio_to_target_in_a_new_array():
     audio = tone(0.02)
@@ -115,11 +122,13 @@ def test_boost_raises_quiet_audio_to_target_in_a_new_array():
     assert boosted is not audio and speech_level(boosted) == pytest.approx(0.3, rel=0.05)
     assert float(np.max(np.abs(audio))) == pytest.approx(0.02, rel=0.05)
 
+
 def test_boost_is_limited_clipped_and_never_attenuates():
-    assert speech_level(boost_quiet(tone(0.001))) == pytest.approx(0.04, rel=0.05)   # 40x
+    assert speech_level(boost_quiet(tone(0.001))) == pytest.approx(0.04, rel=0.05)  # 40x
     loud = tone(0.5)
     assert boost_quiet(loud) is loud
-    clicked = tone(0.02); clicked[100:200] = 0.9
+    clicked = tone(0.02)
+    clicked[100:200] = 0.9
     assert float(np.max(np.abs(boost_quiet(clicked)))) == 1.0
     silent = np.zeros(16000, dtype=np.float32)
     assert boost_quiet(silent) is silent
@@ -133,9 +142,11 @@ def test_boost_is_limited_clipped_and_never_attenuates():
 def test_final_and_preview_decode_boost_quiet_audio_then_zero_the_copy():
     recognizer = WhisperRecognizer(Path("unused"))
     seen = {}
+
     def transcribe(audio, **kwargs):
         seen["audio"], seen["peak"] = audio, float(np.max(np.abs(audio)))
         return iter([SimpleNamespace(text="hi", compression_ratio=1.0)]), None
+
     recognizer._model = Mock(transcribe=transcribe)
     quiet = tone(0.01)
     assert recognizer.transcribe(quiet) == "hi"
@@ -145,13 +156,17 @@ def test_final_and_preview_decode_boost_quiet_audio_then_zero_the_copy():
     recognizer.preview(quiet)
     assert seen["peak"] == pytest.approx(0.3, rel=0.05)
 
+
 def test_repetition_loop_segments_are_dropped():
     recognizer = WhisperRecognizer(Path("unused"))
-    segments = [SimpleNamespace(text="keep this", compression_ratio=1.4),
-                SimpleNamespace(text="la la la la la la", compression_ratio=2.41),
-                SimpleNamespace(text="and this")]                 # no attribute: kept
+    segments = [
+        SimpleNamespace(text="keep this", compression_ratio=1.4),
+        SimpleNamespace(text="la la la la la la", compression_ratio=2.41),
+        SimpleNamespace(text="and this"),
+    ]  # no attribute: kept
     recognizer._model = Mock(transcribe=lambda *a, **k: (iter(segments), None))
     assert recognizer.transcribe(tone(0.3)) == "keep this and this"
+
 
 def test_temperatures_default_to_single_zero():
     recognizer = WhisperRecognizer(Path("unused"))
@@ -261,16 +276,20 @@ def test_quiet_input_adds_notice_to_result_but_not_to_state(setup):
     assert results[-1] == ("Hello, world.", f"Inserted. {QUIET_MESSAGE}")
     assert changes[-1] == (State.IDLE, "Inserted.")
 
+
 def test_normal_input_adds_no_notice(setup):
     assert QUIET_MESSAGE not in results[-1][1]
+
 
 def test_quiet_input_with_no_text_replaces_no_speech_message(setup):
     # recognizer returns ""; recorder.audio = np.full(16000, 0.005)
     assert changes[-1] == (State.IDLE, QUIET_MESSAGE)
 
+
 def test_click_does_not_hide_quiet_input(setup):
     # audio 0.005 with a 100-sample burst of 0.9: still quiet
     assert QUIET_MESSAGE in results[-1][1]
+
 
 def test_tray_shows_quiet_notice_once_per_session(desktop):
     # call complete_transcript twice with a notice containing QUIET_MESSAGE
@@ -303,15 +322,19 @@ def test_word_errors_counts_edits_over_reference_words():
     assert word_errors("the cat sat down", "the cat down") == (1, 4)
     assert word_errors("the cat", "the the the the cat") == (3, 2)
 
+
 def test_paused_markup_is_one_utterance_with_700_ms_between_words():
     assert paused_markup("a b c") == (
-        '<rate speed="-3">a <silence msec="700"/> b <silence msec="700"/> c</rate>')
+        '<rate speed="-3">a <silence msec="700"/> b <silence msec="700"/> c</rate>'
+    )
+
 
 def test_degrade_sets_peak_pads_half_a_second_and_adds_noise():
     out = degrade(np.ones(16000, dtype=np.float32), 0.02, seed=0)
     assert out.size == 32000 and out.dtype == np.float32
     assert float(np.std(out[:8000])) == pytest.approx(0.002, rel=0.1)
     assert float(np.mean(out[8000:24000])) == pytest.approx(0.02, rel=0.05)
+
 
 def test_click_adds_two_bursts_of_peak_0_35_at_fixed_offsets():
     out = click(np.zeros(32000, dtype=np.float32), seed=0)
@@ -320,8 +343,10 @@ def test_click_adds_two_bursts_of_peak_0_35_at_fixed_offsets():
         assert float(np.max(np.abs(out[start : start + burst]))) == pytest.approx(0.35)
     assert not out[: int(0.05 * 16000)].any()
 
+
 def test_noise_clips_are_the_four_fixed_lengths():
     assert [clip.size // 16000 for clip in noise_clips()] == [3, 8, 5, 5]
+
 
 def test_sentences_total_88_words():
     assert sum(len(s.split()) for s in SENTENCES) == 88
