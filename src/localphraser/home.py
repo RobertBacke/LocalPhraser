@@ -25,7 +25,14 @@ from PySide6.QtWidgets import (
 )
 
 from localphraser.analytics import AnalyticsPage
-from localphraser.appearance import CaptionButton, DragHandle, GlassDialog, dark_surface
+from localphraser.appearance import (
+    CaptionButton,
+    DragHandle,
+    GlassDialog,
+    NoteLabel,
+    StatusDot,
+    dark_surface,
+)
 from localphraser.branding import logo_pixmap
 from localphraser.history import History
 from localphraser.native_frame import enable_snap, hit_test, native_message
@@ -84,11 +91,11 @@ class AppWindow(GlassDialog):
         brand_row.addWidget(brand, 1)
         nav.addLayout(brand_row)
         nav.addSpacing(18)
-        self.home_button = QPushButton("Home")
+        self.home_button = self.nav_button("Home")
         self.home_button.setCheckable(True)
         self.home_button.setChecked(True)
         self.home_button.clicked.connect(self.show_home)
-        self.settings_button = QPushButton("Settings")
+        self.settings_button = self.nav_button("Settings")
         self.settings_button.setCheckable(True)
         self.navigation = QButtonGroup(self)
         self.navigation.addButton(self.home_button)
@@ -96,25 +103,34 @@ class AppWindow(GlassDialog):
         self.settings_button.clicked.connect(settings)
         nav.addWidget(self.home_button)
         nav.addWidget(self.settings_button)
-        self.vocabulary_button = QPushButton("Vocabulary")
+        self.vocabulary_button = self.nav_button("Vocabulary")
         self.vocabulary_button.setCheckable(True)
         self.navigation.addButton(self.vocabulary_button)
         if vocabulary:
             self.vocabulary_button.clicked.connect(vocabulary)
         nav.addWidget(self.vocabulary_button)
-        self.analytics_button = QPushButton("Analytics")
+        self.analytics_button = self.nav_button("Analytics")
         self.analytics_button.setCheckable(True)
         self.navigation.addButton(self.analytics_button)
         self.analytics_button.clicked.connect(self.show_analytics)
         nav.addWidget(self.analytics_button)
         if latest is not None:
-            latest_button = QPushButton("Latest transcript")
+            latest_button = self.nav_button("Latest transcript")
             latest_button.clicked.connect(latest)
             nav.addWidget(latest_button)
         nav.addStretch()
+        state_row = QHBoxLayout()
+        state_row.setContentsMargins(4, 0, 0, 2)
+        state_row.setSpacing(8)
+        self.state_dot = StatusDot()
         self.state_label = QLabel("Ready")
         self.state_label.setWordWrap(True)
-        nav.addWidget(self.state_label)
+        dot_column = QVBoxLayout()
+        dot_column.setContentsMargins(0, 5, 0, 0)  # Centre on the first line of text.
+        dot_column.addWidget(self.state_dot, 0, Qt.AlignmentFlag.AlignTop)
+        state_row.addLayout(dot_column)
+        state_row.addWidget(self.state_label, 1)
+        nav.addLayout(state_row)
         self.record_button = QPushButton("Record to history")
         self.record_button.clicked.connect(record)
         self.record_button.setToolTip("Use your shortcut in another app for automatic insertion.")
@@ -149,7 +165,7 @@ class AppWindow(GlassDialog):
         heading.setWordWrap(True)
         heading.setObjectName("pageTitle")
         layout.addWidget(heading)
-        self.hint = QLabel(f"Hold {shortcut}, speak naturally, then release.")
+        self.hint = QLabel()
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
         metrics = QHBoxLayout()
@@ -166,7 +182,9 @@ class AppWindow(GlassDialog):
             metrics.addWidget(panel)
         layout.addLayout(metrics)
         recent = QHBoxLayout()
-        recent.addWidget(QLabel("Recent transcriptions"), 1)
+        recent_title = QLabel("Recent transcriptions")
+        recent_title.setProperty("sectionTitle", True)
+        recent.addWidget(recent_title, 1)
         self.clear_button = QPushButton("Clear history")
         self.clear_button.clicked.connect(self.clear_history)
         recent.addWidget(self.clear_button)
@@ -192,6 +210,8 @@ class AppWindow(GlassDialog):
         self.entry_info.setTextFormat(Qt.TextFormat.PlainText)
         self.entry_info.setWordWrap(True)
         detail_layout.addWidget(self.entry_info)
+        self.entry_notice = NoteLabel(collapse_when_empty=True)
+        detail_layout.addWidget(self.entry_notice)
         self.result_text = QTextEdit()
         self.raw = QTextEdit()
         for editor in (self.result_text, self.raw):
@@ -211,20 +231,56 @@ class AppWindow(GlassDialog):
         detail_layout.addLayout(actions)
         split.addWidget(detail)
         split.setSizes([260, 420])
-        layout.addWidget(split, 1)
-        self.storage_note = QLabel(
+        self.history_split = split
+        self.empty_history = QFrame()
+        self.empty_history.setObjectName("emptyHistory")
+        empty_layout = QVBoxLayout(self.empty_history)
+        empty_layout.setContentsMargins(32, 28, 32, 28)
+        empty_layout.setSpacing(8)
+        empty_layout.addStretch()
+        empty_title = QLabel("No dictations yet")
+        empty_title.setObjectName("emptyTitle")
+        empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(empty_title)
+        self.empty_message = QLabel()
+        self.empty_message.setTextFormat(Qt.TextFormat.PlainText)
+        self.empty_message.setWordWrap(True)
+        self.empty_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(self.empty_message)
+        empty_layout.addStretch()
+        self.history_views = QStackedWidget()
+        self.history_views.addWidget(split)
+        self.history_views.addWidget(self.empty_history)
+        layout.addWidget(self.history_views, 1)
+        self.storage_note = NoteLabel(
             "History stays on this device. Showing the latest 200 entries."
             if history.path
             else "History is held in memory for this session."
         )
-        self.storage_note.setWordWrap(True)
         layout.addWidget(self.storage_note)
         self.pages.addWidget(self.home)
         self.analytics = AnalyticsPage(history)
         self.pages.addWidget(self.analytics)
         content.addWidget(self.pages, 1)
         outer.addLayout(content, 1)
+        self.set_hint(f"Hold {shortcut}, speak naturally, then release.")
         self.refresh_history()
+
+    def nav_button(self, text: str) -> QPushButton:
+        button = QPushButton(text)
+        button.setProperty("nav", True)
+        return button
+
+    def set_hint(self, text: str) -> None:
+        """Show how to dictate with the current shortcut, also in the empty history."""
+        self.hint.setText(text)
+        self.empty_message.setText(
+            f"{text} Speak in any app; your first dictation will appear here."
+        )
+
+    def set_state(self, text: str, tone: str) -> None:
+        self.state_label.setText(text)
+        self.state_dot.set_tone(tone)
 
     def maximize_restore(self) -> None:
         self.showNormal() if self.isMaximized() or self.isFullScreen() else self.showMaximized()
@@ -325,6 +381,7 @@ class AppWindow(GlassDialog):
             item.setData(Qt.ItemDataRole.UserRole, entry["id"])
             self.entries.addItem(item)
         self.clear_button.setEnabled(bool(count))
+        self.history_views.setCurrentWidget(self.history_split if count else self.empty_history)
         if count:
             self.entries.setCurrentRow(0)
         blocker.unblock()
@@ -344,10 +401,11 @@ class AppWindow(GlassDialog):
         self.result_text.setPlainText(entry["text"] if entry else "")
         self.raw.setPlainText(entry["raw"] if entry else "")
         self.entry_info.setText(
-            f"{entry['words']} words · {entry['seconds']:.1f}s recorded\n{entry['notice']}"
+            f"{entry['words']} words · {entry['seconds']:.1f}s recorded"
             if entry
             else "Your next dictation will appear here."
         )
+        self.entry_notice.setText(entry["notice"] if entry else "")
 
     def copy_text(self) -> None:
         editor = self.result_text if self.tabs.currentIndex() == 0 else self.raw

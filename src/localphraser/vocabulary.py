@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from localphraser.appearance import NoteLabel
+
 if TYPE_CHECKING:
     from localphraser.history import History
 
@@ -100,23 +102,26 @@ class VocabularyPage(QScrollArea):
         self.note_for_engine = engine_note
         self.setWidgetResizable(True)
         self.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.viewport().setAutoFillBackground(False)
         body = QWidget()
         body.setObjectName("glassBody")
         self.setWidget(body)
         layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 14, 14, 8)  # Title lines up with the other pages.
+        layout.setSpacing(10)
         heading = QLabel("Your vocabulary")
         heading.setObjectName("pageTitle")
         layout.addWidget(heading)
-        description = QLabel(
-            "Names, apps and terms you want recognized. Only words you add or approve guide "
-            "future dictations. This does not retrain the speech model."
+        layout.addWidget(
+            NoteLabel(
+                "Names, apps and terms you want recognized. Only words you add or approve guide "
+                "future dictations. This does not retrain the speech model."
+            )
         )
-        description.setWordWrap(True)
-        layout.addWidget(description)
-        self.engine_note = QLabel()
-        self.engine_note.setWordWrap(True)
+        self.engine_note = NoteLabel()
         layout.addWidget(self.engine_note)
+        layout.addSpacing(6)
         self.entry = QLineEdit()
         self.entry.setMaxLength(64)
         self.entry.setPlaceholderText("A name or corrected spelling, e.g. Codex")
@@ -136,7 +141,11 @@ class VocabularyPage(QScrollArea):
         self.notice.setTextFormat(Qt.TextFormat.PlainText)
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
-        self.budget = QLabel()
+        layout.addSpacing(6)
+        words_title = QLabel("Approved words")
+        words_title.setProperty("sectionTitle", True)
+        layout.addWidget(words_title)
+        self.budget = NoteLabel()
         layout.addWidget(self.budget)
         self.words = QListWidget()
         self.words.setAccessibleName("Approved vocabulary")
@@ -145,14 +154,17 @@ class VocabularyPage(QScrollArea):
         self.remove_button = QPushButton("Remove selected word")
         self.remove_button.clicked.connect(self.remove_word)
         layout.addWidget(self.remove_button)
-        layout.addWidget(QLabel("Suggestions to review"))
-        help_text = QLabel(
-            "Recurring names and technical terms from the latest 200 saved dictations, plus "
-            "spellings you submit above. Pattern-based suggestions can be wrong; approve only "
-            "the spelling you want. No other app's text is read."
+        layout.addSpacing(6)
+        review_title = QLabel("Suggestions to review")
+        review_title.setProperty("sectionTitle", True)
+        layout.addWidget(review_title)
+        layout.addWidget(
+            NoteLabel(
+                "Recurring names and technical terms from the latest 200 saved dictations, plus "
+                "spellings you submit above. Pattern-based suggestions can be wrong; approve "
+                "only the spelling you want. No other app's text is read."
+            )
         )
-        help_text.setWordWrap(True)
-        layout.addWidget(help_text)
         self.empty_suggestions = QLabel(
             "No suggestions yet. Recurring terms will appear here for review."
         )

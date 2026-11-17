@@ -182,7 +182,7 @@ def test_save_downloads_missing_selection_before_switching_and_returns_home(desk
 
     desktop.show_settings()
     settings = desktop.settings
-    settings.model.setCurrentText(model)
+    settings.model.select_data(model)
     settings.save()
     settings.downloader.start.assert_called_once_with(
         model, Path(desktop.config.model_root), refiner=False
@@ -204,7 +204,7 @@ def test_save_downloads_missing_selection_before_switching_and_returns_home(desk
 def test_unsuccessful_model_install_does_not_switch_or_save_settings(desktop, cancelled):
     desktop.show_settings()
     settings = desktop.settings
-    settings.model.setCurrentText("distil-small.en")
+    settings.model.select_data("distil-small.en")
     settings.duration.setValue(200)
     settings.save()
     settings.download_finished(False, cancelled)
@@ -219,7 +219,7 @@ def test_edits_during_download_are_preserved_for_explicit_save(desktop):
 
     desktop.show_settings()
     settings = desktop.settings
-    settings.model.setCurrentText("distil-small.en")
+    settings.model.select_data("distil-small.en")
     settings.save()
     settings.duration.setValue(200)
     folder = Path(desktop.config.model_root) / "distil-small.en"
@@ -347,6 +347,44 @@ def test_pipeline_warms_on_start_only_for_parakeet(desktop, monkeypatch):
     for model in (PARAKEET_MODEL, "small.en"):
         MAKE_PIPELINE(desktop, replace(desktop.config, model=model))
     assert [k["warm_on_start"] for k in seen] == [True, False]
+
+
+def test_capsule_invites_speech_only_when_live_preview_is_on(desktop, monkeypatch):
+    monkeypatch.setattr(ui, "Dictation", Mock())
+    monkeypatch.setattr(ui, "Recorder", Mock())
+    monkeypatch.setattr(ui, "make_recognizer", Mock())
+    for live in (False, True):
+        MAKE_PIPELINE(desktop, replace(desktop.config, live_preview=live))
+        desktop.indicator.display(State.RECORDING)
+        expected = "Listening — speak now" if live else "Listening"
+        assert desktop.indicator.status.text() == expected
+        desktop.indicator.display(State.IDLE)
+
+
+@pytest.mark.parametrize(
+    ("state", "colour"),
+    [
+        (State.RECORDING, "recording"),
+        (State.TRANSCRIBING, "busy"),
+        (State.WARMING, "muted"),
+        (State.ERROR, "recording"),
+    ],
+)
+def test_sidebar_status_dot_uses_the_capsule_colours(desktop, state, colour):
+    desktop.state_changed(state, "")
+    assert desktop.window.state_label.text() == state.value
+    assert desktop.window.state_dot.tone == colour
+    assert desktop.indicator.dot.tone == colour
+
+
+def test_sidebar_status_dot_is_ready_only_with_a_model(desktop):
+    desktop.state_changed(State.IDLE, "")
+    assert desktop.window.state_label.text() == "Speech model required"
+    assert desktop.window.state_dot.tone == "muted"
+    publish_fixture_model(desktop)
+    desktop.state_changed(State.IDLE, "")
+    assert desktop.window.state_label.text() == "Ready"
+    assert desktop.window.state_dot.tone == "ready"
 
 
 def test_download_warms_preview_and_shortcut_does_not_capture_until_ready(desktop):

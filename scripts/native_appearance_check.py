@@ -71,7 +71,7 @@ def check(output: Path) -> None:
                 settings.scroll_area.ensureWidgetVisible(settings.model)
                 QTest.qWait(150)
                 settings.model.setFocus()
-                settings.model.setCurrentText("small.en")
+                settings.model.select_data("small.en")
                 settings.model.showPopup()
                 QTest.qWait(500)  # Wait for the native combo roll-open animation.
                 popup = settings.model.view().window()
@@ -79,7 +79,7 @@ def check(output: Path) -> None:
                 assert popup.grab().save(str(output / f"{theme}-model-popup.png"))
                 QTest.keyClick(settings.model.view(), Qt.Key.Key_Down)
                 QTest.keyClick(settings.model.view(), Qt.Key.Key_Return)
-                assert settings.model.currentText() == "distil-small.en"
+                assert settings.model.currentData() == "distil-small.en"
                 settings.resize(620, 480)
                 for combo in settings.findChildren(GlassComboBox):
                     settings.scroll_area.ensureWidgetVisible(combo)

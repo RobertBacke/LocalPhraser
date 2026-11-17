@@ -6,7 +6,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QGroupBox, QListView, QWidget
 
 from localphraser.appearance import GlassComboBox, GlassSpinBox
-from localphraser.config import MODELS, PARAKEET_MODEL, Config
+from localphraser.config import MODEL_NAMES, MODELS, PARAKEET_MODEL, Config
 from localphraser.ui import Settings
 
 
@@ -78,8 +78,20 @@ def test_model_popup_preserves_keyboard_selection_and_catalog_ids(app, monkeypat
     settings.show()
     combo = settings.model
     assert isinstance(combo.view(), QListView)
-    assert [combo.itemText(i) for i in range(combo.count())] == list(MODELS)
-    combo.setCurrentText("small.en")
+    # Friendly names are shown; the catalog id stays the item's data and the saved value.
+    assert [combo.itemData(i) for i in range(combo.count())] == list(MODELS)
+    assert [combo.itemText(i) for i in range(combo.count())] == [
+        "Parakeet — recommended",
+        "Whisper tiny.en",
+        "Whisper base.en",
+        "Whisper small.en",
+        "Whisper distil-small.en",
+        "Whisper distil-medium.en",
+        "Whisper medium.en",
+    ]
+    assert combo.currentData() == PARAKEET_MODEL
+    assert combo.select_data("small.en")
+    assert combo.currentText() == "Whisper small.en"
     app.processEvents()  # Let the quality row relayout before the popup opens.
     combo.setFocus()
     combo.showPopup()
@@ -87,7 +99,8 @@ def test_model_popup_preserves_keyboard_selection_and_catalog_ids(app, monkeypat
     assert combo.view().isVisible()
     QTest.keyClick(combo.view(), Qt.Key.Key_Down)
     QTest.keyClick(combo.view(), Qt.Key.Key_Return)
-    assert combo.currentText() == "distil-small.en"
+    assert combo.currentData() == "distil-small.en"
+    assert combo.currentText() == "Whisper distil-small.en"
     settings.save()
     assert saved.call_args.args[0].model == "distil-small.en"
     assert settings.isVisible()
@@ -112,14 +125,14 @@ def test_parakeet_disables_recognition_quality_and_keeps_the_saved_value(
         quality = settings.recognition_quality
         tooltip = quality.toolTip()
         assert quality.isEnabled()
-        settings.model.setCurrentText(PARAKEET_MODEL)
+        settings.model.select_data(PARAKEET_MODEL)
         assert not quality.isEnabled()
         assert settings.quality_hint.text() == "Recognition quality applies to Whisper models only."
         assert quality.currentData() == "accurate"
-        settings.model.setCurrentText("small.en")
+        settings.model.select_data("small.en")
         assert quality.isEnabled() and quality.toolTip() == tooltip
         assert settings.quality_hint.text() == ""
-        settings.model.setCurrentText(PARAKEET_MODEL)
+        settings.model.select_data(PARAKEET_MODEL)
         settings.save()
         assert saved.call_args.args[0].recognition_quality == "accurate"
     finally:
@@ -131,7 +144,7 @@ def test_settings_credit_line_attributes_parakeet(app, monkeypatch):
     monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
     settings = Settings(Config(), Mock())
     try:
-        text = settings.progress.text()
+        text = settings.credits.text()
         assert "Speech models: Systran" in text
         assert "NVIDIA Parakeet TDT 0.6b v2 (CC-BY-4.0), ONNX conversion by istupakov" in text
         assert "Polishing models: Qwen" in text
@@ -193,3 +206,34 @@ def test_keyboard_still_changes_a_focused_list_and_number(app):
     spin.setRange(0, 10)
     QTest.keyClick(spin, Qt.Key.Key_Up)
     assert spin.value() == 1
+
+
+def test_every_catalog_model_has_a_display_name():
+    assert set(MODEL_NAMES) == set(MODELS)
+    assert MODEL_NAMES[PARAKEET_MODEL] == "Parakeet"
+    assert all(MODEL_NAMES[model] == f"Whisper {model}" for model in MODELS[1:])
+
+
+def test_spin_buttons_still_step_the_value(app):
+    from PySide6.QtWidgets import QStyle, QStyleOptionSpinBox
+
+    from localphraser.appearance import GlassDialog
+
+    host = GlassDialog()  # Carries the glass stylesheet that sizes the buttons.
+    spin = GlassSpinBox(host)
+    spin.setRange(0, 10)
+    spin.setGeometry(10, 10, 200, 38)
+    host.show()
+    app.processEvents()
+    try:
+        option = QStyleOptionSpinBox()
+        spin.initStyleOption(option)
+        up = spin.style().subControlRect(
+            QStyle.ComplexControl.CC_SpinBox, option, QStyle.SubControl.SC_SpinBoxUp, spin
+        )
+        assert up.isValid() and up.width() >= 20
+        QTest.mouseClick(spin, Qt.MouseButton.LeftButton, pos=up.center())
+        assert spin.value() == 1
+    finally:
+        host.hide()
+        host.deleteLater()

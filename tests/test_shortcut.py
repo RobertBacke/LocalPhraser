@@ -184,11 +184,13 @@ def test_partial_indicator_is_plain_text_bounded_and_cleared(app):
 
     indicator = Indicator()
     indicator.preview("<b>" + "x" * 1000)
-    assert indicator.textFormat() == Qt.TextFormat.PlainText
-    assert len(indicator.text()) < 250
+    assert indicator.status.textFormat() == Qt.TextFormat.PlainText
+    assert indicator.words.textFormat() == Qt.TextFormat.PlainText
+    assert indicator.words.text() == "x" * 200
     assert indicator.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
     indicator.display(State.IDLE)
-    assert not indicator.text() and not indicator.isVisible()
+    assert not indicator.status.text() and not indicator.words.text()
+    assert not indicator.isVisible()
     indicator.close()
     indicator.deleteLater()
 
@@ -238,13 +240,15 @@ def test_live_preview_setting_and_non_focusing_draft_indicator(app, monkeypatch)
     settings.close()
     indicator = Indicator()
     indicator.live_preview("<b>" + "x" * 1000)
-    assert indicator.text() == "●  Listening\n" + "x" * 200
-    assert indicator.textFormat() == Qt.TextFormat.PlainText
+    assert indicator.status.text() == "Listening"
+    assert indicator.words.text() == "x" * 200
+    assert indicator.words.textFormat() == Qt.TextFormat.PlainText
     assert indicator.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
     indicator.live_preview("")
-    assert indicator.text() == "●  Listening"
+    assert indicator.status.text() == "Listening — speak now"
+    assert not indicator.words.text() and indicator.words.isHidden()
     indicator.display(State.IDLE)
-    assert not indicator.text()
+    assert not indicator.status.text() and not indicator.words.text()
     indicator.close()
     indicator.deleteLater()
 

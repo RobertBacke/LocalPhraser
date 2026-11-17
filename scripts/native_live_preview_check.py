@@ -82,7 +82,8 @@ def check(root: Path, temporary: Path, capture_rate: int, warm_on_launch: bool =
                     assert pipeline.state == State.RECORDING
                     drafts.append(time.monotonic() - started)
                     desktop.indicator.live_preview(text)
-                    assert desktop.indicator.text().startswith("●  Listening\n")
+                    assert desktop.indicator.status.text() == "Listening"
+                    assert desktop.indicator.words.text()
                     desktop.indicator.grab().save(str(temporary / "owned-live-indicator.png"))
 
             pipeline.live_result = draft
@@ -100,7 +101,7 @@ def check(root: Path, temporary: Path, capture_rate: int, warm_on_launch: bool =
                         assert all(word in raw.lower() for word in ("speech", "computer"))
                         assert preserve_words(raw, desktop.latest.text.toPlainText())
                         assert pipeline.recognizer.preview_ready
-                        assert not desktop.indicator.text()
+                        assert not desktop.indicator.words.text()
                         if completed == 0 and not warm_on_launch:
                             assert not drafts and not snapshots, (
                                 "Cold capture ran preview inference."
@@ -139,7 +140,7 @@ def check(root: Path, temporary: Path, capture_rate: int, warm_on_launch: bool =
             pipeline.executor.shutdown(wait=True)
             desktop.insertion.executor.shutdown(wait=True)
             assert code == 0 and completed == 2 and not failures
-            assert pipeline.closed and not desktop.indicator.text()
+            assert pipeline.closed and not desktop.indicator.words.text()
             assert not desktop.latest.text.toPlainText() and not desktop.latest.raw.toPlainText()
             assert all(not a.any() for a in snapshots)
             print(

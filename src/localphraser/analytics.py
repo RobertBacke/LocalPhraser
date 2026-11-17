@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from localphraser.appearance import NoteLabel
+
 if TYPE_CHECKING:
     from localphraser.history import History
 
@@ -49,13 +51,13 @@ class AnalyticsPage(QWidget):
         heading = QLabel("Where you dictate")
         heading.setObjectName("pageTitle")
         layout.addWidget(heading)
-        explanation = QLabel(
-            "Completed dictations by the app focused when recording began. Counts include "
-            "manual-copy results, not just confirmed insertions. "
-            "Older entries have no app identity."
+        layout.addWidget(
+            NoteLabel(
+                "Completed dictations by the app focused when recording began. Counts include "
+                "manual-copy results, not just confirmed insertions. "
+                "Older entries have no app identity."
+            )
         )
-        explanation.setWordWrap(True)
-        layout.addWidget(explanation)
         self.notice = QLabel()
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
@@ -75,14 +77,14 @@ class AnalyticsPage(QWidget):
                 column, QHeaderView.ResizeMode.ResizeToContents
             )
         layout.addWidget(self.table, 1)
-        note = QLabel(
-            "24 hours and 7 days are rolling windows. All time covers saved history; "
-            "deleting entries "
-            "also removes their counts. Turning off history stops new counts. App names stay "
-            "local; window titles, URLs and document contents are not collected."
+        layout.addWidget(
+            NoteLabel(
+                "24 hours and 7 days are rolling windows. All time covers saved history; "
+                "deleting entries "
+                "also removes their counts. Turning off history stops new counts. App names "
+                "stay local; window titles, URLs and document contents are not collected."
+            )
         )
-        note.setWordWrap(True)
-        layout.addWidget(note)
 
     def refresh(self) -> None:
         try:

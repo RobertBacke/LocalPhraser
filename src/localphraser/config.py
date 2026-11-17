@@ -28,6 +28,10 @@ MODEL_HINTS = {
     "distil-medium.en": "Distilled English (~790 MB). Larger encoder; speed depends on your CPU.",
     "medium.en": "Largest option (~1.53 GB). More CPU and memory; expect longer processing.",
 }
+# Names shown in Settings; the catalog id above stays the saved value.
+MODEL_NAMES = {
+    model: "Parakeet" if model == PARAKEET_MODEL else f"Whisper {model}" for model in MODELS
+}
 REFINEMENT_MODELS = ("qwen2.5-0.5b", "qwen2.5-1.5b")
 RECOGNITION_QUALITY = {"fast": 1, "balanced": 3, "accurate": 5}
 DEFAULT_REFINEMENT_MODEL = "qwen2.5-1.5b"

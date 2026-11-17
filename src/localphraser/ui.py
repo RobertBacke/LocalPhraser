@@ -5,15 +5,16 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QDialogButtonBox,
     QFileDialog,
-    QFormLayout,
+    QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSpacerItem,
     QSystemTrayIcon,
     QTabWidget,
     QTextEdit,
@@ -33,12 +35,21 @@ from PySide6.QtWidgets import (
 from localphraser import startup
 from localphraser.activation import ShortcutActivation
 from localphraser.analytics import application_name
-from localphraser.appearance import GlassComboBox, GlassDialog, GlassLabel, GlassSpinBox
+from localphraser.appearance import (
+    GlassCapsule,
+    GlassCheckBox,
+    GlassComboBox,
+    GlassDialog,
+    GlassSpinBox,
+    NoteLabel,
+)
 from localphraser.audio import Recorder, microphones
 from localphraser.branding import app_icon
 from localphraser.config import (
+    DEFAULT_MODEL,
     DEFAULT_PROMPT,
     MODEL_HINTS,
+    MODEL_NAMES,
     MODELS,
     PARAKEET_MODEL,
     REFINEMENT_MODELS,
@@ -82,11 +93,22 @@ class Bridge(QObject):
         callback()
 
 
-class Indicator(GlassLabel):
+def state_tone(state: State) -> str:
+    """The dot colour for a state, shared by the capsule and the sidebar status."""
+    if state in (State.RECORDING, State.ERROR):
+        return "recording"
+    if state in (State.TRANSCRIBING, State.POLISHING, State.INSERTING):
+        return "busy"
+    return "ready" if state == State.IDLE else "muted"
+
+
+class Indicator(GlassCapsule):
     def __init__(self) -> None:
         super().__init__()
         self.anchor_screen: str | None = None
         self.last_state = State.IDLE
+        # Whether live words will follow while listening (the live preview setting).
+        self.expects_words = True
         self.setWindowFlags(
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
@@ -95,8 +117,6 @@ class Indicator(GlassLabel):
             | Qt.WindowType.WindowTransparentForInput
         )
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setTextFormat(Qt.TextFormat.PlainText)
-        self.setWordWrap(True)
         self.setMinimumWidth(320)
         self.setMaximumWidth(560)
 
@@ -106,22 +126,29 @@ class Indicator(GlassLabel):
         self.last_state = state
         if state == State.IDLE:
             self.anchor_screen = None
-            self.clear()
+            self.status.clear()
+            self.words.clear()
             self.hide()
             return
-        self._show_text(f"●  {state.value}")
+        status = state.value
+        if state == State.RECORDING and self.expects_words:
+            status = "Listening — speak now"
+        self._show(status, "", state_tone(state))
 
     def preview(self, text: str) -> None:
-        self._show_text(f"●  Transcribing · preview\n{text[-200:]}")
+        self._show("Transcribing · preview", text[-200:], "busy")
 
     def live_preview(self, text: str) -> None:
         if text:
-            self._show_text(f"●  Listening\n{text[-200:]}")
+            self._show("Listening", text[-200:], "recording")
         else:
             self.display(State.RECORDING)
 
-    def _show_text(self, text: str) -> None:
-        self.setText(text)
+    def _show(self, status: str, words: str, tone: str) -> None:
+        self.status.setText(status)
+        self.words.setText(words)
+        self.words.setVisible(bool(words))
+        self.dot.set_tone(tone)
         screen = next((s for s in QApplication.screens() if s.name() == self.anchor_screen), None)
         screen = screen or QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
         if screen:
@@ -131,13 +158,13 @@ class Indicator(GlassLabel):
             self.setMinimumWidth(min(320, width))
             self.setMaximumWidth(min(560, width))
             self.setMaximumHeight(max(1, area.height() - 64))
-            self.adjustSize()
+            self.fit()
             self.move(
                 area.x() + (area.width() - self.width()) // 2,
                 max(area.top() + 16, area.bottom() - self.height() - 32),
             )
         else:
-            self.adjustSize()
+            self.fit()
         self.show()
 
 
@@ -149,15 +176,13 @@ class Latest(GlassDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 18, 24, 24)
         layout.setSpacing(14)
-        layout.addLayout(self.header("Latest transcript"))
+        layout.addLayout(self.header("Latest transcript", "pageTitle"))
         self.notice = QLabel("No transcript yet. Only the latest result is held in memory.")
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
-        self.timing = QLabel()
-        self.timing.setWordWrap(True)
+        self.timing = NoteLabel(collapse_when_empty=True)
         layout.addWidget(self.timing)
-        self.last_error = QLabel()
-        self.last_error.setWordWrap(True)
+        self.last_error = NoteLabel(hint=False, collapse_when_empty=True)
         layout.addWidget(self.last_error)
         self.text = QTextEdit()
         self.text.setReadOnly(True)
@@ -209,6 +234,76 @@ class Latest(GlassDialog):
         )
 
 
+class FieldGrid:
+    """Rows of label and field, labels centred on their field, notes under the field.
+
+    When the page is narrow, labels stack above their fields instead of squeezing them.
+    """
+
+    def __init__(self, grid: QGridLayout, label_width: int = 156) -> None:
+        self.grid = grid
+        self.label_width = label_width
+        self.stacked = False
+        # Each row: label (None for a note or a wide row), widget, notes, wide, gap before.
+        self.rows: list[tuple[QLabel | None, QWidget, tuple[QLabel, ...], bool, bool]] = []
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(6)
+        grid.setColumnStretch(1, 1)
+
+    def field(self, text: str, field: QWidget, *notes: QLabel) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("fieldLabel")
+        label.setBuddy(field)
+        self.rows.append((label, field, notes, False, True))
+        self.place()
+        return label
+
+    def note(self, note: QLabel) -> None:
+        self.rows.append((None, note, (), False, False))
+        self.place()
+
+    def wide(self, widget: QWidget, gap: bool = True) -> None:
+        self.rows.append((None, widget, (), True, gap))
+        self.place()
+
+    def set_stacked(self, stacked: bool) -> None:
+        if stacked != self.stacked:
+            self.stacked = stacked
+            self.place()
+
+    def place(self) -> None:
+        grid, stacked = self.grid, self.stacked
+        while grid.count():
+            grid.takeAt(0)
+        grid.setColumnMinimumWidth(0, 0 if stacked else self.label_width)
+        row = 0
+
+        def under(widget: QWidget, wide: bool) -> None:
+            nonlocal row
+            if wide or stacked:
+                grid.addWidget(widget, row, 0, 1, 2)
+            else:
+                grid.addWidget(widget, row, 1)
+            row += 1
+
+        for label, widget, notes, wide, gap in self.rows:
+            if gap and row:
+                grid.addItem(QSpacerItem(0, 6), row, 0)
+                row += 1
+            if label is not None:
+                if stacked:
+                    under(label, True)
+                else:
+                    grid.addWidget(label, row, 0, Qt.AlignmentFlag.AlignVCenter)
+                    grid.addWidget(widget, row, 1)
+                    row += 1
+            if label is None or stacked:
+                under(widget, wide)
+            for note in notes:
+                under(note, False)
+
+
 class Settings(GlassDialog):
     theme_changed = Signal(str)
     dismissed = Signal()
@@ -225,9 +320,11 @@ class Settings(GlassDialog):
         self.apply_config = apply
         self.pending_save: Config | None = None
         self.embedded = False
+        self.grids: list[FieldGrid] = []
         self.setWindowTitle("LocalPhraser · Settings")
         self.setMinimumWidth(540)
         outer = QVBoxLayout(self)
+        self.outer_layout = outer
         outer.setContentsMargins(24, 18, 24, 24)
         outer.setSpacing(16)
         self.header_widget = QWidget()
@@ -237,64 +334,75 @@ class Settings(GlassDialog):
         self.scroll_area = scroll
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.viewport().setAutoFillBackground(False)
+        scroll.viewport().installEventFilter(self)
         body = QWidget()
         body.setObjectName("glassBody")
         scroll.setWidget(body)
         outer.addWidget(scroll)
         layout = QVBoxLayout(body)
-        title = QLabel("LocalPhraser")
-        title.setStyleSheet("font-size: 28px; font-weight: 600; margin-bottom: 6px;")
+        self.body_layout = layout
+        layout.setContentsMargins(0, 0, 14, 8)
+        layout.setSpacing(14)
+        title = QLabel("Settings")
+        title.setObjectName("pageTitle")
         layout.addWidget(title)
-        description = QLabel("Use your shortcut to dictate. Speech stays on this device.")
-        description.setWordWrap(True)
-        layout.addWidget(description)
+        layout.addWidget(NoteLabel("Use your shortcut to dictate. Speech stays on this device."))
         self.setup_notice = QLabel()
         self.setup_notice.setWordWrap(True)
         self.setup_notice.hide()
         self.automatic_setup = False
         layout.addWidget(self.setup_notice)
-        form = QFormLayout()
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        form.setVerticalSpacing(14)
+
+        general = self.section(layout, "General")
         self.theme = GlassComboBox()
         for label, value in (("System", "system"), ("Light", "light"), ("Dark", "dark")):
             self.theme.addItem(label, value)
-        self.theme.setCurrentIndex(self.theme.findData(config.theme))
+        self.theme.select_data(config.theme)
         self.theme.setToolTip("Updates and saves immediately. Other changes use Save.")
         self.theme.currentIndexChanged.connect(self.preview_theme)
-        form.addRow("Appearance", self.theme)
-        self.keep_history = QCheckBox("Keep transcript history on this device")
+        general.field("Appearance", self.theme)
+        self.start_at_login = GlassCheckBox("Start LocalPhraser upon startup")
+        self.start_at_login.setChecked(config.start_at_login)
+        self.start_at_login.setToolTip(
+            "Opt-in startup for this configuration and current Windows user. "
+            "Keep this application folder in place after enabling."
+        )
+        general.wide(self.start_at_login)
+        self.keep_history = GlassCheckBox("Keep transcript history on this device")
         self.keep_history.setChecked(config.keep_history)
         self.keep_history.setToolTip(
             "Stores text locally between launches without encryption. Audio is never saved. "
             "Turn off to stop saving new entries; use Clear history to delete existing text."
         )
-        form.addRow(self.keep_history)
+        general.wide(self.keep_history, gap=False)
+
+        shortcut = self.section(layout, "Shortcut")
         self.hotkey = ShortcutRecorder(config.hotkey, begin_capture, end_capture)
-        form.addRow("Global shortcut", self.hotkey)
-        shortcut_hint = QLabel(HINT)
-        shortcut_hint.setWordWrap(True)
+        shortcut_hint = NoteLabel(HINT)
         self.hotkey.message.connect(shortcut_hint.setText)
-        form.addRow(shortcut_hint)
+        shortcut.field("Global shortcut", self.hotkey, shortcut_hint)
         self.activation_mode = GlassComboBox()
         self.activation_mode.addItem("Hold or double-tap — recommended", "both")
         self.activation_mode.addItem("Hold to dictate", "hold")
         self.activation_mode.addItem("Double-tap to start / stop", "double_tap")
-        self.activation_mode.setCurrentIndex(self.activation_mode.findData(config.activation_mode))
+        self.activation_mode.select_data(config.activation_mode)
         self.activation_mode.setToolTip(
             "Use your shortcut for either gesture: hold at least 200 ms and release to finish, "
             "or make two short taps within 350 ms to latch recording. Double-tap again to finish. "
             "Hold-only and double-tap-only are available too."
         )
-        form.addRow("Shortcut activation", self.activation_mode)
+        shortcut.field("Shortcut activation", self.activation_mode)
+
+        microphone = self.section(layout, "Microphone")
         self.device = GlassComboBox()
         self.device.addItem("System default", None)
         choices = []
         try:
             choices = microphones()
-            for microphone in choices:
-                self.device.addItem(microphone.label, microphone.value)
+            for choice in choices:
+                self.device.addItem(choice.label, choice.value)
         except Exception:
             self.device.addItem("Microphones unavailable", None)
         index = self.device.findData(config.microphone)
@@ -312,17 +420,31 @@ class Settings(GlassDialog):
             "Choose an exact device and audio API. Indistinguishable duplicates are omitted; "
             "use System default for those devices."
         )
-        form.addRow("Microphone", self.device)
+        microphone.field("Microphone", self.device)
+        self.keep_ready = GlassCheckBox("Keep microphone ready for faster recording")
+        self.keep_ready.setChecked(config.keep_microphone_ready)
+        self.keep_ready.setToolTip(
+            "Keeps the input stream open but stopped between recordings. "
+            "No audio is captured while idle. Turn off to close the device after each recording."
+        )
+        microphone.wide(self.keep_ready)
+
+        speech = self.section(layout, "Speech recognition")
         self.model = GlassComboBox()
-        self.model.addItems(MODELS)
-        self.model.setCurrentText(config.model)
-        form.addRow("English speech model", self.model)
-        model_hint = QLabel(MODEL_HINTS[config.model])
-        model_hint.setWordWrap(True)
-        self.model.currentTextChanged.connect(lambda name: model_hint.setText(MODEL_HINTS[name]))
         for index, name in enumerate(MODELS):
+            label = MODEL_NAMES[name] + (" — recommended" if name == DEFAULT_MODEL else "")
+            self.model.addItem(label, name)
             self.model.setItemData(index, MODEL_HINTS[name], Qt.ItemDataRole.ToolTipRole)
-        form.addRow(model_hint)
+        self.model.select_data(config.model)
+        model_hint = NoteLabel(MODEL_HINTS[self.model.currentData()])
+        self.model.currentIndexChanged.connect(
+            lambda: model_hint.setText(MODEL_HINTS[self.model.currentData()])
+        )
+        install_hint = NoteLabel(
+            "Save downloads the selected speech model if needed, then returns Home. "
+            "A new download requires internet and can be cancelled."
+        )
+        speech.field("English speech model", self.model, model_hint, install_hint)
         self.recognition_quality = GlassComboBox()
         for value, label in (
             ("fast", "Fast — lowest processing cost"),
@@ -330,59 +452,24 @@ class Settings(GlassDialog):
             ("accurate", "Accurate — more processing"),
         ):
             self.recognition_quality.addItem(label, value)
-        self.recognition_quality.setCurrentIndex(
-            self.recognition_quality.findData(config.recognition_quality)
-        )
+        self.recognition_quality.select_data(config.recognition_quality)
         self.recognition_quality.setToolTip(
             "Balanced and Accurate explore more decoding candidates after release. "
             "Live preview stays fast. More search can help but does not guarantee correct words."
         )
-        form.addRow("Recognition quality", self.recognition_quality)
-        self.quality_hint = QLabel()
-        self.quality_hint.setWordWrap(True)
-        form.addRow(self.quality_hint)
-        self.model.currentTextChanged.connect(self.update_quality_availability)
-        self.update_quality_availability(self.model.currentText())
-        install_hint = QLabel(
-            "Save downloads the selected speech model if needed, then returns Home. "
-            "A new download requires internet and can be cancelled."
+        self.quality_hint = NoteLabel()
+        speech.field("Recognition quality", self.recognition_quality, self.quality_hint)
+        self.model.currentIndexChanged.connect(
+            lambda: self.update_quality_availability(self.model.currentData())
         )
-        install_hint.setWordWrap(True)
-        form.addRow(install_hint)
+        self.update_quality_availability(self.model.currentData())
         self.vocabulary_value = config.vocabulary
-        vocabulary_hint = QLabel(
-            "Manage names, technical terms and suggestions from Vocabulary in the sidebar."
+        speech.note(
+            NoteLabel(
+                "Manage names, technical terms and suggestions from Vocabulary in the sidebar."
+            )
         )
-        vocabulary_hint.setWordWrap(True)
-        form.addRow(vocabulary_hint)
-        self.root = QLineEdit(config.model_root)
-        folder = QPushButton("Browse…")
-        folder.clicked.connect(self.browse)
-        paths = QHBoxLayout()
-        paths.addWidget(self.root)
-        paths.addWidget(folder)
-        form.addRow("Model directory", paths)
-        self.threads = GlassSpinBox()
-        self.threads.setRange(0, thread_limit())
-        self.threads.setSpecialValueText("Automatic")
-        self.threads.setValue(min(config.cpu_threads, thread_limit()))
-        form.addRow("CPU inference threads", self.threads)
-        self.duration = GlassSpinBox()
-        self.duration.setRange(1, 300)
-        self.duration.setSuffix(" seconds")
-        self.duration.setValue(config.max_seconds)
-        form.addRow("Maximum recording", self.duration)
-        self.insert = QCheckBox("Insert into verified text fields automatically")
-        self.insert.setChecked(config.auto_insert)
-        form.addRow(self.insert)
-        self.keep_ready = QCheckBox("Keep microphone ready for faster recording")
-        self.keep_ready.setChecked(config.keep_microphone_ready)
-        self.keep_ready.setToolTip(
-            "Keeps the input stream open but stopped between recordings. "
-            "No audio is captured while idle. Turn off to close the device after each recording."
-        )
-        form.addRow(self.keep_ready)
-        self.live_preview = QCheckBox("Show words while speaking (live preview)")
+        self.live_preview = GlassCheckBox("Show words while speaking (live preview)")
         self.live_preview.setChecked(config.live_preview)
         self.live_preview.setToolTip(
             "Shows recent words in the floating indicator while recording. "
@@ -390,38 +477,83 @@ class Settings(GlassDialog):
             "Wait for Ready before speaking. "
             "Draft words may change. Uses extra CPU; final text is polished after stopping."
         )
-        form.addRow(self.live_preview)
-        self.start_at_login = QCheckBox("Start LocalPhraser upon startup")
-        self.start_at_login.setChecked(config.start_at_login)
-        self.start_at_login.setToolTip(
-            "Opt-in startup for this configuration and current Windows user. "
-            "Keep this application folder in place after enabling."
+        speech.wide(self.live_preview)
+        self.duration = GlassSpinBox()
+        self.duration.setRange(1, 300)
+        self.duration.setSuffix(" seconds")
+        self.duration.setValue(config.max_seconds)
+        speech.field("Maximum recording", self.duration)
+        self.threads = GlassSpinBox()
+        self.threads.setRange(0, thread_limit())
+        self.threads.setSpecialValueText("Automatic")
+        self.threads.setValue(min(config.cpu_threads, thread_limit()))
+        speech.field("CPU inference threads", self.threads)
+        self.root = QLineEdit(config.model_root)
+        self.root.setCursorPosition(0)  # Show the start of a long path.
+        self.root.setAccessibleName("Model directory")
+        folder = QPushButton("Browse…")
+        folder.clicked.connect(self.browse)
+        paths_row = QWidget()
+        paths = QHBoxLayout(paths_row)
+        paths.setContentsMargins(0, 0, 0, 0)
+        paths.setSpacing(8)
+        paths.addWidget(self.root, 1)
+        paths.addWidget(folder)
+        speech.field("Model directory", paths_row).setBuddy(self.root)
+        # The internet requirement is stated in the note under the model list and here.
+        self.install = QPushButton("Download or repair speech model")
+        self.install.setToolTip(
+            "Requires internet. Checks installed files. Damaged models are replaced only after "
+            "a new download is verified; previous files are kept in a .damaged folder in the "
+            "model directory."
         )
-        form.addRow(self.start_at_login)
+        self.install.clicked.connect(self.download)
+        self.cancel_download = QPushButton("Cancel download")
+        self.cancel_download.setEnabled(False)
+        self.cancel_download.hide()  # Shown in place of the download button while busy.
+        downloads_row = QWidget()
+        downloads = QHBoxLayout(downloads_row)
+        downloads.setContentsMargins(0, 0, 0, 0)
+        downloads.setSpacing(8)
+        downloads.addWidget(self.install, 1)
+        downloads.addWidget(self.cancel_download)
+        speech.wide(downloads_row)
+        self.progress = NoteLabel(hint=False, collapse_when_empty=True)
+        speech.wide(self.progress, gap=False)
+        self.download_bar = QProgressBar()
+        self.download_bar.setAccessibleName("Model download progress")
+        self.download_bar.hide()
+        speech.wide(self.download_bar, gap=False)
+        self.download_bytes = NoteLabel()
+        self.download_bytes.hide()
+        speech.wide(self.download_bytes, gap=False)
+
+        output = self.section(layout, "Text output")
+        self.insert = GlassCheckBox("Insert into verified text fields automatically")
+        self.insert.setChecked(config.auto_insert)
+        output.wide(self.insert)
         self.mode = GlassComboBox()
         self.mode.addItem("Raw", "raw")
         self.mode.addItem("Polished (experimental, local)", "polished")
-        self.mode.setCurrentIndex(self.mode.findData(config.mode))
-        form.addRow("Mode", self.mode)
-        mode_hint = QLabel(
+        self.mode.select_data(config.mode)
+        mode_hint = NoteLabel(
             "Raw delivers recognized text fastest. Polished can adjust punctuation, capitals "
             "and hesitation sounds. It rejects other word changes, so already-clean speech "
             "may look unchanged. It does not reliably fix misheard words."
         )
-        mode_hint.setWordWrap(True)
-        form.addRow(mode_hint)
-        layout.addLayout(form)
+        output.field("Mode", self.mode, mode_hint)
         self.polishing = QGroupBox("Local polishing")
-        polishing_form = QFormLayout(self.polishing)
+        polishing = FieldGrid(QGridLayout(self.polishing), label_width=128)
+        self.grids.append(polishing)
         self.refinement_model = GlassComboBox()
         self.refinement_model.addItems(REFINEMENT_MODELS)
         self.refinement_model.setCurrentText(config.refinement_model)
-        polishing_form.addRow("Q4 CPU model", self.refinement_model)
+        polishing.field("Q4 CPU model", self.refinement_model)
         self.refinement_timeout = GlassSpinBox()
         self.refinement_timeout.setRange(2, 60)
         self.refinement_timeout.setSuffix(" seconds")
         self.refinement_timeout.setValue(config.refinement_timeout)
-        polishing_form.addRow("Polishing time limit", self.refinement_timeout)
+        polishing.field("Polishing time limit", self.refinement_timeout)
         self.refinement_prompt = QTextEdit()
         self.refinement_prompt.setAcceptRichText(False)
         self.refinement_prompt.setPlainText(config.refinement_prompt)
@@ -431,57 +563,44 @@ class Settings(GlassDialog):
             "Formatting instructions do not override word preservation. "
             "Word-changing model output falls back to the original transcription."
         )
-        polishing_form.addRow("Instructions", self.refinement_prompt)
+        polishing.field("Instructions", self.refinement_prompt)
         reset_prompt = QPushButton("Restore default instructions")
         reset_prompt.clicked.connect(lambda: self.refinement_prompt.setPlainText(DEFAULT_PROMPT))
-        polishing_form.addRow(reset_prompt)
-        self.install_refinement = QPushButton(
-            "Download or repair polishing model (internet required)"
-        )
+        polishing.wide(reset_prompt)
+        self.install_refinement = QPushButton("Download or repair polishing model")
+        self.install_refinement.setToolTip("Requires internet. Checks installed files.")
         self.install_refinement.clicked.connect(lambda: self.download(True))
-        polishing_form.addRow(self.install_refinement)
-        polishing_hint = QLabel(
-            "Optional CPU runtime and a downloaded model are required. Words and numbers "
-            "must be preserved; failures and time limits fall back to Raw. The original "
-            "is available in Latest transcript. Models are shared under Model directory."
+        polishing.wide(self.install_refinement, gap=False)
+        polishing.wide(
+            NoteLabel(
+                "Optional CPU runtime and a downloaded model are required; downloading needs "
+                "internet. Words and numbers "
+                "must be preserved; failures and time limits fall back to Raw. The original "
+                "is available in Latest transcript. Models are shared under Model directory."
+            ),
+            gap=False,
         )
-        polishing_hint.setWordWrap(True)
-        polishing_form.addRow(polishing_hint)
         self.mode.currentIndexChanged.connect(self.update_mode)
-        layout.addWidget(self.polishing)
+        output.wide(self.polishing)
         self.update_mode()
-        privacy = QLabel(
-            "No accounts, telemetry or saved audio. When enabled, transcript history is saved "
-            "locally without encryption; turn it off above to stop new saves. Delete entries "
-            "or clear history from Home. Only model installation uses the network. "
-            "Latest transcript stays in memory until cleared, replaced, or the app exits. "
-            "Copy changes the clipboard explicitly."
+
+        privacy = self.section(layout, "Privacy and credits")
+        privacy.wide(
+            NoteLabel(
+                "No accounts, telemetry or saved audio. When enabled, transcript history is "
+                "saved locally without encryption; turn it off above to stop new saves. Delete "
+                "entries or clear history from Home. Only model installation uses the network. "
+                "Latest transcript stays in memory until cleared, replaced, or the app exits. "
+                "Copy changes the clipboard explicitly."
+            ),
+            gap=False,
         )
-        privacy.setWordWrap(True)
-        layout.addWidget(privacy)
-        self.install = QPushButton("Download or repair speech model (internet required)")
-        self.install.setToolTip(
-            "Checks installed files. Damaged models are replaced only after a new download "
-            "is verified; previous files are kept in a .damaged folder in the model directory."
-        )
-        self.install.clicked.connect(self.download)
-        layout.addWidget(self.install)
-        self.progress = QLabel(
+        self.credits = NoteLabel(
             "Speech models: Systran; NVIDIA Parakeet TDT 0.6b v2 (CC-BY-4.0), ONNX conversion "
             "by istupakov. Polishing models: Qwen. Downloads use Hugging Face."
         )
-        self.progress.setWordWrap(True)
-        layout.addWidget(self.progress)
-        self.download_bar = QProgressBar()
-        self.download_bar.setAccessibleName("Model download progress")
-        self.download_bar.hide()
-        layout.addWidget(self.download_bar)
-        self.download_bytes = QLabel()
-        self.download_bytes.hide()
-        layout.addWidget(self.download_bytes)
-        self.cancel_download = QPushButton("Cancel download")
-        self.cancel_download.setEnabled(False)
-        layout.addWidget(self.cancel_download)
+        privacy.wide(self.credits, gap=False)
+        layout.addStretch()
         self.downloader = ModelDownload(self)
         self.downloader.message.connect(self.progress.setText)
         self.downloader.progress.connect(self.update_download_progress)
@@ -498,6 +617,30 @@ class Settings(GlassDialog):
         height = min(820, screen.availableGeometry().height() - 100) if screen else 700
         self.resize(620, max(360, height))
 
+    def section(self, layout: QVBoxLayout, title: str) -> "FieldGrid":
+        frame = QFrame()
+        frame.setObjectName("settingsSection")
+        frame.setAccessibleName(title)
+        box = QVBoxLayout(frame)
+        box.setContentsMargins(18, 14, 18, 18)
+        box.setSpacing(12)
+        heading = QLabel(title)
+        heading.setProperty("sectionTitle", True)
+        box.addWidget(heading)
+        grid = QGridLayout()
+        box.addLayout(grid)
+        layout.addWidget(frame)
+        self.grids.append(FieldGrid(grid))
+        return self.grids[-1]
+
+    def eventFilter(self, watched: Any, event: Any) -> bool:
+        if watched is self.scroll_area.viewport() and event.type() == QEvent.Type.Resize:
+            # Narrow pages put labels above their fields rather than squeezing both.
+            stacked = event.size().width() < 520
+            for grid in self.grids:
+                grid.set_stacked(stacked)
+        return super().eventFilter(watched, event)
+
     def update_mode(self) -> None:
         self.polishing.setVisible(self.mode.currentData() == "polished")
 
@@ -510,7 +653,7 @@ class Settings(GlassDialog):
         return Config(
             hotkey=self.hotkey.shortcut_value,
             microphone=self.device.currentData(),
-            model=self.model.currentText(),
+            model=self.model.currentData(),
             model_root=self.root.text().strip(),
             auto_insert=self.insert.isChecked(),
             max_seconds=self.duration.value(),
@@ -541,8 +684,9 @@ class Settings(GlassDialog):
             if not model_present(config.model, Path(config.model_root)):
                 self.pending_save = config
                 self.setup_notice.setText(
-                    f"Downloading {config.model} before saving. Your current model stays active "
-                    "until installation succeeds. Internet is required; you can cancel below."
+                    f"Downloading {MODEL_NAMES[config.model]} before saving. Your current model "
+                    "stays active until installation succeeds. Internet is required; "
+                    "you can cancel below."
                 )
                 self.setup_notice.show()
                 self.download()
@@ -571,6 +715,7 @@ class Settings(GlassDialog):
         self.setMinimumWidth(0)
         self.setSizeGripEnabled(False)
         self.header_widget.hide()
+        self.outer_layout.setContentsMargins(0, 14, 0, 0)  # Line up with the other pages.
 
     def update_quality_availability(self, model: str) -> None:
         # The saved value stays selected so switching back to Whisper restores it.
@@ -590,13 +735,16 @@ class Settings(GlassDialog):
             QMessageBox.warning(self, "Invalid settings", str(exc))
             return
         self.install.setEnabled(False)
+        self.install.hide()
         self.install_refinement.setEnabled(False)
         self.cancel_download.setEnabled(True)
+        self.cancel_download.show()
         self.downloader.start(
             config.refinement_model if refiner else config.model,
             Path(config.model_root),
             refiner=refiner,
         )
+        self.body_layout.activate()  # Place the newly shown button first.
         self.scroll_area.ensureWidgetVisible(self.cancel_download)
 
     def update_download_progress(self, completed: int, total: int | None) -> None:
@@ -627,8 +775,10 @@ class Settings(GlassDialog):
             self.download_bar.setValue(1000)
             self.download_bar.setFormat("Installed and verified")
         self.install.setEnabled(True)
+        self.install.show()
         self.install_refinement.setEnabled(True)
         self.cancel_download.setEnabled(False)
+        self.cancel_download.hide()
         pending, self.pending_save = self.pending_save, None
         if pending is not None:
             if success and model_present(pending.model, Path(pending.model_root)):
@@ -853,7 +1003,7 @@ class Desktop:
             self.press()
 
     def update_shortcut_hint(self) -> None:
-        self.window.hint.setText(
+        self.window.set_hint(
             f"Double-tap {self.config.hotkey} to start or stop recording."
             if self.config.activation_mode == "double_tap"
             else f"Hold {self.config.hotkey}, or double-tap to start / stop."
@@ -868,6 +1018,7 @@ class Desktop:
         if config.keep_microphone_ready:
             # A failed warm-up is retried on press and then reported by the pipeline.
             self.audio_preparer.submit(self.recorder.prepare)
+        self.indicator.expects_words = config.live_preview
         return Dictation(
             self.recorder,
             make_recognizer(
@@ -952,7 +1103,10 @@ class Desktop:
             else state.value
         )
         self.status.setText(f"{label} · {self.config.mode.title()} mode")
-        self.window.state_label.setText(label)
+        self.window.set_state(
+            label,
+            "muted" if state == State.IDLE and label != State.IDLE.value else state_tone(state),
+        )
         self.window.record_button.setText(
             "Stop recording"
             if state == State.RECORDING
@@ -1204,6 +1358,7 @@ class Desktop:
         self.window.result_text.clear()
         self.window.raw.clear()
         self.window.entry_info.clear()
+        self.window.entry_notice.clear()
         self.history.close()
         self.latest.clear()
         self.indicator.display(State.IDLE)

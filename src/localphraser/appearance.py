@@ -20,14 +20,21 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QListView,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
+    QStyle,
+    QStyleOptionButton,
+    QStyleOptionSpinBox,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -44,6 +51,28 @@ def high_contrast() -> bool:
 def dark_surface() -> bool:
     # Stylesheets can retain a widget's old palette when the application theme changes.
     return QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+
+def ink(dark: bool) -> tuple[str, str]:
+    """Body text and muted (hint) text; both stay above WCAG AA on the glass."""
+    return ("#edf8f7", "#c0cce1") if dark else ("#163c42", "#435974")
+
+
+# State colours shared by the listening capsule and the sidebar status (light, dark).
+TONES = {
+    "recording": ((206, 52, 64), (255, 118, 124)),
+    "busy": ((196, 124, 8), (247, 189, 82)),
+    "ready": ((32, 140, 104), (86, 212, 164)),
+}
+
+
+def tone_color(tone: str) -> QColor:
+    if high_contrast():
+        return QApplication.palette().color(QPalette.ColorRole.WindowText)
+    dark = dark_surface()
+    if tone in TONES:
+        return QColor(*TONES[tone][dark])
+    return QColor(ink(dark)[1])
 
 
 @lru_cache(maxsize=1)
@@ -190,11 +219,21 @@ class GlassComboBox(QComboBox):
         self.setView(view)
         self.setMaxVisibleItems(8)
         self.setMinimumHeight(38)
+        # Long items elide instead of forcing the page wider; the open list shows them whole.
+        self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.setMinimumContentsLength(8)
 
     def wheelEvent(self, event: Any) -> None:
         # Scrolling a page must not change the setting under the pointer. Ignoring the
         # event hands it to the enclosing scroll area; the open list scrolls on its own.
         event.ignore()
+
+    def select_data(self, value: Any) -> bool:
+        """Select the item whose stored value (not its display text) is ``value``."""
+        index = self.findData(value)
+        if index >= 0:
+            self.setCurrentIndex(index)
+        return index >= 0
 
     def showPopup(self) -> None:
         # Native roll-open animation uses the screen-sized geometry before we constrain it.
@@ -238,11 +277,155 @@ class GlassComboBox(QComboBox):
         painter.drawLine(QPointF(x, y + 2), QPointF(x + 4, y - 2))
 
 
+def draw_chevron(painter: QPainter, centre: QPointF, up: bool, color: QColor) -> None:
+    pen = QPen(color, 1.6)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    rise = -2.0 if up else 2.0
+    x, y = centre.x(), centre.y()
+    painter.drawLine(QPointF(x - 4, y - rise), QPointF(x, y + rise))
+    painter.drawLine(QPointF(x, y + rise), QPointF(x + 4, y - rise))
+
+
 class GlassSpinBox(QSpinBox):
     """A number field changed by typing, arrow keys or its buttons, never by scrolling."""
 
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        # Style sheets do not pad a spin box's text; line it up with the other fields.
+        line = self.lineEdit()
+        if line is not None:
+            line.setTextMargins(6, 0, 0, 0)
+
     def wheelEvent(self, event: Any) -> None:
         event.ignore()
+
+    def paintEvent(self, event: Any) -> None:
+        super().paintEvent(event)
+        if high_contrast():
+            return
+        option = QStyleOptionSpinBox()
+        self.initStyleOption(option)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        text = self.palette().color(QPalette.ColorRole.Text)
+        steps = self.stepEnabled()
+        for control, up, flag in (
+            (QStyle.SubControl.SC_SpinBoxUp, True, QSpinBox.StepEnabledFlag.StepUpEnabled),
+            (QStyle.SubControl.SC_SpinBoxDown, False, QSpinBox.StepEnabledFlag.StepDownEnabled),
+        ):
+            area = self.style().subControlRect(
+                QStyle.ComplexControl.CC_SpinBox, option, control, self
+            )
+            color = QColor(text)
+            if not (self.isEnabled() and steps & flag):
+                color.setAlpha(80)
+            centre = QRectF(area).center()
+            draw_chevron(painter, QPointF(centre.x(), centre.y() + (1 if up else -1)), up, color)
+
+
+class GlassCheckBox(QCheckBox):
+    """A check box that always shows its box: empty when off, filled and ticked when on."""
+
+    def indicator_rect(self) -> QRect:
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        return self.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, option, self)
+
+    def paintEvent(self, event: Any) -> None:
+        super().paintEvent(event)
+        if high_contrast():
+            return  # The native indicator is drawn by the system style.
+        dark = dark_surface()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.isEnabled():
+            painter.setOpacity(0.45)
+        box = QRectF(self.indicator_rect()).adjusted(1.5, 1.5, -1.5, -1.5)
+        if self.hasFocus():
+            painter.setPen(QPen(QColor("#9fd9ff" if dark else "#365f95"), 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(box.adjusted(-3, -3, 3, 3), 7, 7)
+        if self.isChecked():
+            fill = QLinearGradient(box.topLeft(), box.bottomRight())
+            fill.setColorAt(0, QColor(52, 92, 150))
+            fill.setColorAt(1, QColor(75, 72, 137))
+            painter.setBrush(fill)
+            painter.setPen(QPen(QColor(219, 236, 255, 150 if dark else 90), 1))
+            painter.drawRoundedRect(box, 5, 5)
+            tick = QPen(QColor("white"), 2)
+            tick.setCapStyle(Qt.PenCapStyle.RoundCap)
+            tick.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(tick)
+            w, h, x, y = box.width(), box.height(), box.left(), box.top()
+            painter.drawPolyline(
+                [
+                    QPointF(x + w * 0.24, y + h * 0.52),
+                    QPointF(x + w * 0.43, y + h * 0.70),
+                    QPointF(x + w * 0.77, y + h * 0.32),
+                ]
+            )
+        else:
+            painter.setBrush(QColor(16, 25, 48, 140) if dark else QColor(255, 255, 255, 215))
+            border = (
+                QColor("#8cbddd")
+                if self.underMouse()
+                else QColor(200, 220, 255, 150)
+                if dark
+                else QColor(54, 95, 149, 165)
+            )
+            painter.setPen(QPen(border, 1.4))
+            painter.drawRoundedRect(box, 5, 5)
+
+
+class StatusDot(QWidget):
+    """A small painted state dot; the state is always also given as text beside it."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.tone = "muted"
+        self.setFixedSize(10, 10)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def set_tone(self, tone: str) -> None:
+        if tone != self.tone:
+            self.tone = tone
+            self.update()
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(tone_color(self.tone))
+        painter.drawEllipse(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5))
+
+
+class NoteLabel(QLabel):
+    """Wrapped plain text. As a hint (the default) it is muted and slightly smaller."""
+
+    def __init__(
+        self, text: str = "", *, hint: bool = True, collapse_when_empty: bool = False
+    ) -> None:
+        super().__init__()
+        self.collapse_when_empty = collapse_when_empty
+        if hint:
+            self.setProperty("hint", True)
+        self.setWordWrap(True)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setText(text)
+
+    def setText(self, text: str) -> None:
+        super().setText(text)
+        if not self.collapse_when_empty:
+            return
+        if not text:
+            self.hide()
+        elif self.parentWidget() is not None:  # Never show a parentless label as a window.
+            self.show()
+
+    def clear(self) -> None:
+        self.setText("")
 
 
 class GlassDialog(QDialog):
@@ -257,10 +440,10 @@ class GlassDialog(QDialog):
         self.setFont(QFont(interface_family(), 10))
         self.refresh_surface()
 
-    def header(self, title: str) -> QHBoxLayout:
+    def header(self, title: str, style: str = "windowTitle") -> QHBoxLayout:
         row = QHBoxLayout()
         handle = DragHandle(title)
-        handle.setObjectName("windowTitle")
+        handle.setObjectName(style)
         handle.setToolTip("Drag to move this window")
         close = QToolButton()
         close.setText("×")
@@ -280,7 +463,7 @@ class GlassDialog(QDialog):
             self.setStyleSheet("")
         else:
             dark = mode[0]
-            text, muted = ("#edf8f7", "#c0cce1") if dark else ("#163c42", "#435974")
+            text, muted = ink(dark)
             field = "rgba(16, 25, 48, 125)" if dark else "rgba(255, 255, 255, 155)"
             border = "rgba(227, 239, 255, 50)" if dark else "rgba(255, 255, 255, 220)"
             selected = "rgba(17,35,66,175)" if dark else "rgba(109,164,229,55)"
@@ -293,6 +476,9 @@ class GlassDialog(QDialog):
                 "stop:0.45 rgba(255,255,255,90),stop:1 rgba(238,245,255,135))"
             )
             menu = "#1b2a40" if dark else "#f5faff"
+            hover = "rgba(255,255,255,22)" if dark else "rgba(255,255,255,135)"
+            handle = "rgba(220,235,255,70)" if dark else "rgba(54,95,149,85)"
+            handle_hover = "rgba(220,235,255,125)" if dark else "rgba(54,95,149,145)"
             self.setStyleSheet(
                 f"* {{ font-family: '{interface_family()}'; font-size: 10pt; }}"
                 f"QDialog#glassDialog {{ color: {text}; }}"
@@ -301,12 +487,18 @@ class GlassDialog(QDialog):
                 "QLabel#brand { font-size: 17px; font-weight: 600; padding: 10px 0; }"
                 "QLabel#pageTitle { font-size: 28px; font-weight: 600; }"
                 "QLabel#metricNumber { font-size: 28px; font-weight: 600; }"
-                f"QFrame#metric, QFrame#sidebar, QWidget#transcriptPanel {{ background: {glass};"
-                f" border: 1px solid {border}; border-radius: 20px; }}"
+                f"QFrame#metric, QFrame#sidebar, QWidget#transcriptPanel, QFrame#emptyHistory"
+                f" {{ background: {glass}; border: 1px solid {border}; border-radius: 20px; }}"
+                f"QFrame#settingsSection {{ background: {glass}; border: 1px solid {border};"
+                " border-radius: 18px; }"
+                "QLabel[sectionTitle=true] { font-size: 15px; font-weight: 600; }"
+                "QLabel#emptyTitle { font-size: 17px; font-weight: 600; }"
                 f"QListWidget, QTableWidget {{ color: {text}; background: {glass}; "
                 f"border: 1px solid {border};"
                 " border-radius: 20px; padding: 8px; }"
-                "QListWidget::item { padding: 12px 8px; border-radius: 8px; }"
+                # A transparent border keeps selected rows the same height as the others.
+                "QListWidget::item { padding: 12px 8px; border-radius: 8px;"
+                " border: 1px solid transparent; }"
                 f"QHeaderView::section {{ color: {text}; background: {field}; "
                 "border: none; padding: 10px 6px; }"
                 "QTableWidget::item { padding: 10px 6px; }"
@@ -320,6 +512,28 @@ class GlassDialog(QDialog):
                 "QComboBox { padding-right: 32px; }"
                 "QComboBox::drop-down { width: 28px; border: none; }"
                 "QComboBox::down-arrow { image: none; }"
+                "QSpinBox { padding-right: 34px; }"
+                "QSpinBox::up-button, QSpinBox::down-button { subcontrol-origin: border;"
+                " width: 26px; border: none; background: transparent; border-radius: 6px; }"
+                "QSpinBox::up-button { subcontrol-position: top right; margin: 4px 4px 0 0; }"
+                "QSpinBox::down-button { subcontrol-position: bottom right; margin: 0 4px 4px 0; }"
+                f"QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {hover}; }}"
+                "QSpinBox::up-arrow, QSpinBox::down-arrow { image: none; width: 0; height: 0; }"
+                "QCheckBox { spacing: 10px; outline: none; padding: 4px; }"
+                "QCheckBox::indicator { width: 20px; height: 20px; border: none;"
+                " background: transparent; image: none; }"
+                "QScrollBar:vertical { background: transparent; width: 12px; margin: 4px 2px;"
+                " border: none; }"
+                "QScrollBar:horizontal { background: transparent; height: 12px; margin: 2px 4px;"
+                " border: none; }"
+                f"QScrollBar::handle {{ background: {handle}; border-radius: 4px; }}"
+                "QScrollBar::handle:hover, QScrollBar::handle:pressed {"
+                f" background: {handle_hover}; }}"
+                "QScrollBar::handle:vertical { min-height: 36px; }"
+                "QScrollBar::handle:horizontal { min-width: 36px; }"
+                "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; border: none;"
+                " background: none; }"
+                "QScrollBar::add-page, QScrollBar::sub-page { background: none; }"
                 f"QProgressBar {{ color: {text}; background: {field}; border: 1px solid {border};"
                 " border-radius: 7px; min-height: 22px; text-align: center; }"
                 "QProgressBar::chunk { background: rgba(71,151,164,160); border-radius: 6px; }"
@@ -340,6 +554,17 @@ class GlassDialog(QDialog):
                 " stop:0 rgba(52,92,150,245),stop:1 rgba(75,72,137,245)); color: white;"
                 " border-color: rgba(219,236,255,110); font-weight: 600; }"
                 f"QPushButton:disabled, QLabel:disabled {{ color: {muted}; }}"
+                "QComboBox:disabled, QSpinBox:disabled, QLineEdit:disabled {"
+                f" color: {muted}; background: transparent; }}"
+                f"QLabel[hint=true] {{ color: {muted}; font-size: 9pt; }}"
+                # Sidebar navigation reads as a list of places, not as buttons.
+                "QPushButton[nav=true] { background: transparent; border: 1px solid transparent;"
+                " text-align: left; padding: 9px 14px; }"
+                f"QPushButton[nav=true]:hover {{ background: {hover}; border-color: {border}; }}"
+                "QPushButton[nav=true]:checked { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+                " stop:0 rgba(52,92,150,245),stop:1 rgba(75,72,137,245)); color: white;"
+                " border-color: rgba(219,236,255,110); font-weight: 600; }"
+                f"QPushButton[nav=true]:focus {{ border: 2px solid {focus}; }}"
                 f"QGroupBox {{ border: 1px solid {border}; border-radius: 14px;"
                 " margin-top: 12px; padding: 18px 12px 12px; }"
                 "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }"
@@ -367,12 +592,37 @@ class GlassDialog(QDialog):
             paint_surface(self, self.native_glass, 22, opacity=160 if dark_surface() else 185)
 
 
-class GlassLabel(QLabel):
+class GlassCapsule(QWidget):
+    """A frosted, plain-text capsule: a painted state dot, a short status and the words."""
+
     def __init__(self) -> None:
         super().__init__()
         self.native_glass = False
         self.surface_mode: tuple[bool, bool] | None = None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        layout = QVBoxLayout(self)
+        self.capsule_layout = layout
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)  # fit() sizes it.
+        layout.setContentsMargins(22, 13, 24, 15)
+        layout.setSpacing(6)
+        row = QHBoxLayout()
+        row.setSpacing(9)
+        self.dot = StatusDot()
+        self.status = QLabel()
+        self.status.setObjectName("capsuleStatus")
+        self.words = QLabel()
+        self.words.setObjectName("capsuleWords")
+        self.words.setWordWrap(True)
+        self.words.hide()
+        for label in (self.status, self.words):
+            label.setTextFormat(Qt.TextFormat.PlainText)  # Transcripts are never markup.
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.words.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        row.addWidget(self.dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self.status, 1)
+        layout.addLayout(row)
+        layout.addWidget(self.words)
         self.refresh_surface()
         application = QApplication.instance()
         if isinstance(application, QApplication):
@@ -383,16 +633,38 @@ class GlassLabel(QLabel):
         if self.surface_mode == mode:
             return
         self.surface_mode = mode
-        color = (
-            QApplication.palette().color(QPalette.ColorRole.WindowText).name()
-            if mode[1]
-            else ("#edf8f7" if mode[0] else "#163c42")
-        )
+        if mode[1]:
+            color = muted = QApplication.palette().color(QPalette.ColorRole.WindowText).name()
+        else:
+            color, muted = ink(mode[0])
         self.setStyleSheet(
-            f"background: transparent; color: {color}; padding: 14px 24px;"
-            f"font-family: '{interface_family()}'; font-size: 14px; font-weight: 500;"
+            f"* {{ background: transparent; font-family: '{interface_family()}'; }}"
+            f"QLabel#capsuleStatus {{ color: {muted}; font-size: 12px; font-weight: 600;"
+            " letter-spacing: 0.2px; }"
+            f"QLabel#capsuleWords {{ color: {color}; font-size: 17px; font-weight: 500; }}"
         )
+        self.dot.update()
         self.update()
+
+    def fit(self) -> None:
+        """Grow to fit the words on one line within the width limits, then wrap."""
+        for label in (self.status, self.words):
+            label.ensurePolished()
+        margins = self.capsule_layout.contentsMargins()
+        status = (
+            self.dot.width() + 9 + self.status.fontMetrics().horizontalAdvance(self.status.text())
+        )
+        words = self.words.fontMetrics().horizontalAdvance(self.words.text())
+        wanted = max(status, words if self.words.isVisibleTo(self) else 0)
+        width = max(
+            self.minimumWidth(),
+            min(self.maximumWidth(), wanted + 8 + margins.left() + margins.right()),
+        )
+        self.capsule_layout.activate()
+        height = self.heightForWidth(width)
+        if height < 0:
+            height = self.sizeHint().height()
+        self.resize(width, max(self.minimumHeight(), min(self.maximumHeight(), height)))
 
     def changeEvent(self, event: Any) -> None:
         super().changeEvent(event)
@@ -405,4 +677,3 @@ class GlassLabel(QLabel):
 
     def paintEvent(self, event: Any) -> None:
         paint_surface(self, True, min(24, self.height() / 2), rim=False, opacity=250)
-        super().paintEvent(event)
