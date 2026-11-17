@@ -133,6 +133,12 @@ class WindowSnapshot:
     caret_rect: tuple[int, int, int, int]
 
 
+# How long capture waits for a Chromium or Electron window to publish its focused field the
+# first time an accessibility client asks. A ready field returns at once; only a field that
+# is still being published uses this time. It must stay below the target worker's limit.
+READINESS_SECONDS = 1.5
+
+
 class CaretNotReady(ValueError):
     """No input sent: a preceding batch may still be advancing the caret."""
 
@@ -264,7 +270,7 @@ class WindowsInsertion:
             if self.snapshot() != before:
                 raise ValueError("Focus changed during target verification.")
             return native
-        deadline = time.monotonic() + 0.5
+        deadline = time.monotonic() + READINESS_SECONDS
         while True:
             try:
                 control, caret = self._selection()

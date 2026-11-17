@@ -1,11 +1,14 @@
 import ctypes
+import inspect
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
+from localphraser.target_worker import TargetWorker
 from localphraser.windows import (
     INPUT,
+    READINESS_SECONDS,
     NativeTarget,
     Target,
     TargetNotReady,
@@ -185,7 +188,9 @@ def test_first_access_readiness_wait_is_bounded_and_never_sends_input(monkeypatc
     if failure == "focus":
         insertion.snapshot.side_effect = [expected, WindowSnapshot(999, 42, 456, 456, (1, 2, 3, 4))]
     elif failure == "deadline":
-        monkeypatch.setattr("localphraser.windows.time.monotonic", Mock(side_effect=[0, 1]))
+        monkeypatch.setattr(
+            "localphraser.windows.time.monotonic", Mock(side_effect=[0, READINESS_SECONDS])
+        )
     if failure:
         with pytest.raises(ValueError):
             insertion.capture(expected)
@@ -194,6 +199,29 @@ def test_first_access_readiness_wait_is_bounded_and_never_sends_input(monkeypatc
         target = insertion.capture(expected)
         assert target.hwnd == 123 and target.process_id == 42
         assert insertion._selection.call_count == 2
+    insertion.api.SendInput.assert_not_called()
+
+
+def test_readiness_wait_outlasts_a_slow_first_access_inside_the_worker_limit(monkeypatch):
+    # A large Chromium or Electron page can need about a second to publish its field the
+    # first time an accessibility client asks. The wait must cover that and still end
+    # before the target worker's own limit, so the reason shown is the precise one.
+    worker_limit = inspect.signature(TargetWorker.__init__).parameters["timeout"].default
+    assert 1.0 < READINESS_SECONDS < worker_limit
+    insertion, caret, _ = insertion_fixture()
+    expected = WindowSnapshot(123, 42, 456, 456, (1, 2, 3, 4))
+    insertion.snapshot = Mock(return_value=expected)
+    insertion._native_target = Mock(return_value=None)
+    control = SimpleNamespace(ProcessId=42, GetRuntimeId=lambda: [1, 2, 3])
+    insertion.api.GetWindowThreadProcessId.side_effect = lambda hwnd, pid: (
+        setattr(pid._obj, "value", 42) or 1
+    )
+    insertion._selection.side_effect = [TargetNotReady(42), TargetNotReady(42), (control, caret)]
+    monkeypatch.setattr("localphraser.windows.time.sleep", Mock())
+    monkeypatch.setattr("localphraser.windows.time.monotonic", Mock(side_effect=[0, 0.6, 1.0]))
+    target = insertion.capture(expected)
+    assert target.hwnd == 123 and target.process_id == 42
+    assert insertion._selection.call_count == 3
     insertion.api.SendInput.assert_not_called()
 
 

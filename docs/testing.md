@@ -1152,3 +1152,26 @@ All 20 error cells (`errors_per_100`, five levels, continuous and paused) and bo
 rows (`words_invented` 0, 0, 0, 0) are identical to the recorded `base.en` and `small.en` rows
 above. Every benchmark level at or below 0.02 is boosted 15 times or more, so the guard still
 applies there; at 0.25 it no longer applies and nothing changed.
+
+## 2026-11-17: longer first-use field readiness wait
+
+The user reported "target not verified" on the first dictation into an Electron chat app, with
+the second dictation inserting normally, and said they have seen the same on first launch before.
+That is the pattern reproduced on 2026-11-02 with an owned Chrome profile: the first focused-
+control query returns the window's Pane, and the editable field appears on a later query. That
+owned page published its field in 135 ms; a large Electron page can take longer than the 500 ms
+the wait allowed.
+
+The readiness wait is now `READINESS_SECONDS = 1.5` in `windows.py`, still inside the unchanged
+two-second worker limit. A field that is already published returns at once, so nothing is slower
+in the ordinary case. Every check from 2026-11-02 is unchanged: the original window, process,
+focused child and caret snapshot is compared before and after every wait, and password, disabled,
+read-only, selected-text, foreign-process and changed-focus cases are still refused. Text
+delivery is still never retried. `test_readiness_wait_outlasts_a_slow_first_access_inside_the_worker_limit`
+failed at 0.5 s and passes at 1.5 s; the deadline case now uses the constant.
+
+Not proven: the cause in the user's app was not reproduced, because that would mean driving
+their window. The notice now names its reason, so a repeat that reads "Text-field accessibility
+is not ready." would mean 1.5 s is still too short, and any other reason points elsewhere (for
+example the field was not focused). The accessibility client is also created at start-up since
+`abe2478`, which removes that cost from the first dictation.

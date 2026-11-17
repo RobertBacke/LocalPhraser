@@ -195,6 +195,9 @@ recognition completed but insertion was blocked. The notice now names the reason
 focus, unsupported accessibility providers and elevated target apps can still prevent safe
 insertion. The accessibility client is created when the app starts, so the first dictation
 after launch no longer pays that cost inside its two-second verification limit.
+Browser-based and Electron apps publish their text field only after the first accessibility
+request; LocalPhraser waits up to 1.5 seconds for it while you speak. If the notice still says
+“Text-field accessibility is not ready.”, dictate once more and report the app.
 
 Scrolling over a list or number field in Settings scrolls the page and never changes the
 setting; use a click, the arrow keys or typing to change it.
