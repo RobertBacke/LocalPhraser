@@ -72,7 +72,7 @@ class Config:
     model_root: str = str(data_dir() / "models")
     auto_insert: bool = True
     max_seconds: int = 120
-    cpu_threads: int = 4
+    cpu_threads: int = 0
     keep_microphone_ready: bool = True
     vocabulary: str = ""
     mode: str = "raw"
@@ -136,8 +136,8 @@ class Config:
             raise ValueError("Polishing time limit must be 2–60 seconds.")
         if type(self.max_seconds) is not int or not 1 <= self.max_seconds <= 300:
             raise ValueError("Recording limit must be 1–300 seconds.")
-        if type(self.cpu_threads) is not int or not 1 <= self.cpu_threads <= 16:
-            raise ValueError("CPU threads must be 1–16.")
+        if type(self.cpu_threads) is not int or not 0 <= self.cpu_threads <= 16:
+            raise ValueError("CPU threads must be 0–16.")
         return self
 
 
@@ -165,3 +165,19 @@ def save_config(config: Config, path: Path) -> None:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def thread_limit() -> int:
+    """Physical cores, at most eight: more threads only slow CPU inference down."""
+    import psutil
+
+    physical = psutil.cpu_count(logical=False)
+    if not physical:
+        physical = max(1, (os.cpu_count() or 2) // 2)
+    return min(8, physical)
+
+
+def inference_threads(setting: int) -> int:
+    """Resolve the saved setting (0 means automatic) to a usable thread count."""
+    limit = thread_limit()
+    return limit if setting <= 0 else min(setting, limit)

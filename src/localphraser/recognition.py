@@ -8,7 +8,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from localphraser.audio import SAMPLE_RATE, Audio
-from localphraser.config import RECOGNITION_QUALITY
+from localphraser.config import RECOGNITION_QUALITY, inference_threads
 
 
 class Recognizer(Protocol):
@@ -25,12 +25,12 @@ class WhisperRecognizer:
     def __init__(
         self,
         model_path: Path,
-        cpu_threads: int = 4,
+        cpu_threads: int = 0,
         vocabulary: str = "",
         quality: str = "balanced",
     ):
         self.path = model_path
-        self.cpu_threads = cpu_threads
+        self.cpu_threads = inference_threads(cpu_threads)
         self.vocabulary = vocabulary.strip()
         self.beam_size = RECOGNITION_QUALITY[quality]
         self._model: Any = None

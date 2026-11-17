@@ -64,6 +64,12 @@ def test_changed_content_is_rejected(raw, candidate):
     assert not preserve_words(raw, candidate)
 
 
+def test_saved_thread_count_is_capped_at_the_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr("localphraser.config.thread_limit", lambda: 6)
+    assert LocalRefiner("fixture", tmp_path, 16, DEFAULT_PROMPT, 5).threads == 6
+    assert LocalRefiner("fixture", tmp_path, 0, DEFAULT_PROMPT, 5).threads == 6
+
+
 def test_warm_worker_reuse_and_explicit_close(tmp_path, monkeypatch):
     monkeypatch.setattr(refinement, "refinement_worker", echo_worker)
     backend = LocalRefiner("fixture", tmp_path, 1, DEFAULT_PROMPT, 5)

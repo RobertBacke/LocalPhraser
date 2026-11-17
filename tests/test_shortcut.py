@@ -282,3 +282,17 @@ def test_theme_previews_immediately_and_save_emits_completion(app, monkeypatch):
     assert applied.call_args.args[0].theme == "dark"
     completed.assert_called_once_with()
     settings.close()
+
+
+def test_thread_setting_shows_automatic_and_caps_saved_values(app, monkeypatch):
+    monkeypatch.setattr("localphraser.ui.microphones", lambda: [])
+    monkeypatch.setattr("localphraser.ui.thread_limit", lambda: 6)
+    automatic = Settings(Config(cpu_threads=0), Mock())
+    assert automatic.threads.value() == 0
+    assert automatic.threads.text() == "Automatic"
+    assert automatic.values().cpu_threads == 0
+    automatic.close()
+    capped = Settings(Config(cpu_threads=16), Mock())
+    assert capped.threads.maximum() == 6
+    assert capped.threads.value() == 6
+    capped.close()

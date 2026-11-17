@@ -11,6 +11,7 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Any, Protocol
 
+from localphraser.config import inference_threads
 from localphraser.refinement_models import verify_refiner
 
 MAX_INPUT_CHARS = 3000
@@ -122,7 +123,8 @@ def refinement_worker(
 
 class LocalRefiner:
     def __init__(self, name: str, root: Path, threads: int, prompt: str, timeout: float):
-        self.name, self.root, self.threads = name, root, threads
+        self.name, self.root = name, root
+        self.threads = inference_threads(threads)
         self.prompt, self.timeout = prompt, timeout
         self.context = mp.get_context("spawn")
         self.process: Any = None

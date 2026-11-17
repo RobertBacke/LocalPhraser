@@ -45,6 +45,7 @@ from localphraser.config import (
     Config,
     profile_file,
     save_config,
+    thread_limit,
 )
 from localphraser.downloads import ModelDownload
 from localphraser.history import History
@@ -357,8 +358,9 @@ class Settings(GlassDialog):
         paths.addWidget(folder)
         form.addRow("Model directory", paths)
         self.threads = QSpinBox()
-        self.threads.setRange(1, 16)
-        self.threads.setValue(config.cpu_threads)
+        self.threads.setRange(0, thread_limit())
+        self.threads.setSpecialValueText("Automatic")
+        self.threads.setValue(min(config.cpu_threads, thread_limit()))
         form.addRow("CPU inference threads", self.threads)
         self.duration = QSpinBox()
         self.duration.setRange(1, 300)

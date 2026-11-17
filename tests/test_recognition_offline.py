@@ -80,6 +80,7 @@ def test_prepare_loads_local_model_once_without_inference(monkeypatch, tmp_path)
     factory = Mock()
     factory.return_value.transcribe.return_value = (iter([]), None)
     monkeypatch.setattr("localphraser.models.verify_model", verify)
+    monkeypatch.setattr("localphraser.config.thread_limit", lambda: 8)
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=factory))
     recognizer = WhisperRecognizer(tmp_path, cpu_threads=2)
     recognizer.prepare()
@@ -199,3 +200,12 @@ def test_startup_warmup_initializes_vad_and_decoder_without_retaining_output(fai
     assert seen[1][1]["vad_filter"] is False
     assert seen[1][1]["max_new_tokens"] == 1
     assert all(not np.count_nonzero(audio) for audio, _ in seen)
+
+
+def test_saved_thread_count_is_capped_at_the_limit(monkeypatch, tmp_path):
+    factory = Mock()
+    monkeypatch.setattr("localphraser.models.verify_model", Mock())
+    monkeypatch.setattr("localphraser.config.thread_limit", lambda: 6)
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=factory))
+    WhisperRecognizer(tmp_path, cpu_threads=16).prepare()
+    assert factory.call_args.kwargs["cpu_threads"] == 6

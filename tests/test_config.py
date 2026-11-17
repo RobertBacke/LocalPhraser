@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from localphraser import config
 from localphraser.config import Config, load_config, parse_hotkey, save_config
 
 
@@ -40,7 +41,8 @@ def test_roundtrip(tmp_path):
         {"max_seconds": True},
         {"max_seconds": 301},
         {"auto_insert": "false"},
-        {"cpu_threads": 0},
+        {"cpu_threads": -1},
+        {"cpu_threads": 17},
         {"model": "cloud"},
         {"model_root": "relative"},
         {"microphone": 1},
@@ -93,3 +95,29 @@ def test_appearance_roundtrip(theme, tmp_path):
     path = tmp_path / "config.json"
     save_config(Config(theme=theme), path)
     assert load_config(path).theme == theme
+
+
+def test_thread_limit_uses_physical_cores_capped_at_eight(monkeypatch):
+    monkeypatch.setattr("psutil.cpu_count", lambda logical=True: 6 if not logical else 12)
+    assert config.thread_limit() == 6
+    monkeypatch.setattr("psutil.cpu_count", lambda logical=True: 24)
+    assert config.thread_limit() == 8
+
+
+def test_thread_limit_falls_back_when_physical_count_is_unknown(monkeypatch):
+    monkeypatch.setattr("psutil.cpu_count", lambda logical=True: None)
+    monkeypatch.setattr("os.cpu_count", lambda: 4)
+    assert config.thread_limit() == 2
+    monkeypatch.setattr("os.cpu_count", lambda: None)
+    assert config.thread_limit() == 1
+
+
+def test_inference_threads_caps_saved_values_and_resolves_automatic(monkeypatch):
+    monkeypatch.setattr(config, "thread_limit", lambda: 6)
+    assert [config.inference_threads(n) for n in (0, 1, 4, 6, 16)] == [6, 1, 4, 6, 6]
+
+
+def test_zero_and_sixteen_threads_are_valid_and_zero_is_default():
+    assert Config().cpu_threads == 0
+    Config(cpu_threads=0).validate()
+    Config(cpu_threads=16).validate()
