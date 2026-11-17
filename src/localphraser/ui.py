@@ -1151,11 +1151,14 @@ class Desktop:
             self.notify(message)
 
     def update_level(self) -> None:
-        self.indicator.set_level(display_level(self.pipeline.input_level()))
+        shown = display_level(self.pipeline.input_level())
+        self.indicator.set_level(shown)
+        self.window.set_level(shown)
 
     def stop_level(self) -> None:
         self.level_timer.stop()
         self.indicator.clear_level()
+        self.window.clear_level()
 
     def check_audio(self) -> None:
         if self.recorder.full.is_set():

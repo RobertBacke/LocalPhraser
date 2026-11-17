@@ -408,21 +408,39 @@ class GlassPanel(QFrame):
 
 
 class Glyph(QWidget):
-    """A painted icon in a theme colour; decoration beside text that names the thing."""
+    """A painted icon in a theme colour; decoration beside text that names the thing.
 
-    def __init__(self, name: str, role: str = "glow", size: int = 20) -> None:
+    With ``badge`` it sits on a small rounded chip, as the stat tiles and section titles do.
+    """
+
+    def __init__(
+        self, name: str, role: str = "glow", size: int = 20, *, badge: bool = False
+    ) -> None:
         super().__init__()
         self.name = name
         self.role = role  # "glow", "text" or "muted".
+        self.badge = badge
         self.setFixedSize(size, size)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        area = QRectF(self.rect())
         if high_contrast():
             color = self.palette().color(QPalette.ColorRole.WindowText)
         else:
-            color = QColor(getattr(current_theme(), self.role))
-        icons.paint(QPainter(self), self.name, QRectF(self.rect()), color)
+            tokens = current_theme()
+            color = QColor(getattr(tokens, self.role))
+            if self.badge:
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.setPen(QPen(QColor(*tokens.chip_border), 1))
+                painter.setBrush(QColor(*tokens.chip))
+                radius = min(12.0, area.height() * 0.3)
+                painter.drawRoundedRect(area.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
+        if self.badge:
+            side = min(24.0, area.width() * 0.54)
+            area = QRectF(area.center().x() - side / 2, area.center().y() - side / 2, side, side)
+        icons.paint(painter, self.name, area, color)
 
 
 class IconButton(QPushButton):
@@ -913,6 +931,171 @@ class LevelMeter(QWidget):
             painter.drawRoundedRect(bar, width / 2, width / 2)
 
 
+class StatusOrb(QWidget):
+    """The Home status orb: a glass disc with an icon, ringed and lit in the state colour.
+
+    While recording, ``set_level`` makes the ring and its glow respond to the input level.
+    """
+
+    def __init__(self, glyph: str = "microphone", size: int = 96) -> None:
+        super().__init__()
+        self.glyph = glyph
+        self.tone = "muted"
+        self.level = 0.0
+        self.setFixedSize(size, size)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def set_size(self, size: int) -> None:
+        self.setFixedSize(size, size)
+
+    def set_tone(self, tone: str) -> None:
+        if tone != self.tone:
+            self.tone = tone
+            self.update()
+
+    def set_level(self, shown: float) -> None:
+        level = min(1.0, max(0.0, shown)) if shown == shown else 0.0
+        if level != self.level:
+            self.level = level
+            self.update()
+
+    def reset(self) -> None:
+        self.set_level(0.0)
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        side = float(min(self.width(), self.height()))
+        centre = QRectF(self.rect()).center()
+        radius = side * 0.375
+        disc = QRectF(centre.x() - radius, centre.y() - radius, radius * 2, radius * 2)
+        mark = QRectF(0, 0, radius * 0.9, radius * 0.9)
+        mark.moveCenter(centre)
+        if high_contrast():
+            ink = self.palette().color(QPalette.ColorRole.WindowText)
+            painter.setPen(QPen(ink, 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(disc)
+            icons.paint(painter, self.glyph, mark, ink)
+            return
+        tokens = current_theme()
+        color = tone_color(self.tone)
+        # A soft glow in the state colour; brighter and wider with the input level.
+        glow = QRadialGradient(centre, side / 2)
+        inner, outer = QColor(color), QColor(color)
+        inner.setAlpha(round(70 + 110 * self.level) if tokens.dark else round(60 + 90 * self.level))
+        outer.setAlpha(0)
+        glow.setColorAt(0, inner)
+        glow.setColorAt(0.72, inner)
+        glow.setColorAt(1, outer)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(glow)
+        painter.drawEllipse(centre, side / 2, side / 2)
+        # The glass disc.
+        if tokens.dark:
+            painter.setBrush(QColor(12, 16, 36, 235))
+            painter.drawEllipse(disc)
+        top, bottom = (
+            (QColor(255, 255, 255, 34), QColor(255, 255, 255, 8))
+            if tokens.dark
+            else (QColor(255, 255, 255, 250), QColor(255, 255, 255, 215))
+        )
+        painter.setBrush(diagonal(disc, top, bottom))
+        painter.drawEllipse(disc)
+        # The ring: the state colour, thicker as the level rises.
+        width = 2.5 + 3.0 * self.level
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(color, width))
+        painter.drawEllipse(disc.adjusted(width / 2, width / 2, -width / 2, -width / 2))
+        if self.level > 0:
+            echo = QColor(color)
+            echo.setAlpha(round(60 + 150 * self.level))
+            reach = radius + 3 + (side / 2 - radius - 4) * self.level
+            painter.setPen(QPen(echo, 1.5))
+            painter.drawEllipse(centre, reach, reach)
+        icons.paint(painter, self.glyph, mark, QColor(tokens.text))
+
+
+class StateChip(QFrame):
+    """A small pill naming a state: a painted dot and a word, never the colour alone."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        row = QHBoxLayout(self)
+        row.setContentsMargins(9, 4, 12, 4)
+        row.setSpacing(7)
+        self.dot = StatusDot()
+        self.label = QLabel()
+        self.label.setObjectName("chipText")
+        self.label.setTextFormat(Qt.TextFormat.PlainText)
+        row.addWidget(self.dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self.label)
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+
+    def set_state(self, text: str, tone: str) -> None:
+        self.label.setText(text)
+        self.dot.set_tone(tone)
+
+    def paintEvent(self, event: Any) -> None:
+        if high_contrast():
+            super().paintEvent(event)
+            return
+        tokens = current_theme()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        area = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        painter.setPen(QPen(QColor(*tokens.chip_border), 1))
+        painter.setBrush(QColor(*tokens.chip))
+        painter.drawRoundedRect(area, area.height() / 2, area.height() / 2)
+
+
+class ChipLabel(QLabel):
+    """Plain text whose " · "-separated parts are each drawn as a small chip."""
+
+    PAD = 10
+    GAP = 6
+
+    def __init__(self, text: str = "") -> None:
+        super().__init__(text)
+        self.setObjectName("chips")
+        self.setTextFormat(Qt.TextFormat.PlainText)
+
+    def parts(self) -> list[str]:
+        return [part for part in self.text().split(" · ") if part]
+
+    def sizeHint(self) -> QSize:
+        metrics = self.fontMetrics()
+        widths = [metrics.horizontalAdvance(part) + 2 * self.PAD for part in self.parts()]
+        return QSize(sum(widths) + self.GAP * max(0, len(widths) - 1), metrics.height() + 10)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(40, self.fontMetrics().height() + 10)
+
+    def paintEvent(self, event: Any) -> None:
+        if high_contrast():
+            super().paintEvent(event)
+            return
+        tokens = current_theme()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        metrics = self.fontMetrics()
+        height = float(metrics.height() + 8)
+        top = (self.height() - height) / 2
+        x = 0.5
+        for part in self.parts():
+            room = self.width() - x - 2 * self.PAD
+            if room < 16:
+                break
+            label = metrics.elidedText(part, Qt.TextElideMode.ElideRight, int(room))
+            pill = QRectF(x, top, metrics.horizontalAdvance(label) + 2 * self.PAD, height)
+            painter.setPen(QPen(QColor(*tokens.chip_border), 1))
+            painter.setBrush(QColor(*tokens.chip))
+            painter.drawRoundedRect(pill, height / 2, height / 2)
+            painter.setPen(QColor(tokens.text))
+            painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, label)
+            x = pill.right() + self.GAP
+
+
 class NoteLabel(QLabel):
     """Wrapped plain text. As a hint (the default) it is muted and slightly smaller."""
 
@@ -965,6 +1148,11 @@ def stylesheet(tokens: Theme) -> str:
         "QLabel[sectionTitle=true] { font-size: 15px; font-weight: 600; }"
         "QLabel#emptyTitle { font-size: 17px; font-weight: 600; }"
         f"QLabel[muted=true] {{ color: {muted}; }}"
+        "QLabel#pageTitle[compact=true] { font-size: 19px; }"
+        "QLabel#chips { font-size: 9pt; }"
+        "QLabel#chipText { font-size: 9pt; font-weight: 600; }"
+        f"QLabel#metricCaption {{ color: {muted}; font-size: 9pt; }}"
+        "QLabel#metricNumber[compact=true] { font-size: 17px; }"
         f"QLabel[hint=true] {{ color: {muted}; font-size: 9pt; }}"
         f"QLabel:disabled {{ color: {muted}; }}"
         "QWidget#glassBody, QScrollArea, QStackedWidget { background: transparent;"
@@ -973,7 +1161,8 @@ def stylesheet(tokens: Theme) -> str:
         # Lists and tables.
         f"QListWidget {{ color: {text}; background: {field}; border: 1px solid {field_border};"
         " border-radius: 12px; padding: 6px; outline: 0; }"
-        "QListWidget#historyCards { background: transparent; border: none; padding: 0; }"
+        "QListWidget#historyCards { background: transparent; border: none; padding: 0;"
+        " border-radius: 0; }"
         # A transparent border keeps selected rows the same height as the others.
         "QListWidget::item { padding: 9px 10px; border-radius: 8px;"
         " border: 1px solid transparent; }"

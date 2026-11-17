@@ -5,9 +5,19 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from PySide6.QtCore import QEvent, QSignalBlocker, Qt
-from PySide6.QtGui import QBrush, QColor, QLinearGradient
+from PySide6.QtCore import QEvent, QRect, QRectF, QSignalBlocker, QSize, Qt
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QFontMetricsF,
+    QLinearGradient,
+    QPainter,
+    QPen,
+    QTextLayout,
+)
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QButtonGroup,
     QHBoxLayout,
@@ -15,9 +25,12 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
-    QPushButton,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -26,19 +39,154 @@ from PySide6.QtWidgets import (
 from localphraser.analytics import AnalyticsPage
 from localphraser.appearance import (
     CaptionButton,
+    ChipLabel,
     DragHandle,
     GlassDialog,
     GlassPanel,
+    Glyph,
     IconButton,
+    LevelMeter,
     NoteLabel,
     SegmentedTabs,
+    StateChip,
     StatusDot,
+    StatusOrb,
     current_theme,
     high_contrast,
+    paint_panel,
 )
 from localphraser.branding import logo_pixmap
 from localphraser.history import History
 from localphraser.native_frame import enable_snap, hit_test, native_message
+from localphraser.pipeline import State
+
+COMPACT_WIDTH = 820  # Below this the window uses its narrow arrangement.
+STACKED_WIDTH = 720  # Below this the history list sits above the entry.
+STAMP, WORDS, PREVIEW = (Qt.ItemDataRole.UserRole + offset for offset in (1, 2, 3))
+
+
+def chip_word(text: str, tone: str) -> str:
+    """The short word beside the hero's state dot, so red or grey never stands alone."""
+    if tone == "ready":
+        return "Ready"
+    if tone == "busy":
+        return "Working"
+    if tone == "recording":
+        return "Recording" if text == State.RECORDING.value else "Needs attention"
+    return "Not ready"
+
+
+class RecordButton(IconButton):
+    """The Home record action: a microphone, or a stop square while it says Stop."""
+
+    def setText(self, text: str) -> None:
+        super().setText(text)
+        self.set_glyph("stop" if text.startswith("Stop") else "microphone")
+
+
+def wrapped_lines(text: str, font: QFont, width: float, limit: int) -> list[str]:
+    """Break plain text into at most ``limit`` lines, eliding the last one if cut."""
+    layout = QTextLayout(text, font)
+    layout.beginLayout()
+    spans: list[tuple[int, int]] = []
+    while len(spans) < limit:
+        line = layout.createLine()
+        if not line.isValid():
+            break
+        line.setLineWidth(width)
+        spans.append((line.textStart(), line.textLength()))
+    layout.endLayout()
+    lines = [text[start : start + length].rstrip() for start, length in spans]
+    if spans and spans[-1][0] + spans[-1][1] < len(text):
+        rest = text[spans[-1][0] :]
+        lines[-1] = QFontMetricsF(font).elidedText(rest, Qt.TextElideMode.ElideRight, width)
+    return lines
+
+
+class HistoryCards(QStyledItemDelegate):
+    """Draws each history row as its own glass card: time, word count, two preview lines."""
+
+    HEIGHT = 86
+    GAP = 8
+
+    def card_rect(self, row: QRect) -> QRect:
+        """The card inside a row; the rest of the row is the gap to the next card."""
+        return row.adjusted(1, 0, -7, -self.GAP)
+
+    def sizeHint(self, option: QStyleOptionViewItem, index: Any) -> QSize:
+        if high_contrast():
+            return super().sizeHint(option, index)
+        return QSize(120, self.HEIGHT + self.GAP)
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: Any) -> None:
+        if high_contrast():
+            super().paint(painter, option, index)
+            return
+        tokens = current_theme()
+        state = option.state
+        selected = bool(state & QStyle.StateFlag.State_Selected)
+        card = QRectF(self.card_rect(option.rect))
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        paint_panel(painter, card, tokens, 14, selected=selected)
+        outline = card.adjusted(0.5, 0.5, -0.5, -0.5)
+        if not selected and state & QStyle.StateFlag.State_MouseOver:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(*tokens.hover))
+            painter.drawRoundedRect(outline, 14, 14)
+        if selected and state & QStyle.StateFlag.State_HasFocus:
+            painter.setPen(QPen(QColor(tokens.focus), 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(outline.adjusted(1.5, 1.5, -1.5, -1.5), 12.5, 12.5)
+        body = card.adjusted(14, 11, -14, -11)
+        small = QFont(option.font)
+        small.setPointSizeF(max(7.0, small.pointSizeF() - 1))
+        metrics = QFontMetricsF(small)
+        row = QRectF(body.left(), body.top(), body.width(), metrics.height() + 6)
+        # The word count is a chip at the right when the card is wide enough for both.
+        words = str(index.data(WORDS) or "")
+        chip_width = metrics.horizontalAdvance(words) + 18
+        stamp = str(index.data(STAMP) or "")
+        room = body.width()
+        if words and body.width() >= metrics.horizontalAdvance(stamp) + chip_width + 10:
+            pill = QRectF(body.right() - chip_width, row.top(), chip_width, row.height())
+            painter.setPen(QPen(QColor(*tokens.chip_border), 1))
+            painter.setBrush(QColor(*tokens.chip))
+            painter.drawRoundedRect(pill, pill.height() / 2, pill.height() / 2)
+            painter.setFont(small)
+            painter.setPen(QColor(tokens.text))
+            painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)
+            room -= chip_width + 10
+        painter.setFont(small)
+        painter.setPen(QColor(tokens.muted))
+        painter.drawText(
+            QRectF(row.left(), row.top(), room, row.height()),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            metrics.elidedText(stamp, Qt.TextElideMode.ElideRight, room),
+        )
+        font = QFont(option.font)
+        if selected:
+            font.setWeight(QFont.Weight.Medium)
+        painter.setFont(font)
+        painter.setPen(QColor(tokens.text))
+        spacing = QFontMetricsF(font).lineSpacing()
+        top = row.bottom() + 5
+        for line in wrapped_lines(str(index.data(PREVIEW) or ""), font, body.width(), 2):
+            painter.drawText(
+                QRectF(body.left(), top, body.width(), spacing),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                line,
+            )
+            top += spacing
+        painter.restore()
+
+
+class ScrollPage(QWidget):
+    """A scrolled page that asks for its minimum height, so it scrolls only when it must."""
+
+    def heightForWidth(self, width: int) -> int:
+        layout = self.layout()
+        return layout.totalMinimumHeightForWidth(width) if layout is not None else -1
 
 
 class AppWindow(GlassDialog):
@@ -138,18 +286,15 @@ class AppWindow(GlassDialog):
         state_row.addLayout(dot_column)
         state_row.addWidget(self.state_label, 1)
         nav.addWidget(self.state_chip)
-        nav.addSpacing(6)
-        self.record_button = IconButton("Record to history", "microphone", "primary")
-        self.record_button.clicked.connect(record)
-        self.record_button.setToolTip("Use your shortcut in another app for automatic insertion.")
-        nav.addWidget(self.record_button)
+        nav.addSpacing(4)
         quit_button = IconButton("Quit LocalPhraser", "power", "quiet")
         quit_button.clicked.connect(quit_app)
         nav.addWidget(quit_button)
         outer.addWidget(sidebar)
         content = QVBoxLayout()
+        content.setSpacing(8)
         chrome = QHBoxLayout()
-        chrome.setSpacing(6)
+        chrome.setSpacing(2)
         drag = DragHandle("Your words. On your device.")
         drag.setObjectName("tagline")
         chrome.addWidget(drag, 1)
@@ -166,35 +311,99 @@ class AppWindow(GlassDialog):
             chrome.addWidget(button)
         content.addLayout(chrome)
         self.pages = QStackedWidget()
-        self.home = QWidget()
-        layout = QVBoxLayout(self.home)
-        layout.setContentsMargins(0, 14, 0, 0)
-        layout.setSpacing(18)
-        heading = QLabel("A space for your words")
-        heading.setWordWrap(True)
-        heading.setObjectName("pageTitle")
-        layout.addWidget(heading)
+        # Home scrolls instead of clipping when the window is at its smallest.
+        self.home = QScrollArea()
+        self.home.setWidgetResizable(True)
+        self.home.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.home.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.home.viewport().setAutoFillBackground(False)
+        self.home_body = ScrollPage()
+        self.home_body.setObjectName("glassBody")
+        self.home.setWidget(self.home_body)
+        layout = QVBoxLayout(self.home_body)
+        self.home_layout = layout
+        layout.setContentsMargins(0, 6, 0, 0)
+        layout.setSpacing(16)
+
+        # Hero: what the app is doing now, and the one action that starts a dictation.
+        self.hero = GlassPanel("hero")
+        self.hero_box = QVBoxLayout(self.hero)
+        self.hero_box.setSpacing(8)
+        self.hero_top = QHBoxLayout()
+        self.hero_text = QVBoxLayout()
+        self.hero_text.setSpacing(6)
+        self.hero_side = QVBoxLayout()
+        self.hero_side.setSpacing(10)
+        self.hero_foot = QHBoxLayout()
+        self.hero_foot.setSpacing(12)
+        self.orb = StatusOrb("microphone")
+        self.hero_chip = StateChip()
+        self.headline = QLabel("Ready to dictate")
+        self.headline.setObjectName("pageTitle")
+        self.headline.setWordWrap(True)
+        self.headline.setTextFormat(Qt.TextFormat.PlainText)
+        self.hero_head = QWidget()
+        head = QVBoxLayout(self.hero_head)
+        head.setContentsMargins(0, 0, 0, 0)
+        head.setSpacing(6)
+        head.addWidget(self.hero_chip, 0, Qt.AlignmentFlag.AlignLeft)
+        head.addWidget(self.headline)
         self.hint = QLabel()
+        self.hint.setProperty("muted", True)
         self.hint.setWordWrap(True)
-        layout.addWidget(self.hint)
-        metrics = QHBoxLayout()
+        self.hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.record_button = RecordButton("Record to history", "microphone", "primary")
+        self.record_button.clicked.connect(record)
+        self.record_button.setToolTip("Use your shortcut in another app for automatic insertion.")
+        self.hero_meter = LevelMeter(bars=28)
+        self.hero_meter.setFixedHeight(26)
+        self.hero_meter.setAccessibleName("Microphone level")
+        self.hero_top.addWidget(self.orb, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.hero_top.addLayout(self.hero_text, 1)
+        self.hero_top.addLayout(self.hero_side)
+        self.hero_box.addLayout(self.hero_top)
+        self.hero_box.addLayout(self.hero_foot)
+        self.compact: bool | None = None
+        self.stacked: bool | None = None
+        layout.addWidget(self.hero)
+
         self.metric_labels = []
-        for caption in ("Saved words", "Dictations", "Speaking pace"):
+        self.metric_icons = []
+        self.metric_boxes = []
+        metrics = QHBoxLayout()
+        self.metrics_row = metrics
+        metrics.setSpacing(14)
+        for caption, glyph in (
+            ("Saved words", "lines"),
+            ("Dictations", "microphone"),
+            ("Speaking pace", "gauge"),
+        ):
             panel = GlassPanel("metric")
-            stack = QVBoxLayout(panel)
+            tile = QHBoxLayout(panel)
+            tile.setContentsMargins(14, 12, 14, 12)
+            tile.setSpacing(12)
+            icon = Glyph(glyph, "glow", 40, badge=True)
+            tile.addWidget(icon, 0, Qt.AlignmentFlag.AlignVCenter)
+            stack = QVBoxLayout()
+            stack.setSpacing(0)
             number = QLabel("—")
             number.setObjectName("metricNumber")
+            caption_label = QLabel(caption)
+            caption_label.setObjectName("metricCaption")
             stack.addWidget(number)
-            stack.addWidget(QLabel(caption))
+            stack.addWidget(caption_label)
+            tile.addLayout(stack, 1)
             self.metric_labels.append(number)
+            self.metric_icons.append(icon)
+            self.metric_boxes.append(tile)
             metrics.addWidget(panel)
         layout.addLayout(metrics)
+
         recent = QHBoxLayout()
         recent_title = QLabel("Recent transcriptions")
         recent_title.setProperty("sectionTitle", True)
         recent.addWidget(recent_title, 1)
-        self.clear_button = QPushButton("Clear history")
-        self.clear_button.setProperty("danger", True)
+        self.clear_button = IconButton("Clear history", "trash", "danger")
         self.clear_button.clicked.connect(self.clear_history)
         recent.addWidget(self.clear_button)
         layout.addLayout(recent)
@@ -204,19 +413,26 @@ class AppWindow(GlassDialog):
         self.history_notice.hide()
         layout.addWidget(self.history_notice)
         split = QSplitter()
-        split.setHandleWidth(16)
+        split.setHandleWidth(12)
+        split.setChildrenCollapsible(False)
         self.entries = QListWidget()
+        self.entries.setObjectName("historyCards")
+        self.entries.setItemDelegate(HistoryCards(self.entries))
         self.entries.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.entries.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.entries.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.entries.setMouseTracking(True)  # Cards respond to the pointer.
+        self.entries.setMinimumWidth(150)
         self.entries.setAccessibleName("Recent transcriptions")
         self.entries.currentItemChanged.connect(self.select_entry)
         split.addWidget(self.entries)
         detail = GlassPanel("transcriptPanel")
+        detail.setMinimumWidth(190)
         detail_layout = QVBoxLayout(detail)
-        detail_layout.setContentsMargins(16, 16, 16, 16)
-        self.entry_info = QLabel("Your next dictation will appear here.")
-        self.entry_info.setTextFormat(Qt.TextFormat.PlainText)
-        self.entry_info.setWordWrap(True)
+        self.detail_layout = detail_layout
+        detail_layout.setContentsMargins(18, 16, 18, 18)
+        detail_layout.setSpacing(10)
+        self.entry_info = ChipLabel("Your next dictation will appear here.")
         detail_layout.addWidget(self.entry_info)
         self.entry_notice = NoteLabel(collapse_when_empty=True)
         detail_layout.addWidget(self.entry_notice)
@@ -228,29 +444,36 @@ class AppWindow(GlassDialog):
         self.tabs = SegmentedTabs()
         self.tabs.addTab(self.result_text, "Result")
         self.tabs.addTab(self.raw, "Original")
-        detail_layout.addWidget(self.tabs)
+        detail_layout.addWidget(self.tabs, 1)
         actions = QHBoxLayout()
-        self.copy_button = QPushButton("Copy text")
+        actions.setSpacing(10)
+        self.copy_button = IconButton("Copy text", "copy", "primary")
         self.copy_button.clicked.connect(self.copy_text)
-        self.delete_button = QPushButton("Delete entry")
-        self.delete_button.setProperty("danger", True)
+        self.delete_button = IconButton("Delete entry", "trash", "danger")
         self.delete_button.clicked.connect(self.delete_entry)
-        actions.addWidget(self.copy_button)
-        actions.addWidget(self.delete_button)
+        actions.addWidget(self.copy_button, 1)
+        actions.addWidget(self.delete_button, 1)
         detail_layout.addLayout(actions)
         split.addWidget(detail)
-        split.setSizes([260, 420])
+        split.setStretchFactor(0, 4)
+        split.setStretchFactor(1, 5)
+        split.setSizes([330, 440])
         self.history_split = split
+        self.tabs.setMinimumHeight(104)
         self.empty_history = GlassPanel("emptyHistory")
         empty_layout = QVBoxLayout(self.empty_history)
-        empty_layout.setContentsMargins(32, 28, 32, 28)
+        empty_layout.setContentsMargins(32, 24, 32, 24)
         empty_layout.setSpacing(8)
         empty_layout.addStretch()
+        self.empty_icon = Glyph("microphone", "glow", 56, badge=True)
+        empty_layout.addWidget(self.empty_icon, 0, Qt.AlignmentFlag.AlignHCenter)
+        empty_layout.addSpacing(6)
         empty_title = QLabel("No dictations yet")
         empty_title.setObjectName("emptyTitle")
         empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_layout.addWidget(empty_title)
         self.empty_message = QLabel()
+        self.empty_message.setProperty("muted", True)
         self.empty_message.setTextFormat(Qt.TextFormat.PlainText)
         self.empty_message.setWordWrap(True)
         self.empty_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -271,6 +494,9 @@ class AppWindow(GlassDialog):
         self.pages.addWidget(self.analytics)
         content.addWidget(self.pages, 1)
         outer.addLayout(content, 1)
+        self.set_compact(self.width() < COMPACT_WIDTH)
+        self.set_stacked(self.width() < STACKED_WIDTH)
+        self.set_state("Ready", "ready")
         self.set_hint(f"Hold {shortcut}, speak naturally, then release.")
         self.refresh_history()
 
@@ -285,8 +511,84 @@ class AppWindow(GlassDialog):
         )
 
     def set_state(self, text: str, tone: str) -> None:
+        """Show the state in the sidebar chip and, in words, in the Home hero."""
         self.state_label.setText(text)
         self.state_dot.set_tone(tone)
+        self.headline.setText("Ready to dictate" if text == State.IDLE.value else text)
+        self.hero_chip.set_state(chip_word(text, tone), tone)
+        self.orb.set_tone(tone)
+
+    def set_level(self, shown: float) -> None:
+        """Show the live input level (0..1 on the meter scale) while recording."""
+        self.hero_meter.set_level(shown)
+        self.orb.set_level(shown)
+
+    def clear_level(self) -> None:
+        self.hero_meter.reset()
+        self.orb.reset()
+
+    def set_compact(self, compact: bool) -> None:
+        """Rearrange for a narrow window: the hero drops its meter, the tiles tighten."""
+        if compact == self.compact:
+            return
+        self.compact = compact
+        self.shell_layout.setContentsMargins(*([12] * 4 if compact else [18] * 4))
+        self.shell_layout.setSpacing(12 if compact else 22)
+        self.sidebar.setFixedWidth(178 if compact else 208)
+        self.sidebar_layout.setContentsMargins(*((8, 12, 8, 8) if compact else (12, 16, 12, 12)))
+        self.home_layout.setSpacing(10 if compact else 16)
+        # Wide: orb | chip, headline, hint | button over meter.
+        # Narrow: orb | headline, hint, then the button across the card; no chip or meter.
+        for layout in (self.hero_text, self.hero_side, self.hero_foot):
+            while layout.count():
+                layout.takeAt(0)
+        if compact:
+            self.hero_box.setContentsMargins(14, 12, 14, 12)
+            self.hero_top.setSpacing(12)
+            self.orb.set_size(56)
+            self.hero_text.addStretch()
+            self.hero_text.addWidget(self.hero_head)
+            self.hero_text.addWidget(self.hint)
+            self.hero_text.addStretch()
+            self.hero_foot.addWidget(self.record_button, 1)
+            self.record_button.setMinimumWidth(0)
+        else:
+            self.hero_box.setContentsMargins(22, 18, 24, 18)
+            self.hero_top.setSpacing(20)
+            self.orb.set_size(96)
+            self.hero_text.addStretch()
+            self.hero_text.addWidget(self.hero_head)
+            self.hero_text.addWidget(self.hint)
+            self.hero_text.addStretch()
+            self.hero_side.addStretch()
+            self.hero_side.addWidget(self.record_button)
+            self.hero_side.addWidget(self.hero_meter)
+            self.hero_side.addStretch()
+            self.record_button.setMinimumWidth(196)
+        self.hero_meter.setVisible(not compact)
+        self.hero_chip.setVisible(not compact)  # The headline already states the state.
+        self.metrics_row.setSpacing(8 if compact else 14)
+        for icon, tile in zip(self.metric_icons, self.metric_boxes, strict=True):
+            icon.setVisible(not compact)
+            tile.setContentsMargins(*((10, 8, 8, 8) if compact else (14, 12, 14, 12)))
+        self.detail_layout.setContentsMargins(*((12, 12, 12, 12) if compact else (18, 16, 18, 18)))
+        for label in (self.headline, *self.metric_labels):
+            label.setProperty("compact", compact)
+            label.style().unpolish(label)
+            label.style().polish(label)
+
+    def set_stacked(self, stacked: bool) -> None:
+        """In a very narrow window the history list sits above the entry, not beside it."""
+        if stacked == self.stacked:
+            return
+        self.stacked = stacked
+        self.history_split.setOrientation(
+            Qt.Orientation.Vertical if stacked else Qt.Orientation.Horizontal
+        )
+        card = HistoryCards.HEIGHT + HistoryCards.GAP
+        self.entries.setMinimumHeight(card if stacked else 0)
+        self.history_split.setSizes([card + 60, 240] if stacked else [330, 440])
+        self.history_views.setMinimumHeight(card + 12 + 230 if stacked else 236)
 
     def maximize_restore(self) -> None:
         self.showNormal() if self.isMaximized() or self.isFullScreen() else self.showMaximized()
@@ -296,14 +598,9 @@ class AppWindow(GlassDialog):
         enable_snap(self)
 
     def resizeEvent(self, event: Any) -> None:
-        if hasattr(self, "sidebar"):
-            compact = self.width() < 820
-            self.shell_layout.setContentsMargins(*([12] * 4 if compact else [18] * 4))
-            self.shell_layout.setSpacing(12 if compact else 22)
-            self.sidebar.setFixedWidth(178 if compact else 208)
-            self.sidebar_layout.setContentsMargins(
-                *((8, 12, 8, 8) if compact else (12, 16, 12, 12))
-            )
+        if hasattr(self, "stacked"):
+            self.set_compact(self.width() < COMPACT_WIDTH)
+            self.set_stacked(self.width() < STACKED_WIDTH)
         super().resizeEvent(event)
 
     def nativeEvent(self, event_type: Any, message: int) -> Any:
@@ -396,10 +693,13 @@ class AppWindow(GlassDialog):
                 )
             except (ValueError, TypeError, OverflowError):
                 stamp = "Saved transcription"
-            item = QListWidgetItem(
-                f"{stamp}   {entry['words']} words\n{entry['preview'].replace(chr(10), ' ')}"
-            )
+            preview = entry["preview"].replace(chr(10), " ")
+            # The text keeps both lines for assistive technology; the delegate draws a card.
+            item = QListWidgetItem(f"{stamp}   {entry['words']} words\n{preview}")
             item.setData(Qt.ItemDataRole.UserRole, entry["id"])
+            item.setData(STAMP, stamp)
+            item.setData(WORDS, f"{entry['words']} words")
+            item.setData(PREVIEW, preview)
             self.entries.addItem(item)
         self.clear_button.setEnabled(bool(count))
         self.history_views.setCurrentWidget(self.history_split if count else self.empty_history)

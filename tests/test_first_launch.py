@@ -637,6 +637,9 @@ def test_level_timer_runs_only_while_recording_and_zeroes_afterwards(desktop):
     desktop.update_level()
     meter = desktop.indicator.meter
     assert meter.active and meter.levels[-1] == pytest.approx(display_level(0.1))
+    hero = desktop.window.hero_meter  # The Home hero shows the same level.
+    assert hero.active and hero.levels[-1] == pytest.approx(display_level(0.1))
+    assert desktop.window.orb.level == pytest.approx(display_level(0.1))
     desktop.pipeline.input_level.return_value = 0.5
     desktop.update_level()
     assert list(meter.levels)[-2:] == pytest.approx([display_level(0.1), display_level(0.5)])
@@ -647,6 +650,7 @@ def test_level_timer_runs_only_while_recording_and_zeroes_afterwards(desktop):
         desktop.state_changed(state, "")
         assert not desktop.level_timer.isActive(), state
         assert not meter.active and not any(meter.levels), state
+        assert not hero.active and not any(hero.levels) and desktop.window.orb.level == 0.0
     desktop.state_changed(State.WARMING, "")
     assert not desktop.level_timer.isActive()
 
@@ -659,3 +663,4 @@ def test_level_timer_stops_and_zeroes_on_shutdown(desktop):
     desktop.shutdown()
     assert not desktop.level_timer.isActive()
     assert not any(desktop.indicator.meter.levels)
+    assert not any(desktop.window.hero_meter.levels)

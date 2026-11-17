@@ -2,7 +2,7 @@ import sqlite3
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMessageBox, QPushButton
 
@@ -106,7 +106,7 @@ def text_bands(image):
     return bands
 
 
-def test_selected_and_unselected_history_rows_show_date_and_preview_lines(app):
+def test_history_rows_are_separate_cards_showing_time_and_preview_selected_or_not(app):
     history = History(None)
     history.add("first words", "Hello there, everyone.", "Inserted.", 2)
     history.add("second words", "Thanks again for coming.", "Inserted.", 3)
@@ -116,12 +116,47 @@ def test_selected_and_unselected_history_rows_show_date_and_preview_lines(app):
     app.processEvents()
     try:
         assert window.entries.currentRow() == 0
+        delegate = window.entries.itemDelegate()
+        cards = []
         for row in (0, 1):
             item = window.entries.item(row)
             assert item.isSelected() is (row == 0)
-            rect = window.entries.visualItemRect(item)
-            image = window.entries.viewport().grab(rect).toImage()
+            # The row's text still carries both lines for assistive technology.
+            assert "words\n" in item.text()
+            card = delegate.card_rect(window.entries.visualItemRect(item))
+            cards.append(card)
+            # Inside the card's rim: the time line and the preview line, selected or not.
+            inner = card.adjusted(6, 6, -6, -6)
+            image = window.entries.viewport().grab(inner).toImage()
             assert text_bands(image) == 2, f"row {row} shows {text_bands(image)} line(s)"
+        # Separate cards: a gap of the backdrop between one card and the next.
+        assert cards[1].top() - cards[0].bottom() >= 6
+        view = window.entries.viewport().grab().toImage()
+        edge = QPoint(cards[0].left(), cards[0].center().y())
+        # The selected card is outlined in the accent; the other has a quiet glass rim.
+        accent = QColor(appearance.current_theme().accent[0])
+        assert colour_distance(view.pixelColor(edge), accent) < 70
+        other = QPoint(cards[1].left(), cards[1].center().y())
+        assert colour_distance(view.pixelColor(other), accent) > 120
+    finally:
+        window.hide()
+        window.deleteLater()
+        history.close()
+
+
+def test_long_previews_take_two_elided_lines_and_never_more(app):
+    history = History(None)
+    words = "A much longer dictation that keeps going well past the width of a card. " * 4
+    history.add(words, words, "Inserted.", 9)
+    window = AppWindow(history, Mock(), Mock(), Mock(), "CapsLock")
+    window.resize(1040, 740)
+    window.show()
+    app.processEvents()
+    try:
+        delegate = window.entries.itemDelegate()
+        card = delegate.card_rect(window.entries.visualItemRect(window.entries.item(0)))
+        image = window.entries.viewport().grab(card.adjusted(6, 6, -6, -6)).toImage()
+        assert text_bands(image) == 3  # Time line, then exactly two preview lines.
     finally:
         window.hide()
         window.deleteLater()
@@ -265,3 +300,166 @@ def test_invalid_saved_timestamp_does_not_hide_recoverable_words(saved_workspace
     window.refresh_history()
     assert "Saved transcription" in window.entries.item(0).text()
     assert window.result_text.toPlainText() == "Recover these words."
+
+
+@pytest.fixture
+def workspace(app):
+    history = History(None)
+    record = Mock()
+    window = AppWindow(history, Mock(), record, Mock(), "CapsLock", latest=Mock())
+    window.resize(1040, 740)
+    window.show()
+    app.processEvents()
+    yield window, history, record
+    window.hide()
+    window.deleteLater()
+    history.close()
+
+
+def test_hero_states_the_state_in_words_with_a_chip_and_an_orb(workspace):
+    window, _, _ = workspace
+    seen = {}
+    for label, tone, headline in (
+        ("Ready", "ready", "Ready to dictate"),
+        ("Listening", "recording", "Listening"),
+        ("Transcribing", "busy", "Transcribing"),
+        ("Speech model required", "muted", "Speech model required"),
+        ("Preparing speech model", "muted", "Preparing speech model"),
+        ("Error", "recording", "Error"),
+    ):
+        window.set_state(label, tone)
+        assert window.headline.text() == headline
+        assert window.state_label.text() == label  # The sidebar keeps the plain label.
+        assert window.orb.tone == window.hero_chip.dot.tone == window.state_dot.tone == tone
+        # Never by colour alone: the chip always says a word beside its dot.
+        assert window.hero_chip.label.text()
+        seen[label] = window.hero_chip.label.text()
+    assert seen["Listening"] != seen["Error"]  # Both are red; the words tell them apart.
+    assert len({seen["Ready"], seen["Listening"], seen["Transcribing"]}) == 3
+    for widget in (window.orb, window.hero_chip, window.headline, window.hint):
+        assert window.hero.isAncestorOf(widget) and widget.isVisible()
+    assert window.hint.text() == "Hold CapsLock, speak naturally, then release."
+    assert window.orb.glyph == "microphone"
+
+
+def test_record_button_is_the_hero_primary_action_and_shows_microphone_or_stop(workspace):
+    window, _, record = workspace
+    button = window.record_button
+    assert window.hero.isAncestorOf(button) and not window.sidebar.isAncestorOf(button)
+    assert button.property("primary") is True and button.property("nav") is not True
+    assert button.text() == "Record to history" and button.glyph == "microphone"
+    button.setText("Stop recording")
+    assert button.glyph == "stop"
+    for label in ("Record (manual copy)", "Record to history"):
+        button.setText(label)
+        assert button.glyph == "microphone" and button.text() == label
+    assert "shortcut" in button.toolTip()
+    button.click()
+    record.assert_called_once_with()
+
+
+def test_hero_meter_and_orb_follow_the_level_and_are_flat_when_idle(workspace, app):
+    window, _, _ = workspace
+    meter = window.hero_meter
+    assert window.hero.isAncestorOf(meter) and meter.isVisible()
+    assert not meter.active and not any(meter.levels) and window.orb.level == 0.0
+    window.set_state("Listening", "recording")
+    app.processEvents()
+    quiet = window.orb.grab().toImage()
+    window.set_level(0.8)
+    assert meter.active and meter.levels[-1] == 0.8 and window.orb.level == 0.8
+    app.processEvents()
+    assert window.orb.grab().toImage() != quiet  # The ring responds to the level.
+    window.clear_level()
+    assert not meter.active and not any(meter.levels) and window.orb.level == 0.0
+
+
+def test_stats_are_three_tiles_with_an_icon_a_number_and_a_label(workspace):
+    from PySide6.QtWidgets import QLabel
+
+    from localphraser.appearance import GlassPanel, Glyph
+
+    window, history, _ = workspace
+    history.add("one two three", "One two three.", "Inserted.", 2)
+    window.refresh_history()
+    tiles = window.findChildren(GlassPanel, "metric")
+    assert len(tiles) == 3
+    captions = []
+    for tile, number in zip(tiles, window.metric_labels, strict=True):
+        assert tile.isAncestorOf(number) and tile.findChild(Glyph) is not None
+        captions.append(
+            next(label.text() for label in tile.findChildren(QLabel) if label is not number)
+        )
+    assert captions == ["Saved words", "Dictations", "Speaking pace"]
+    assert [label.text() for label in window.metric_labels] == ["3", "1", "90 wpm"]
+
+
+def test_detail_card_has_chips_a_primary_copy_and_a_quiet_delete(workspace, app):
+    window, history, _ = workspace
+    history.add("words here", "Words here.", "Inserted.", 2)
+    window.refresh_history()
+    app.processEvents()
+    assert window.entry_info.text() == "2 words · 2.0s recorded"
+    assert window.entry_info.parts() == ["2 words", "2.0s recorded"]  # One chip each.
+    assert window.entry_info.textFormat() == Qt.TextFormat.PlainText
+    assert (window.copy_button.role, window.copy_button.glyph) == ("primary", "copy")
+    assert (window.delete_button.role, window.delete_button.glyph) == ("danger", "trash")
+    assert (window.clear_button.role, window.clear_button.glyph) == ("danger", "trash")
+    window.tabs.setCurrentIndex(1)
+    window.copy_button.click()
+    assert app.clipboard().text() == "words here"
+
+
+def test_empty_history_is_a_centred_card_with_the_microphone_icon(workspace):
+    from localphraser.appearance import Glyph
+
+    window, _, _ = workspace
+    assert window.empty_history.isVisible()
+    icon = window.empty_history.findChild(Glyph)
+    assert icon is not None and icon.name == "microphone" and icon.isVisible()
+    centre = icon.mapTo(window.empty_history, icon.rect().center()).x()
+    assert abs(centre - window.empty_history.width() / 2) <= 2
+
+
+def test_nothing_in_the_hero_clips_or_overlaps_at_the_minimum_window_size(workspace, app):
+    window, history, _ = workspace
+    history.add("words here", "Words here.", "Inserted.", 2)
+    window.refresh_history()
+    window.set_state("Speech model required", "muted")  # The longest headline.
+    window.record_button.setText("Record (manual copy)")  # The longest label.
+
+    def boxes():
+        for _ in range(3):
+            app.processEvents()
+        found = {}
+        for name in ("orb", "hero_chip", "headline", "hint", "record_button", "hero_meter"):
+            widget = getattr(window, name)
+            if widget.isVisible():
+                found[name] = QRect(widget.mapTo(window.hero, QPoint(0, 0)), widget.size())
+        return found
+
+    for size in (window.minimumSize(), QSize(1040, 740)):
+        window.resize(size)
+        found = boxes()
+        names = list(found)
+        for name in names:
+            assert window.hero.rect().contains(found[name]), (size, name)
+            widget = getattr(window, name)
+            assert widget.width() >= widget.minimumSizeHint().width(), (size, name)
+        for index, first in enumerate(names):
+            for second in names[index + 1 :]:
+                assert not found[first].intersects(found[second]), (size, first, second)
+        # The page never needs more width than it has; a short window scrolls instead.
+        page = window.home_body
+        assert page.minimumSizeHint().width() <= window.home.viewport().width()
+        assert page.height() >= page.heightForWidth(page.width())
+        card = window.entries.itemDelegate().HEIGHT
+        assert window.entries.isVisible() and window.entries.height() >= card
+        for widget in (window.copy_button, window.delete_button, window.clear_button):
+            assert widget.isVisible() and widget.width() >= widget.minimumSizeHint().width()
+            assert widget.height() >= widget.minimumSizeHint().height()
+        assert window.result_text.height() >= 40
+    assert window.hero_meter.isVisible()  # Back at full size the meter returns...
+    window.resize(window.minimumSize())
+    boxes()
+    assert not window.hero_meter.isVisible()  # ...and the smallest window drops it.
