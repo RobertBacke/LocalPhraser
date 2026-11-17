@@ -209,3 +209,66 @@ def test_saved_thread_count_is_capped_at_the_limit(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=factory))
     WhisperRecognizer(tmp_path, cpu_threads=16).prepare()
     assert factory.call_args.kwargs["cpu_threads"] == 6
+
+
+def test_final_and_preview_decode_boost_quiet_audio_then_zero_the_copy(tone):
+    recognizer = WhisperRecognizer(Path("unused"))
+    seen = {}
+
+    def transcribe(audio, **kwargs):
+        seen["audio"], seen["peak"] = audio, float(np.max(np.abs(audio)))
+        return iter([SimpleNamespace(text="hi", compression_ratio=1.0)]), None
+
+    recognizer._model = Mock(transcribe=transcribe)
+    quiet = tone(0.01)
+    assert recognizer.transcribe(quiet) == "hi"
+    assert seen["peak"] == pytest.approx(0.3, rel=0.05)
+    assert not seen["audio"].any() and seen["audio"] is not quiet
+    assert float(np.max(np.abs(quiet))) == pytest.approx(0.01, rel=0.05)
+    recognizer.preview_ready = True
+    seen.clear()
+    assert recognizer.preview(quiet) == "hi"
+    assert seen["peak"] == pytest.approx(0.3, rel=0.05)
+    assert not seen["audio"].any() and seen["audio"] is not quiet
+
+
+def test_boosted_copy_survives_lazy_decoding_and_is_zeroed_on_error(tone):
+    recognizer = WhisperRecognizer(Path("unused"))
+    seen = {}
+
+    def transcribe(audio, **kwargs):
+        seen["audio"] = audio
+
+        def segments():
+            seen["peak_while_decoding"] = float(np.max(np.abs(audio)))
+            yield SimpleNamespace(text="hi", compression_ratio=1.0)
+            raise RuntimeError("decoder failed")
+
+        return segments(), None
+
+    recognizer._model = Mock(transcribe=transcribe)
+    with pytest.raises(RuntimeError):
+        recognizer.transcribe(tone(0.01))
+    assert seen["peak_while_decoding"] == pytest.approx(0.3, rel=0.05)
+    assert not seen["audio"].any()
+
+
+def test_repetition_loop_segments_are_dropped(tone):
+    recognizer = WhisperRecognizer(Path("unused"))
+    segments = [
+        SimpleNamespace(text="keep this", compression_ratio=1.4),
+        SimpleNamespace(text="la la la la la la", compression_ratio=2.41),
+        SimpleNamespace(text="and this"),  # no attribute: kept
+    ]
+    recognizer._model = Mock(transcribe=lambda *a, **k: (iter(segments), None))
+    assert recognizer.transcribe(tone(0.3)) == "keep this and this"
+
+
+def test_temperatures_default_to_single_zero(tone):
+    recognizer = WhisperRecognizer(Path("unused"))
+    recognizer._model = Mock(transcribe=Mock(return_value=(iter([]), None)))
+    recognizer.transcribe(tone(0.3))
+    assert recognizer._model.transcribe.call_args.kwargs["temperature"] == 0
+    recognizer.temperatures = (0.0, 0.2, 0.4)
+    recognizer.transcribe(tone(0.3))
+    assert recognizer._model.transcribe.call_args.kwargs["temperature"] == (0.0, 0.2, 0.4)

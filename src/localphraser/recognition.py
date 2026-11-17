@@ -9,6 +9,9 @@ import numpy as np
 
 from localphraser.audio import SAMPLE_RATE, Audio
 from localphraser.config import RECOGNITION_QUALITY, inference_threads
+from localphraser.levels import boost_quiet
+
+MAX_COMPRESSION_RATIO = 2.4  # Above this a segment is a repetition loop.
 
 
 class Recognizer(Protocol):
@@ -35,6 +38,7 @@ class WhisperRecognizer:
         self.beam_size = RECOGNITION_QUALITY[quality]
         self._model: Any = None
         self.preview_ready = False
+        self.temperatures: tuple[float, ...] = (0.0,)
 
     def prepare(self) -> None:
         """Load verified local weights while microphone capture is stopped."""
@@ -97,22 +101,30 @@ class WhisperRecognizer:
     def _decode(
         self, audio: Audio, partial: Callable[[str], None] | None = None, *, preview: bool = False
     ) -> str:
-        segments, _ = self._model.transcribe(
-            audio,
-            language="en",
-            beam_size=1 if preview else self.beam_size,
-            vad_filter=True,
-            condition_on_previous_text=False,
-            temperature=0,
-            # Long recordings need timestamp-guided window advancement to avoid repetition.
-            without_timestamps=audio.size <= 30 * SAMPLE_RATE,
-            hotwords=self.vocabulary or None,
-        )
-        parts = []
-        for segment in segments:
-            text = segment.text.strip()
-            if text:
-                parts.append(text)
-                if partial is not None:
-                    partial(" ".join(parts))
-        return " ".join(parts)
+        boosted = boost_quiet(audio)
+        try:
+            segments, _ = self._model.transcribe(
+                boosted,
+                language="en",
+                beam_size=1 if preview else self.beam_size,
+                vad_filter=True,
+                condition_on_previous_text=False,
+                temperature=0 if len(self.temperatures) == 1 else self.temperatures,
+                # Long recordings need timestamp-guided window advancement to avoid repetition.
+                without_timestamps=audio.size <= 30 * SAMPLE_RATE,
+                hotwords=self.vocabulary or None,
+            )
+            parts = []
+            # The generator is lazy: decoding reads `boosted` while it is consumed.
+            for segment in segments:
+                if getattr(segment, "compression_ratio", 0.0) > MAX_COMPRESSION_RATIO:
+                    continue
+                text = segment.text.strip()
+                if text:
+                    parts.append(text)
+                    if partial is not None:
+                        partial(" ".join(parts))
+            return " ".join(parts)
+        finally:
+            if boosted is not audio:
+                boosted.fill(0)
