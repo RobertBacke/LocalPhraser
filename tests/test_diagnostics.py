@@ -1,7 +1,9 @@
 import json
 import socket
 import sys
-from unittest.mock import Mock
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock
 
 import numpy as np
 import pytest
@@ -129,3 +131,36 @@ def test_missing_models_write_failure_without_audio_or_downloads(tmp_path, monke
     assert json.loads(report.read_text())["stage"] == "model_verification"
     assert not root.exists()
     audio.assert_not_called()
+
+
+def _fake_sapi(monkeypatch, tmp_path):
+    spoken = []
+    voice = Mock()
+    voice.Speak.side_effect = lambda *args: spoken.append(args)
+    stream = Mock()
+    stream.Open.side_effect = lambda path, *_: Path(path).write_bytes(b"")
+    created = {"SAPI.SpVoice": voice, "SAPI.SpFileStream": stream}
+    client = SimpleNamespace(CreateObject=lambda name, **_: created[name])
+    monkeypatch.setitem(sys.modules, "comtypes", SimpleNamespace(client=client))
+    monkeypatch.setitem(sys.modules, "comtypes.client", client)
+    container = MagicMock()
+    container.__enter__.return_value.decode.return_value = []
+    resampler = Mock()
+    resampler.resample.return_value = [
+        SimpleNamespace(to_ndarray=lambda: np.ones((1, 8), dtype=np.float32))
+    ]
+    av = SimpleNamespace(open=lambda path: container, AudioResampler=lambda **_: resampler)
+    monkeypatch.setitem(sys.modules, "av", av)
+    return spoken
+
+
+def test_synthetic_audio_speaks_given_text_as_xml(monkeypatch, tmp_path):
+    spoken = _fake_sapi(monkeypatch, tmp_path)
+    audio = diagnostics.synthetic_audio(tmp_path, text="x", xml=True)
+    assert spoken == [("x", 8)] and audio.dtype == np.float32
+
+
+def test_synthetic_audio_defaults_to_synthetic_text_without_flag(monkeypatch, tmp_path):
+    spoken = _fake_sapi(monkeypatch, tmp_path)
+    diagnostics.synthetic_audio(tmp_path)
+    assert spoken == [(diagnostics.SYNTHETIC_TEXT,)]

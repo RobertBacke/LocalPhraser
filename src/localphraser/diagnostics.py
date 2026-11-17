@@ -22,8 +22,13 @@ from localphraser.refinement import LocalRefiner, preserve_words
 SYNTHETIC_TEXT = "Local speech recognition keeps my words on this computer."
 
 
-def synthetic_audio(directory: Path, sample_rate: int = SAMPLE_RATE) -> Audio:
-    """Use an installed Windows SAPI voice; remove its generated WAV before inference."""
+def synthetic_audio(
+    directory: Path, sample_rate: int = SAMPLE_RATE, text: str | None = None, xml: bool = False
+) -> Audio:
+    """Use an installed Windows SAPI voice; remove its generated WAV before inference.
+
+    `text=None` speaks `SYNTHETIC_TEXT`. `xml=True` speaks SAPI XML markup (flag 8).
+    """
     import av
     import comtypes.client
 
@@ -34,7 +39,11 @@ def synthetic_audio(directory: Path, sample_rate: int = SAMPLE_RATE) -> Audio:
         stream.Open(str(wav), 3, False)
         try:
             voice.AudioOutputStream = stream
-            voice.Speak(SYNTHETIC_TEXT)
+            spoken = SYNTHETIC_TEXT if text is None else text
+            if xml:
+                voice.Speak(spoken, 8)
+            else:
+                voice.Speak(spoken)
         finally:
             stream.Close()
         with av.open(str(wav)) as container:
