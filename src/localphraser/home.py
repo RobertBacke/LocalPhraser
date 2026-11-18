@@ -267,10 +267,13 @@ class AppWindow(GlassDialog):
         self.navigation.addButton(self.analytics_button)
         self.analytics_button.clicked.connect(self.show_analytics)
         nav.addWidget(self.analytics_button)
+        self.latest_button: IconButton | None = None
         if latest is not None:
-            latest_button = self.nav_button("Latest transcript", "transcript")
-            latest_button.clicked.connect(latest)
-            nav.addWidget(latest_button)
+            self.latest_button = self.nav_button("Latest transcript", "transcript")
+            self.latest_button.setCheckable(True)
+            self.navigation.addButton(self.latest_button)
+            self.latest_button.clicked.connect(latest)
+            nav.addWidget(self.latest_button)
         nav.addStretch()
         # The status chip: the state as a dot and as words, never by colour alone.
         self.state_chip = GlassPanel("stateChip", nested=True, radius=12)
@@ -654,6 +657,13 @@ class AppWindow(GlassDialog):
 
     def show_vocabulary(self, widget: QWidget) -> None:
         self.vocabulary_button.setChecked(True)
+        if self.pages.indexOf(widget) < 0:
+            self.pages.addWidget(widget)
+        self.pages.setCurrentWidget(widget)
+
+    def show_latest(self, widget: QWidget) -> None:
+        if self.latest_button is not None:
+            self.latest_button.setChecked(True)
         if self.pages.indexOf(widget) < 0:
             self.pages.addWidget(widget)
         self.pages.setCurrentWidget(widget)

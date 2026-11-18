@@ -45,7 +45,8 @@ Caps Lock hook / WM_HOTKEY → cheap native window/caret snapshot → microphone
 - `models.py`: explicit online installation with provenance and hashes, offline verification.
 - `downloads.py`: owned QProcess installer lifecycle, cancellation and separate offline cleanup.
 - `startup.py`: quoted windowless startup command and per-profile current-user Run entry.
-- `ui.py`: tray, nonactivating multi-monitor indicator, settings, recovery transcript, UI dispatcher.
+- `ui.py`: tray, nonactivating multi-monitor indicator, settings, the Latest transcript
+  recovery page (a page of the workspace, not a window), UI dispatcher.
 - `main.py`: CLI, one-instance lock, separate online/offline entry paths.
 
 After release, capture continues for 250 ms (`pipeline.TAIL_SECONDS`) so the last word is not

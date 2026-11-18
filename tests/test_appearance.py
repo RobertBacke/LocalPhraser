@@ -782,9 +782,10 @@ def test_latest_transcript_keeps_its_content_with_segments_and_a_primary_copy(ap
         copy = buttons["Copy to clipboard"]
         assert (copy.role, copy.glyph) == ("primary", "copy")
         assert buttons["Clear"].property("primary") is not True
-        close = latest.findChild(QToolButton)
-        assert isinstance(close, appearance.CloseGlyph)
-        assert close.accessibleName() == "Close window" and not close.text()
+        # A page of the main window: no caption, no close control, no stylesheet of its own.
+        assert latest.findChild(appearance.CloseGlyph) is None
+        assert not isinstance(latest, appearance.GlassDialog) and not latest.styleSheet()
+        assert latest.findChild(QLabel, "pageTitle").text() == "Latest transcript"
         latest.set_transcript("Result words.", "Inserted.")
         latest.raw.setPlainText("raw words")
         copy.click()
@@ -816,7 +817,7 @@ def test_every_painted_element_falls_back_to_native_drawing_in_high_contrast(
     settings = Settings(Config(mode="polished"), Mock())
     latest, indicator = Latest(), Indicator()
     try:
-        for dialog in (window, settings, latest):
+        for dialog in (window, settings):
             assert not dialog.styleSheet()  # Palette colours and native controls only.
         window.resize(1040, 740)
         window.show()
@@ -831,13 +832,17 @@ def test_every_painted_element_falls_back_to_native_drawing_in_high_contrast(
         window.show_settings(settings)
         app.processEvents()
         assert not window.grab().isNull()
-        latest.show()
+        for filled in (False, True):  # The empty state, then the transcript card.
+            if filled:
+                latest.set_transcript("Plain words.", "Inserted.")
+            window.show_latest(latest)
+            app.processEvents()
+            assert not window.grab().isNull()
         indicator.display(State.RECORDING)
         indicator.set_level(0.7)
         indicator.live_preview("plain words")
         app.processEvents()
-        for widget in (latest, indicator):
-            assert not widget.grab().isNull()
+        assert not indicator.grab().isNull()
         # The orb and the hero meter draw in the palette's text colour, not theme colours.
         ink = window.palette().color(QPalette.ColorRole.WindowText)
         meter = window.hero_meter.grab().toImage()

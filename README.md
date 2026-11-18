@@ -40,7 +40,8 @@ development and build artifacts. Actual installer size has not yet been benchmar
 4. The indicator shows listening/transcribing. Verified targets receive Unicode input.
    If the microphone input was very quiet, the result says so and suggests raising the
    input level in Windows Sound settings.
-5. If the field cannot be verified or focus/caret changes, use tray → Latest transcript → Copy.
+5. If the field cannot be verified or focus/caret changes, open Latest transcript (sidebar or
+   tray; it opens as a page of the main window) and use Copy.
 
 Opening the EXE uses `%LOCALAPPDATA%\LocalPhraser\config.json` and its model directory.
 An earlier development command with `--config .cache/dev/config.json` uses a separate profile.

@@ -123,6 +123,20 @@ def check(output: Path, models: Path) -> None:
             assert load_config(config_path).vocabulary == "Codex"
             assert desktop.pipeline.recognizer.vocabulary == "Codex"
             desktop.window.grab().save(str(folder / "vocabulary.png"))
+            # Latest transcript is a page of this window, reached from the sidebar and the tray.
+            windows = {widget for widget in app.topLevelWidgets() if widget.isVisible()}
+            assert desktop.window.latest_button is not None
+            desktop.window.latest_button.click()
+            QTest.qWait(50)
+            assert desktop.window.pages.currentWidget() is desktop.latest
+            assert desktop.latest.text.toPlainText() == "Hello from the local workspace."
+            assert {widget for widget in app.topLevelWidgets() if widget.isVisible()} == windows
+            desktop.window.grab().save(str(folder / "latest.png"))
+            desktop.show_home()
+            next(a for a in desktop.menu.actions() if a.text() == "Latest transcript…").trigger()
+            QTest.qWait(50)
+            assert desktop.window.pages.currentWidget() is desktop.latest
+            assert {widget for widget in app.topLevelWidgets() if widget.isVisible()} == windows
             desktop.show_settings()
             settings = desktop.settings
             assert settings is not None
@@ -212,12 +226,12 @@ def check(output: Path, models: Path) -> None:
             reopened = History(folder / "history.sqlite3")
             assert reopened.stats() == (1, 5, 150)
             reopened.close()
-            for widget in (desktop.window, desktop.indicator, desktop.latest):
+            for widget in (desktop.window, desktop.indicator):
                 widget.deleteLater()
             app.processEvents()
         assert not errors
         print(
-            "Owned workspace passed: taskbar, instant theme, settings, "
+            "Owned workspace passed: taskbar, instant theme, settings, latest page, "
             "persistent history, read-only recovery, WPM, compact layout and second-launch restore."
         )
     finally:

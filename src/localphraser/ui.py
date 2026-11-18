@@ -23,7 +23,9 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpacerItem,
+    QStackedWidget,
     QSystemTrayIcon,
     QTextEdit,
     QVBoxLayout,
@@ -62,7 +64,7 @@ from localphraser.config import (
 )
 from localphraser.downloads import ModelDownload
 from localphraser.history import History
-from localphraser.home import AppWindow
+from localphraser.home import AppWindow, ScrollPage
 from localphraser.hotkey import Hotkey
 from localphraser.levels import display_level
 from localphraser.models import model_present
@@ -173,23 +175,45 @@ class Indicator(GlassCapsule):
         self.show()
 
 
-class Latest(GlassDialog):
+class Latest(QScrollArea):
+    """The Latest transcript page: the one in-memory result, its notice, timings and
+    the last error. It shows a centred empty state while there is nothing to recover,
+    and scrolls rather than clips when a long notice meets a small window.
+    """
+
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Latest transcript · LocalPhraser")
-        self.resize(560, 320)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 18, 24, 24)
-        layout.setSpacing(14)
-        layout.addLayout(self.header("Latest transcript", "pageTitle"))
+        self.setWidgetResizable(True)
+        self.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.viewport().setAutoFillBackground(False)
+        body = ScrollPage()
+        body.setObjectName("glassBody")
+        self.setWidget(body)
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 6, 0, 0)  # Title lines up with the other pages.
+        layout.setSpacing(12)
+        title = QLabel("Latest transcript")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        layout.addWidget(
+            NoteLabel(
+                "The most recent result, kept in memory until cleared, replaced, or the app exits."
+            )
+        )
+        self.card = GlassPanel("latestCard")
+        box = QVBoxLayout(self.card)
+        box.setContentsMargins(18, 16, 18, 18)
+        box.setSpacing(10)
         self.notice = QLabel("No transcript yet. Only the latest result is held in memory.")
+        self.notice.setTextFormat(Qt.TextFormat.PlainText)
         self.notice.setWordWrap(True)
-        layout.addWidget(self.notice)
+        box.addWidget(self.notice)
         self.timing = NoteLabel(collapse_when_empty=True)
-        layout.addWidget(self.timing)
+        box.addWidget(self.timing)
         self.last_error = NoteLabel(hint=False, collapse_when_empty=True)
         self.last_error.setProperty("error", True)
-        layout.addWidget(self.last_error)
+        box.addWidget(self.last_error)
         self.text = QTextEdit()
         self.text.setReadOnly(True)
         self.text.setAcceptRichText(False)
@@ -199,8 +223,12 @@ class Latest(GlassDialog):
         self.tabs = SegmentedTabs()
         self.tabs.addTab(self.text, "Result")
         self.tabs.addTab(self.raw, "Raw transcription")
-        layout.addWidget(self.tabs)
+        # Takes the room there is: a few lines in a small window, never a reason to scroll.
+        self.tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        self.tabs.setMinimumHeight(100)
+        box.addWidget(self.tabs, 1)
         row = QHBoxLayout()
+        row.setSpacing(10)
         copy = IconButton("Copy to clipboard", "copy", "primary")
         copy.clicked.connect(
             lambda: QApplication.clipboard().setText(
@@ -209,17 +237,55 @@ class Latest(GlassDialog):
         )
         clear = QPushButton("Clear")
         clear.clicked.connect(self.clear)
-        row.setSpacing(10)
         row.addWidget(copy, 1)
         row.addWidget(clear, 1)
-        layout.addLayout(row)
+        box.addLayout(row)
+        self.empty = GlassPanel("emptyLatest")
+        centred = QVBoxLayout(self.empty)
+        centred.setContentsMargins(32, 24, 32, 24)
+        centred.setSpacing(8)
+        centred.addStretch()
+        centred.addWidget(
+            Glyph("transcript", "glow", 56, badge=True), 0, Qt.AlignmentFlag.AlignHCenter
+        )
+        centred.addSpacing(6)
+        self.empty_title = QLabel("No transcript yet")
+        self.empty_title.setObjectName("emptyTitle")
+        self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        centred.addWidget(self.empty_title)
+        self.empty_message = QLabel(
+            "Dictate in any app and the result appears here. "
+            "Only the latest result is held in memory."
+        )
+        self.empty_message.setProperty("muted", True)
+        self.empty_message.setTextFormat(Qt.TextFormat.PlainText)
+        self.empty_message.setWordWrap(True)
+        self.empty_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        centred.addWidget(self.empty_message)
+        centred.addStretch()
+        self.views = QStackedWidget()
+        self.views.addWidget(self.empty)
+        self.views.addWidget(self.card)
+        layout.addWidget(self.views, 1)
+        # The pipeline writes the raw text and the result separately; follow both.
+        self.text.textChanged.connect(self.refresh_view)
+        self.raw.textChanged.connect(self.refresh_view)
+
+    def refresh_view(self) -> None:
+        """Show the card when there is a transcript or an error to act on, else the empty state."""
+        something = bool(
+            self.text.toPlainText() or self.raw.toPlainText() or self.last_error.text()
+        )
+        self.views.setCurrentWidget(self.card if something else self.empty)
 
     def clear(self) -> None:
         self.text.clear()
         self.raw.clear()
         self.notice.setText("Transcript cleared.")
+        self.empty_title.setText("Transcript cleared")
         self.timing.clear()
         self.last_error.clear()
+        self.refresh_view()
 
     def set_transcript(self, text: str, notice: str) -> None:
         self.text.setPlainText(text)
@@ -228,6 +294,7 @@ class Latest(GlassDialog):
 
     def record_error(self, message: str) -> None:
         self.last_error.setText(f"Last error: {message}")
+        self.refresh_view()
 
     def set_timing(self, recognition: float, polishing: float, total: float) -> None:
         self.timing.setText(
@@ -950,6 +1017,7 @@ class Desktop:
             latest=self.show_latest,
             vocabulary=self.show_vocabulary,
         )
+        self.window.pages.addWidget(self.latest)  # A page of the workspace from the start.
         self.update_shortcut_hint()
         self.window.setWindowIcon(app_icon())
         self.tray.show()
@@ -1225,9 +1293,8 @@ class Desktop:
         self.window.activateWindow()
 
     def show_latest(self) -> None:
-        self.latest.show()
-        self.latest.raise_()
-        self.latest.activateWindow()
+        self.window.show_latest(self.latest)
+        self.reveal_workspace()
 
     def show_settings(self) -> None:
         if self.settings is None:

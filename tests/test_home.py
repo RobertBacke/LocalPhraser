@@ -463,3 +463,30 @@ def test_nothing_in_the_hero_clips_or_overlaps_at_the_minimum_window_size(worksp
     window.resize(window.minimumSize())
     boxes()
     assert not window.hero_meter.isVisible()  # ...and the smallest window drops it.
+
+
+def test_latest_row_exists_only_with_a_latest_action_and_shows_a_given_page(app):
+    from PySide6.QtWidgets import QWidget
+
+    history = History(None)
+    plain = AppWindow(history, Mock(), Mock(), Mock(), "CapsLock")
+    opened = Mock()
+    window = AppWindow(history, Mock(), Mock(), Mock(), "CapsLock", latest=opened)
+    try:
+        assert plain.latest_button is None  # The rule for showing the row is unchanged.
+        assert window.latest_button is not None
+        assert window.latest_button in window.navigation.buttons()
+        window.latest_button.click()
+        opened.assert_called_once_with()
+        page = QWidget()
+        window.show_latest(page)
+        assert window.pages.currentWidget() is page and page.parent() is not None
+        assert window.latest_button.isChecked()
+        window.show_home()
+        assert window.home_button.isChecked() and not window.latest_button.isChecked()
+        window.show_latest(page)
+        assert window.pages.count() == 3  # Home, Analytics and the one Latest page.
+    finally:
+        for widget in (plain, window):
+            widget.deleteLater()
+        history.close()

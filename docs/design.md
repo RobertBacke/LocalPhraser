@@ -47,11 +47,13 @@ missing selected speech model downloads before saving, with progress/cancellatio
 configuration switch on failure. Edits made during a download require a fresh Save. Theme
 selection applies and saves immediately without applying other edited fields. The draggable
 header and accessible Close glyph replace the native caption. A size grip supports resizing;
-the existing Escape and keyboard navigation behavior remains. Latest transcript keeps Result
-and Raw as a segmented control.
+the existing Escape and keyboard navigation behavior remains. Latest transcript is a page
+of the workspace like the others, reached from the sidebar or the tray: the notice, timings
+and last error above a segmented Result/Raw control, with Copy and Clear, and a centred empty
+state while there is nothing to recover. No separate window opens.
 
 ```text
-Settings / Latest                Dictation capsule (dark in both themes)
+Standalone Settings              Dictation capsule (dark in both themes)
 ┌ draggable title       Close ┐   ╭───────────────────────────╮
 │ primary content            │   │ ▂▅▇▅▂  Listening          │
 │ scrollable controls        │   │        recent spoken words │
@@ -80,7 +82,7 @@ recording and feeds the capsule and the Home hero through `levels.display_level`
 (−54 dBFS → 0, −6 dBFS → 1). The timer is stopped and the meters are flattened in every
 other state and on shutdown. Nothing is stored or logged. There is no decorative animation.
 
-The main/recovery windows on Windows 11 build 22621+ can accept a DWM desktop acrylic
+The main window on Windows 11 build 22621+ can accept a DWM desktop acrylic
 backdrop request; older systems, offscreen tests and rejected native requests use an opaque
 painted fallback. With acrylic the painted surface stays about 93% opaque so contrast does
 not depend on what is behind the window. Composition policy can still reduce effects even

@@ -664,3 +664,206 @@ def test_level_timer_stops_and_zeroes_on_shutdown(desktop):
     assert not desktop.level_timer.isActive()
     assert not any(desktop.indicator.meter.levels)
     assert not any(desktop.window.hero_meter.levels)
+
+
+def visible_windows(app):
+    return {widget for widget in app.topLevelWidgets() if widget.isVisible()}
+
+
+def latest_row(desktop):
+    from PySide6.QtWidgets import QPushButton
+
+    return next(
+        button
+        for button in desktop.window.sidebar.findChildren(QPushButton)
+        if button.text() == "Latest transcript"
+    )
+
+
+def test_sidebar_entry_opens_latest_as_a_page_of_the_main_window(desktop, app):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QLabel
+
+    from localphraser import appearance
+
+    desktop.show_home()
+    desktop.window.resize(1040, 740)
+    app.processEvents()
+    before = visible_windows(app)
+    row = latest_row(desktop)
+    assert row is desktop.window.latest_button and row.isCheckable() and not row.isChecked()
+    assert row.property("nav") is True and row.glyph == "transcript"
+    row.click()
+    app.processEvents()
+    # The same window shows the page; nothing else opened.
+    assert visible_windows(app) == before
+    assert desktop.window.pages.currentWidget() is desktop.latest
+    assert desktop.latest.window() is desktop.window and not desktop.latest.isWindow()
+    assert desktop.latest.isVisible()
+    # The current-page marker moved from Home to Latest transcript.
+    assert row.isChecked() and not desktop.window.home_button.isChecked()
+    image = desktop.window.grab().toImage()
+    glow = QColor(appearance.current_theme().glow)
+
+    def marker(button):
+        rect = button.marker_rect().toRect()
+        pixel = image.pixelColor(
+            button.mapTo(desktop.window, QPoint(rect.center().x(), rect.top() + 2))
+        )
+        return (
+            abs(pixel.red() - glow.red())
+            + abs(pixel.green() - glow.green())
+            + abs(pixel.blue() - glow.blue())
+        )
+
+    assert marker(row) < 60 < marker(desktop.window.home_button)
+    # The title sits where every other page's title sits, in the same style.
+    title = desktop.latest.findChild(QLabel, "pageTitle")
+    assert title.text() == "Latest transcript"
+    here = title.mapTo(desktop.window, QPoint(0, 0))
+    desktop.window.analytics_button.click()
+    app.processEvents()
+    other = desktop.window.analytics.findChild(QLabel, "pageTitle")
+    assert other.mapTo(desktop.window, QPoint(0, 0)) == here
+    assert other.font() == title.font()
+    assert not row.isChecked() and not desktop.latest.isVisible()
+    # Keyboard: the row is reached and activated like the other navigation rows.
+    assert row.focusPolicy() == desktop.window.analytics_button.focusPolicy()
+    row.setFocus()
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    QTest.keyClick(row, Qt.Key.Key_Space)
+    assert desktop.window.pages.currentWidget() is desktop.latest and row.isChecked()
+
+
+@pytest.mark.parametrize("start", ["hidden", "minimised", "another page"])
+def test_tray_action_reveals_the_window_on_the_latest_page(desktop, app, start):
+    action = next(a for a in desktop.menu.actions() if a.text() == "Latest transcript…")
+    if start == "minimised":
+        desktop.show_home()
+        desktop.window.showMinimized()
+    elif start == "another page":
+        desktop.show_vocabulary()
+    else:
+        desktop.window.hide()
+    app.processEvents()
+    assert desktop.window.pages.currentWidget() is not desktop.latest
+    before = visible_windows(app) - {desktop.window}
+    action.trigger()
+    app.processEvents()
+    assert desktop.window.isVisible() and not desktop.window.isMinimized()
+    assert desktop.window.pages.currentWidget() is desktop.latest
+    assert desktop.window.latest_button.isChecked()
+    assert visible_windows(app) - {desktop.window} == before  # No separate window.
+    assert not desktop.latest.isWindow()
+
+
+def test_latest_page_shows_an_empty_state_until_there_is_something_to_recover(desktop, app):
+    from localphraser.appearance import Glyph
+
+    desktop.show_latest()
+    app.processEvents()
+    latest = desktop.latest
+    assert latest.empty.isVisible() and not latest.card.isVisible()
+    assert not latest.text.isVisible() and not latest.tabs.isVisible()
+    icon = latest.empty.findChild(Glyph)
+    assert icon is not None and icon.isVisible()
+    centre = icon.mapTo(latest.empty, icon.rect().center()).x()
+    assert abs(centre - latest.empty.width() / 2) <= 2
+    assert latest.empty_title.text() == "No transcript yet"
+    assert "held in memory" in latest.empty_message.text()
+    # The raw transcription arrives first from the pipeline; the card replaces the empty state.
+    latest.raw.setPlainText("hello world")
+    app.processEvents()
+    assert latest.card.isVisible() and not latest.empty.isVisible()
+    latest.set_transcript("Hello, world.", "Inserted.")
+    latest.set_timing(0.5, 0.0, 0.7)
+    app.processEvents()
+    assert latest.card.isVisible() and latest.tabs.isVisible() and latest.text.isVisible()
+    assert latest.notice.text() == "Inserted." and latest.notice.isVisible()
+    assert latest.timing.isVisible() and latest.last_error.isHidden()
+    latest.clear()
+    app.processEvents()
+    assert latest.empty.isVisible() and not latest.card.isVisible()
+    assert latest.empty_title.text() == "Transcript cleared"
+    assert latest.notice.text() == "Transcript cleared."
+    assert latest.timing.isHidden() and latest.last_error.isHidden()
+    # An error with no transcript is still shown, with Clear in reach.
+    latest.record_error("Cannot open microphone.")
+    app.processEvents()
+    assert latest.card.isVisible() and not latest.empty.isVisible()
+    assert latest.last_error.isVisible()
+    assert latest.last_error.text() == "Last error: Cannot open microphone."
+    latest.clear()
+    app.processEvents()
+    assert latest.empty.isVisible() and not latest.last_error.text()
+
+
+def test_a_result_arriving_while_the_latest_page_is_open_updates_it_in_place(desktop, app):
+    desktop.show_latest()
+    app.processEvents()
+    windows = visible_windows(app)
+    assert desktop.latest.empty.isVisible()
+    desktop.pipeline.audio_seconds = 2
+    desktop.latest.raw.setPlainText("new words <b>plain</b>")
+    desktop.complete_transcript("New words <b>plain</b>.", "Inserted.")
+    desktop.latest.set_timing(0.4, 0.0, 0.6)
+    app.processEvents()
+    latest = desktop.latest
+    assert desktop.window.pages.currentWidget() is latest and visible_windows(app) == windows
+    assert latest.card.isVisible() and not latest.empty.isVisible()
+    assert latest.text.toPlainText() == "New words <b>plain</b>."  # Never markup.
+    assert latest.raw.toPlainText() == "new words <b>plain</b>"
+    assert latest.notice.text() == "Inserted." and "After release: 0.6s" in latest.timing.text()
+    desktop.state_changed(State.ERROR, "Recording failed.")
+    app.processEvents()
+    assert latest.last_error.isVisible()
+    assert latest.last_error.text() == "Last error: Recording failed."
+    assert latest.text.toPlainText() == "New words <b>plain</b>."
+    desktop.complete_transcript("A second result.", "Inserted.")
+    app.processEvents()
+    assert latest.text.toPlainText() == "A second result."
+    assert latest.last_error.text() == "Last error: Recording failed."  # Kept until Clear.
+
+
+def test_latest_page_is_owned_by_the_window_from_the_start_and_cleared_on_shutdown(desktop):
+    assert desktop.latest.parent() is not None and not desktop.latest.isWindow()
+    assert desktop.window.pages.indexOf(desktop.latest) >= 0
+    assert desktop.window.pages.currentWidget() is not desktop.latest
+    desktop.latest.set_transcript("Private words.", "Inserted.")
+    desktop.shutdown()
+    assert not desktop.latest.text.toPlainText() and not desktop.latest.raw.toPlainText()
+
+
+def test_latest_page_fits_the_smallest_window_without_scrolling_or_clipping(desktop, app):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QPushButton
+
+    desktop.show_latest()
+    desktop.window.resize(desktop.window.minimumSize())
+    latest = desktop.latest
+    for filled in (False, True):
+        if filled:
+            latest.raw.setPlainText("hello world")
+            latest.set_transcript("Hello, world.", "Inserted.")
+            latest.set_timing(0.5, 0.0, 0.7)
+        for _ in range(3):
+            app.processEvents()
+        assert latest.verticalScrollBar().maximum() == 0, filled  # Nothing to scroll to.
+        shown = latest.card if filled else latest.empty
+        bottom = shown.mapTo(desktop.window, QPoint(0, shown.height())).y()
+        assert bottom <= desktop.window.height()
+    for button in latest.findChildren(QPushButton):
+        assert button.isVisible() and button.height() >= button.minimumSizeHint().height()
+        assert latest.card.rect().contains(button.geometry())
+    assert latest.text.height() >= 40
+    # A long notice and an error in the smallest window scroll rather than clip.
+    latest.set_transcript("Hello, world.", "Target could not be verified. " * 12)
+    latest.record_error("Microphone disconnected or audio stopped arriving. " * 4)
+    for _ in range(3):
+        app.processEvents()
+    body = latest.widget()
+    assert body.height() >= body.heightForWidth(body.width())
+    assert latest.text.height() >= 40

@@ -13,7 +13,7 @@ from localphraser.appearance import GlassComboBox, dark_surface
 from localphraser.audio import Microphone
 from localphraser.branding import logo_pixmap
 from localphraser.config import Config
-from localphraser.ui import Indicator, Latest, Settings, set_appearance
+from localphraser.ui import Indicator, Settings, set_appearance
 
 
 def check(output: Path) -> None:
@@ -34,13 +34,10 @@ def check(output: Path) -> None:
                 Config(model_root=str(output.resolve() / "models"), mode="polished"),
                 lambda cfg: None,
             )
-            latest = Latest()
-            latest.set_transcript("Your words stay on this device.", "Inserted.")
             indicator = Indicator()
             for theme in ("light", "dark", "system"):
                 set_appearance(theme)
                 settings.show()
-                latest.show()
                 QTest.qWait(150)
                 active = app.activeWindow()
                 indicator.live_preview("Your words stay on this device.")
@@ -52,7 +49,6 @@ def check(output: Path) -> None:
                 assert screen.availableGeometry().contains(indicator.geometry())
                 for label, widget in (
                     ("settings", settings),
-                    ("latest", latest),
                     ("indicator", indicator),
                 ):
                     if theme != "system":
@@ -64,7 +60,6 @@ def check(output: Path) -> None:
                 buttons = settings.findChild(QDialogButtonBox)
                 assert buttons.isVisible() and buttons.geometry().bottom() <= settings.height()
                 settings.resize(620, 820)
-                latest.hide()
                 indicator.hide()
                 settings.raise_()
                 settings.activateWindow()
@@ -102,11 +97,11 @@ def check(output: Path) -> None:
                 settings.resize(620, 820)
                 indicator.hide()
             assert logo_pixmap(256).save(str(output / "speech-prism.png"))
-            close = latest.findChild(QToolButton)
+            close = settings.findChild(QToolButton)
             assert close.accessibleName() == "Close window"
             close.click()
-            assert not latest.isVisible()
-            for widget in (settings, latest, indicator):
+            assert not settings.isVisible()
+            for widget in (settings, indicator):
                 widget.close()
                 widget.deleteLater()
             app.processEvents()
